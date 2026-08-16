@@ -126,24 +126,43 @@ def fp_chip(ref, x, y, net_of, value, kind="0805", rot=0):
     return (x - ex - CLEAR, y - ey - CLEAR, x + ex + CLEAR, y + ey + CLEAR)
 
 
-def fp_soic14(pkg_ref, sections, x, y, net_of):
+def fp_soic14(pkg_ref, sections, x, y, net_of, rot=0):
+    """SOIC-14.  rot=0: pins down the sides, package tall, pins escape sideways.
+    rot=90: pins along top and bottom, package wide, pins escape vertically."""
     _m = fp_begin()
-    pitch, row, pw, ph = 5.0, 10.5, 6.0, 2.5
-    for i in range(7):
-        pad_rect(sections[i + 1], i + 1, x - row, y + i * pitch,
-                 net_of(sections[i + 1], i + 1), pw, ph)
-    for i in range(7):
-        n = 8 + i
-        pad_rect(sections[n], n, x + row, y + (6 - i) * pitch,
-                 net_of(sections[n], n), pw, ph)
-    silk_rect(x - 7.5, y - 4, x + 7.5, y + 34)
-    track([(x - 7.5, y - 4), (x - 4, y - 4)], TOPSILK, 0.5)
-    silk_ref(x - 7.5, y - 6.5, pkg_ref.split()[0], 2.4)
-    fp_end(pkg_ref.split()[0], _m, x, y + 15)
-    PARTS[pkg_ref] = dict(value="MC33079", x=x, y=y + 15, rot=0,
+    pitch, row = 5.0, 10.5
+    if rot == 0:
+        pw, ph = 6.0, 2.5
+        for i in range(7):
+            pad_rect(sections[i + 1], i + 1, x - row, y + i * pitch,
+                     net_of(sections[i + 1], i + 1), pw, ph)
+            n = 8 + i
+            pad_rect(sections[n], n, x + row, y + (6 - i) * pitch,
+                     net_of(sections[n], n), pw, ph)
+        silk_rect(x - 7.5, y - 4, x + 7.5, y + 34)
+        track([(x - 7.5, y - 4), (x - 4, y - 4)], TOPSILK, 0.5)
+        silk_ref(x - 7.5, y - 6.5, pkg_ref.split()[0], 2.4)
+        cx, cy = x, y + 15
+        box = (x - row - pw / 2 - CLEAR, y - ph / 2 - CLEAR,
+               x + row + pw / 2 + CLEAR, y + 30 + ph / 2 + CLEAR)
+    else:
+        pw, ph = 2.5, 6.0
+        for i in range(7):
+            pad_rect(sections[i + 1], i + 1, x + i * pitch, y + row,
+                     net_of(sections[i + 1], i + 1), pw, ph)
+            n = 8 + i
+            pad_rect(sections[n], n, x + (6 - i) * pitch, y - row,
+                     net_of(sections[n], n), pw, ph)
+        silk_rect(x - 4, y - 7.5, x + 34, y + 7.5)
+        track([(x - 4, y + 7.5), (x - 4, y + 4)], TOPSILK, 0.5)
+        silk_ref(x - 4, y - 10, pkg_ref.split()[0], 2.4)
+        cx, cy = x + 15, y
+        box = (x - 4 - CLEAR, y - row - ph / 2 - CLEAR,
+               x + 34 + CLEAR, y + row + ph / 2 + CLEAR)
+    fp_end(pkg_ref.split()[0], _m, cx, cy)
+    PARTS[pkg_ref] = dict(value="MC33079", x=cx, y=cy, rot=rot,
                           assembled=True, pkg="SOIC-14")
-    return (x - row - pw / 2 - CLEAR, y - ph / 2 - CLEAR,
-            x + row + pw / 2 + CLEAR, y + 30 + ph / 2 + CLEAR)
+    return box
 
 
 def fp_elec(ref, x, y, net_of, value):
@@ -239,8 +258,8 @@ VALUE = {r: netdoc["parts"][r]["value"] for r in netdoc["parts"]}
 # and below 310x250 leave nets unroutable.  Component area is only ~13% of the
 # board - the rest is routing headroom, and on two layers with this router it
 # is what sets the floor, not the parts.
-BW = float(os.environ.get("BOARD_W", 320.0))
-BH = float(os.environ.get("BOARD_H", 270.0))
+BW = float(os.environ.get("BOARD_W", 300.0))
+BH = float(os.environ.get("BOARD_H", 240.0))
 SLOT_PITCH = int(os.environ.get("SLOT_PITCH", 18))
 MOUNT_HOLES = [(9, 9), (BW - 9, 9), (9, BH - 9), (BW - 9, BH - 9)]
 MOUNT_R = 12.6 / 2
@@ -271,8 +290,13 @@ FIXED = [
 # uses the board's long dimension and gives each filter its own half with its
 # frequency pot below it.  Switchable so both can be swept for a size that
 # routes.
+# Rotating the quads so their pins escape vertically, into the open space above
+# and below rather than into the channel between the two packages, is what lets
+# the board come down to 300x240.  Unrotated it needs 320x270.
+IC_ROT = int(os.environ.get("IC_ROT", 90))
 if os.environ.get("IC_LAYOUT", "side") == "side":
-    SOICS = [("U1", U1S, 88, 60), ("U2", U2S, 198, 60)]
+    SOICS = ([("U1", U1S, 56, 74), ("U2", U2S, 186, 74)] if IC_ROT
+             else [("U1", U1S, 88, 60), ("U2", U2S, 198, 60)])
 else:
     SOICS = [("U1", U1S, 110, 62), ("U2", U2S, 110, 150)]
 POTS = [("VR1", "VR1A", "VR1B", BW / 2 - 65, BH - 40),
@@ -292,7 +316,7 @@ def place_fixed():
             placed.append(fn(ref, x, y, N, **spec))
         spec["fn"] = fn
     for pkg, sec, x, y in SOICS:
-        placed.append(fp_soic14(pkg, sec, x, y, N))
+        placed.append(fp_soic14(pkg, sec, x, y, N, IC_ROT))
     for pkg, ga, gb, x, y in POTS:
         placed.append(fp_pot(pkg, ga, gb, x, y, N))
         POT_BOSSES.extend([(x - 14, y - 22), (x + 14, y - 22)])
@@ -320,7 +344,8 @@ def auto_place():
     fixed_boxes = list(placed)
     # SOIC pads can only break out sideways, so reserve elbow room beside each
     for _pkg, _sec, _sx, _sy in SOICS:
-        fixed_boxes.append((_sx - 24, _sy - 8, _sx + 24, _sy + 38))
+        fixed_boxes.append((_sx - 8, _sy - 24, _sx + 38, _sy + 24) if IC_ROT
+                           else (_sx - 24, _sy - 8, _sx + 24, _sy + 38))
     anchors = {}
     padpos = {(p["ref"], p["num"]): (p["x"], p["y"]) for p in pads}
     for ref in CHIPS:
