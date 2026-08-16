@@ -78,16 +78,65 @@ Crossover frequency is set by the series combination of the pot gang and its
 f = 1 / (2 * pi * R * C)
 ```
 
+### Stock ESP values
+
 | Filter | C | R range | Frequency range |
 |---|---|---|---|
 | Filter 1 (High/Mid) | C1, C2 = 10 nF | 3.3 k … 23.3 k | 683 Hz … 4.82 kHz |
 | Filter 2 (Mid/Low) | C3, C4 = 100 nF | 3.3 k … 23.3 k | 68.3 Hz … 482 Hz |
 
 Both gangs of a pot must track; both capacitors in a filter must be the same
-value, as must both series resistors. To move a range, change the capacitors
-(smaller C = higher frequency). Reducing R7/R8/R17/R18 to 2.2 k widens the
-range; the article warns against going much lower. 4.7 nF in filter 1 gives
-roughly 1.45 kHz … 10 kHz.
+value, as must both series resistors.
+
+### Retuning to a different range
+
+Two things are being chosen at once, and it's worth separating them:
+
+* The **series resistor** sets the top of the range (pot at minimum), *and*
+  fixes the max/min **ratio** at `(Rs + Rpot) / Rs`.
+* The **capacitor** then slides the whole range up or down without changing
+  that ratio.
+
+So pick Rs from the ratio you want, then C from the frequency you want:
+
+```
+Rs   = Rpot / (ratio - 1)
+C    = 1 / (2 * pi * Rs * f_max)
+```
+
+With the stock 3.3 k and a 20 k pot the ratio is 7.06 — a very wide sweep. The
+`retuned` variant in this repository narrows both filters:
+
+| | Rs (R7/R8, R17/R18) | C | Range | Ratio |
+|---|---|---|---|---|
+| Filter 1, stock | 3.3 k | 10 nF | 683 Hz … 4.82 kHz | 7.06 |
+| Filter 1, retuned | 4.7 k | 33 nF | 195 Hz … 1.03 kHz | 5.26 |
+| Filter 2, stock | 3.3 k | 100 nF | 68.3 Hz … 482 Hz | 7.06 |
+| Filter 2, retuned | 6.2 k | 100 nF | 60.7 Hz … 257 Hz | 4.23 |
+
+Six components change in total (R7, R8, C1, C2, R17, R18) and nothing else —
+Q, topology, op-amps and pots are untouched, because the Q network and the
+frequency network are independent.
+
+Raising the series resistors also *reduces* loading on the preceding stage, so
+this direction is always safe. The article's warning is about the opposite:
+don't go much below 2.2 k.
+
+Two consequences of narrowing the ranges are worth knowing:
+
+* The two ranges now **overlap** (filter 1 goes down to 195 Hz, filter 2 up to
+  257 Hz). That's harmless and gives useful adjustment room, but you must keep
+  the Mid/Low point below the High/Mid point, or the bands invert.
+* Filter 2's ratio can't be narrowed to exactly 250/68 = 3.68 while keeping
+  100 nF, because with C fixed the series resistor sets the ratio and the
+  absolute frequency together. If you want the tighter range, use
+  R17/R18 = 7.5 k with C3/C4 = 82 nF, which gives 70.6 Hz … 259 Hz — ratio
+  3.67, essentially exact. The 6.2 k / 100 nF choice above was preferred
+  because it reuses the 100 nF caps and still covers the whole target span.
+
+Other ranges from the article: 4.7 nF in filter 1 with the stock 3.3 k gives
+roughly 1.45 kHz … 10 kHz; dropping the series resistors to 2.2 k widens the
+sweep.
 
 ## Test points
 

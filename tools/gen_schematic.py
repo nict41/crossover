@@ -44,6 +44,26 @@ wires = []           # list of point lists [(x, y), ...]
 
 
 # --------------------------------------------------------------------------
+# Variants.  Only the frequency-setting network differs: the pot gang in series
+# with rs sets R, and c is the integrator capacitor, so f = 1 / (2*pi*R*C) with
+# R sweeping from rs to rs + 20k.  Q, topology and every other value are shared.
+# --------------------------------------------------------------------------
+VARIANTS = [
+    dict(slug="esp-p148-3way-state-variable-crossover",
+         title="3-Way State Variable Electronic Crossover  -  ESP Project 148",
+         rs1="3.3k", c1="10nF", range1="680 Hz - 4.8 kHz",
+         rs2="3.3k", c2="100nF", range2="68 Hz - 480 Hz"),
+    dict(slug="esp-p148-3way-crossover-retuned-200hz-1khz",
+         title="3-Way State Variable Electronic Crossover  -  ESP P148, retuned "
+               "(195 Hz - 1.03 kHz / 61 Hz - 257 Hz)",
+         rs1="4.7k", c1="33nF", range1="195 Hz - 1.03 kHz",
+         rs2="6.2k", c2="100nF", range2="61 Hz - 257 Hz"),
+]
+
+W_CANVAS, H_CANVAS = 2200, 1600
+
+
+# --------------------------------------------------------------------------
 # primitives
 # --------------------------------------------------------------------------
 def T(mark, x, y, text, size="7pt", color=SYM_COLOR, anchor="start",
@@ -266,237 +286,238 @@ def note(x, y, text, size="9pt", weight="", anchor="start", color="#0000A0"):
 # ==========================================================================
 #  T H E   S C H E M A T I C
 # ==========================================================================
-OY = 600            # vertical offset of the second (68 Hz - 480 Hz) filter
+def draw(cfg):
+    """Place every component and wire for one variant of the crossover."""
+    OY = 600        # vertical offset of the second (lower frequency) filter
 
-# ---------------- Filter 1: 680 Hz - 4.8 kHz (High / Mid crossover) -------
-netlabel("INPUT", 60, 280, anchor="end", dx=-4, dy=3)
-capacitor("C0", "10uF", 130, 280, polar=True)
-w((60, 280), (100, 280))
-w((160, 280), (240, 280))                       # C0 -> U1A pin 3
+    # ---------------- Filter 1: 680 Hz - 4.8 kHz (High / Mid crossover) -------
+    netlabel("INPUT", 60, 280, anchor="end", dx=-4, dy=3)
+    capacitor("C0", "10uF", 130, 280, polar=True)
+    w((60, 280), (100, 280))
+    w((160, 280), (240, 280))                       # C0 -> U1A pin 3
 
-resistor("R1", "10k", 200, 350, vertical=True)
-w((200, 280), (200, 320))
-w((200, 380), (200, 400))
-gnd(200, 400)
+    resistor("R1", "10k", 200, 350, vertical=True)
+    w((200, 280), (200, 320))
+    w((200, 380), (200, 400))
+    gnd(200, 400)
 
-opamp("U1A", 260, 300, (3, "+"), (2, "-"), 1, power=(8, 4))
-netlabel("+15V", 280, 240, anchor="middle", dy=-8)
-netlabel("-15V", 280, 360, anchor="middle", dy=16)
-w((350, 300), (390, 300))
-w((390, 300), (390, 400), (240, 400), (240, 320))       # unity-gain feedback
-w((390, 300), (390, 200), (430, 200))                   # buffer out -> R2
+    opamp("U1A", 260, 300, (3, "+"), (2, "-"), 1, power=(8, 4))
+    netlabel("+15V", 280, 240, anchor="middle", dy=-8)
+    netlabel("-15V", 280, 360, anchor="middle", dy=16)
+    w((350, 300), (390, 300))
+    w((390, 300), (390, 400), (240, 400), (240, 320))       # unity-gain feedback
+    w((390, 300), (390, 200), (430, 200))                   # buffer out -> R2
 
-resistor("R2", "5.6k", 460, 200)
-w((490, 200), (530, 200))
+    resistor("R2", "5.6k", 460, 200)
+    w((490, 200), (530, 200))
 
-# summing amplifier U1B
-opamp("U1B", 590, 300, (6, "-"), (5, "+"), 7)
-w((530, 100), (530, 280), (570, 280))           # SUM1N spine
-resistor("R6", "5.6k", 600, 100, above=True)                # feedback from 2nd integrator (LP1)
-resistor("R5", "5.6k", 600, 140)                # local negative feedback (HP1)
-w((530, 100), (570, 100))
-w((530, 140), (570, 140))
-w((630, 100), (1580, 100))                      # LP1 rail
-w((630, 140), (1680, 140))                      # HP1 rail
-w((680, 300), (720, 300), (720, 140))           # U1B out -> HP1 rail
+    # summing amplifier U1B
+    opamp("U1B", 590, 300, (6, "-"), (5, "+"), 7)
+    w((530, 100), (530, 280), (570, 280))           # SUM1N spine
+    resistor("R6", "5.6k", 600, 100, above=True)                # feedback from 2nd integrator (LP1)
+    resistor("R5", "5.6k", 600, 140)                # local negative feedback (HP1)
+    w((530, 100), (570, 100))
+    w((530, 140), (570, 140))
+    w((630, 100), (1580, 100))                      # LP1 rail
+    w((630, 140), (1680, 140))                      # HP1 rail
+    w((680, 300), (720, 300), (720, 140))           # U1B out -> HP1 rail
 
-w((570, 320), (490, 320), (490, 460))           # SUM1P spine
-resistor("R4", "5.6k", 560, 460)                # feedback from 1st integrator (BP1)
-w((490, 460), (530, 460))
-resistor("R3", "12k", 490, 530, vertical=True)  # sets Q
-w((490, 460), (490, 500))
-w((490, 560), (490, 580))
-gnd(490, 580)
-note(450, 535, "Set Q", anchor="end")
+    w((570, 320), (490, 320), (490, 460))           # SUM1P spine
+    resistor("R4", "5.6k", 560, 460)                # feedback from 1st integrator (BP1)
+    w((490, 460), (530, 460))
+    resistor("R3", "12k", 490, 530, vertical=True)  # sets Q
+    w((490, 460), (490, 500))
+    w((490, 560), (490, 580))
+    gnd(490, 580)
+    note(450, 535, "Set Q", anchor="end")
 
-# first integrator U2A
-pot("VR1A", "20k", 800, 300)
-w((720, 300), (770, 300))
-w((800, 330), (800, 360), (870, 360), (870, 300))
-w((830, 300), (870, 300))
-w((870, 300), (890, 300))
-resistor("R7", "3.3k", 920, 300)
-opamp("U2A", 1010, 300, (2, "-"), (3, "+"), 1, power=(8, 4))
-netlabel("+15V", 1030, 240, anchor="middle", dy=-8)
-netlabel("-15V", 1030, 360, anchor="middle", dy=16)
-w((950, 300), (950, 280), (990, 280))
-w((990, 320), (990, 360))
-gnd(990, 360)
-capacitor("C1", "10nF", 1040, 190, above=True)
-w((990, 280), (990, 190), (1010, 190))
-w((1100, 300), (1130, 300))
-w((1130, 300), (1130, 190), (1070, 190))
-w((1130, 300), (1180, 300))
-w((1180, 300), (1180, 460), (590, 460))         # BP1 rail back to R4
+    # first integrator U2A
+    pot("VR1A", "20k", 800, 300)
+    w((720, 300), (770, 300))
+    w((800, 330), (800, 360), (870, 360), (870, 300))
+    w((830, 300), (870, 300))
+    w((870, 300), (890, 300))
+    resistor("R7", cfg["rs1"], 920, 300)
+    opamp("U2A", 1010, 300, (2, "-"), (3, "+"), 1, power=(8, 4))
+    netlabel("+15V", 1030, 240, anchor="middle", dy=-8)
+    netlabel("-15V", 1030, 360, anchor="middle", dy=16)
+    w((950, 300), (950, 280), (990, 280))
+    w((990, 320), (990, 360))
+    gnd(990, 360)
+    capacitor("C1", cfg["c1"], 1040, 190, above=True)
+    w((990, 280), (990, 190), (1010, 190))
+    w((1100, 300), (1130, 300))
+    w((1130, 300), (1130, 190), (1070, 190))
+    w((1130, 300), (1180, 300))
+    w((1180, 300), (1180, 460), (590, 460))         # BP1 rail back to R4
 
-# second integrator U2B
-pot("VR1B", "20k", 1250, 300)
-w((1180, 300), (1220, 300))
-w((1250, 330), (1250, 360), (1320, 360), (1320, 300))
-w((1280, 300), (1320, 300))
-w((1320, 300), (1340, 300))
-resistor("R8", "3.3k", 1370, 300)
-opamp("U2B", 1460, 300, (6, "-"), (5, "+"), 7)
-w((1400, 300), (1400, 280), (1440, 280))
-w((1440, 320), (1440, 360))
-gnd(1440, 360)
-capacitor("C2", "10nF", 1490, 190, above=True)
-w((1440, 280), (1440, 190), (1460, 190))
-w((1550, 300), (1580, 300))
-w((1520, 190), (1580, 190))
-w((1580, 40), (1580, 340))                      # LP1 spine
-netlabel("LP1", 1580, 340, anchor="middle", dy=16)
+    # second integrator U2B
+    pot("VR1B", "20k", 1250, 300)
+    w((1180, 300), (1220, 300))
+    w((1250, 330), (1250, 360), (1320, 360), (1320, 300))
+    w((1280, 300), (1320, 300))
+    w((1320, 300), (1340, 300))
+    resistor("R8", cfg["rs1"], 1370, 300)
+    opamp("U2B", 1460, 300, (6, "-"), (5, "+"), 7)
+    w((1400, 300), (1400, 280), (1440, 280))
+    w((1440, 320), (1440, 360))
+    gnd(1440, 360)
+    capacitor("C2", cfg["c1"], 1490, 190, above=True)
+    w((1440, 280), (1440, 190), (1460, 190))
+    w((1550, 300), (1580, 300))
+    w((1520, 190), (1580, 190))
+    w((1580, 40), (1580, 340))                      # LP1 spine
+    netlabel("LP1", 1580, 340, anchor="middle", dy=16)
 
-# TP1 null network and High output
-resistor("R11", "10k", 1630, 40)
-w((1580, 40), (1600, 40))
-w((1660, 40), (1680, 40))
-resistor("R10", "10k", 1680, 110, vertical=True)
-w((1680, 80), (1680, 40))
-w((1680, 40), (1680, 20))
-netlabel("TP1", 1680, 20, anchor="middle", dy=-8)
-w((1680, 140), (1720, 140))
-resistor("R9", "100R", 1750, 140)
-w((1780, 140), (1820, 140))
-netlabel("HIGH", 1820, 140, anchor="start", dx=4, dy=3)
+    # TP1 null network and High output
+    resistor("R11", "10k", 1630, 40)
+    w((1580, 40), (1600, 40))
+    w((1660, 40), (1680, 40))
+    resistor("R10", "10k", 1680, 110, vertical=True)
+    w((1680, 80), (1680, 40))
+    w((1680, 40), (1680, 20))
+    netlabel("TP1", 1680, 20, anchor="middle", dy=-8)
+    w((1680, 140), (1720, 140))
+    resistor("R9", "100R", 1750, 140)
+    w((1780, 140), (1820, 140))
+    netlabel("HIGH", 1820, 140, anchor="start", dx=4, dy=3)
 
-note(1000, 85, "680 Hz - 4.8 kHz  (VR1 sets the High / Mid crossover point)",
-     anchor="middle")
-note(60, 60, "FILTER 1 - state variable, Q = 0.5 (Linkwitz-Riley)", weight="bold")
+    note(1000, 85, "%s  (VR1 sets the High / Mid crossover point)" % cfg["range1"],
+         anchor="middle")
+    note(60, 60, "FILTER 1 - state variable, Q = 0.5 (Linkwitz-Riley)", weight="bold")
 
-# ---------------- Filter 2: 68 Hz - 480 Hz (Mid / Low crossover) ----------
-netlabel("LP1", 370, 200 + OY, anchor="end", dx=-4, dy=3)
-resistor("R15", "5.6k", 460, 200 + OY)
-w((370, 200 + OY), (430, 200 + OY))
-w((490, 200 + OY), (530, 200 + OY))
+    # ---------------- Filter 2: 68 Hz - 480 Hz (Mid / Low crossover) ----------
+    netlabel("LP1", 370, 200 + OY, anchor="end", dx=-4, dy=3)
+    resistor("R15", "5.6k", 460, 200 + OY)
+    w((370, 200 + OY), (430, 200 + OY))
+    w((490, 200 + OY), (530, 200 + OY))
 
-opamp("U3A", 590, 300 + OY, (2, "-"), (3, "+"), 1, power=(8, 4))
-netlabel("+15V", 610, 240 + OY, anchor="middle", dy=-8)
-netlabel("-15V", 610, 360 + OY, anchor="middle", dy=16)
-w((530, 100 + OY), (530, 280 + OY), (570, 280 + OY))
-resistor("R12", "5.6k", 600, 100 + OY, above=True)          # feedback from 2nd integrator (LP2)
-resistor("R16", "5.6k", 600, 140 + OY)          # local negative feedback (HP2)
-w((530, 100 + OY), (570, 100 + OY))
-w((530, 140 + OY), (570, 140 + OY))
-w((630, 100 + OY), (1580, 100 + OY))            # LP2 rail
-w((630, 140 + OY), (1680, 140 + OY))            # HP2 rail
-w((680, 300 + OY), (720, 300 + OY), (720, 140 + OY))
+    opamp("U3A", 590, 300 + OY, (2, "-"), (3, "+"), 1, power=(8, 4))
+    netlabel("+15V", 610, 240 + OY, anchor="middle", dy=-8)
+    netlabel("-15V", 610, 360 + OY, anchor="middle", dy=16)
+    w((530, 100 + OY), (530, 280 + OY), (570, 280 + OY))
+    resistor("R12", "5.6k", 600, 100 + OY, above=True)          # feedback from 2nd integrator (LP2)
+    resistor("R16", "5.6k", 600, 140 + OY)          # local negative feedback (HP2)
+    w((530, 100 + OY), (570, 100 + OY))
+    w((530, 140 + OY), (570, 140 + OY))
+    w((630, 100 + OY), (1580, 100 + OY))            # LP2 rail
+    w((630, 140 + OY), (1680, 140 + OY))            # HP2 rail
+    w((680, 300 + OY), (720, 300 + OY), (720, 140 + OY))
 
-w((570, 320 + OY), (490, 320 + OY), (490, 460 + OY))
-resistor("R14", "5.6k", 560, 460 + OY)          # feedback from 1st integrator (BP2)
-w((490, 460 + OY), (530, 460 + OY))
-resistor("R13", "12k", 490, 530 + OY, vertical=True)
-w((490, 460 + OY), (490, 500 + OY))
-w((490, 560 + OY), (490, 580 + OY))
-gnd(490, 580 + OY)
-note(450, 535 + OY, "Set Q", anchor="end")
+    w((570, 320 + OY), (490, 320 + OY), (490, 460 + OY))
+    resistor("R14", "5.6k", 560, 460 + OY)          # feedback from 1st integrator (BP2)
+    w((490, 460 + OY), (530, 460 + OY))
+    resistor("R13", "12k", 490, 530 + OY, vertical=True)
+    w((490, 460 + OY), (490, 500 + OY))
+    w((490, 560 + OY), (490, 580 + OY))
+    gnd(490, 580 + OY)
+    note(450, 535 + OY, "Set Q", anchor="end")
 
-pot("VR2A", "20k", 800, 300 + OY)
-w((720, 300 + OY), (770, 300 + OY))
-w((800, 330 + OY), (800, 360 + OY), (870, 360 + OY), (870, 300 + OY))
-w((830, 300 + OY), (870, 300 + OY))
-w((870, 300 + OY), (890, 300 + OY))
-resistor("R17", "3.3k", 920, 300 + OY)
-opamp("U3B", 1010, 300 + OY, (6, "-"), (5, "+"), 7)
-w((950, 300 + OY), (950, 280 + OY), (990, 280 + OY))
-w((990, 320 + OY), (990, 360 + OY))
-gnd(990, 360 + OY)
-capacitor("C3", "100nF", 1040, 190 + OY, above=True)
-w((990, 280 + OY), (990, 190 + OY), (1010, 190 + OY))
-w((1100, 300 + OY), (1130, 300 + OY))
-w((1130, 300 + OY), (1130, 190 + OY), (1070, 190 + OY))
-w((1130, 300 + OY), (1180, 300 + OY))
-w((1180, 300 + OY), (1180, 460 + OY), (590, 460 + OY))
+    pot("VR2A", "20k", 800, 300 + OY)
+    w((720, 300 + OY), (770, 300 + OY))
+    w((800, 330 + OY), (800, 360 + OY), (870, 360 + OY), (870, 300 + OY))
+    w((830, 300 + OY), (870, 300 + OY))
+    w((870, 300 + OY), (890, 300 + OY))
+    resistor("R17", cfg["rs2"], 920, 300 + OY)
+    opamp("U3B", 1010, 300 + OY, (6, "-"), (5, "+"), 7)
+    w((950, 300 + OY), (950, 280 + OY), (990, 280 + OY))
+    w((990, 320 + OY), (990, 360 + OY))
+    gnd(990, 360 + OY)
+    capacitor("C3", cfg["c2"], 1040, 190 + OY, above=True)
+    w((990, 280 + OY), (990, 190 + OY), (1010, 190 + OY))
+    w((1100, 300 + OY), (1130, 300 + OY))
+    w((1130, 300 + OY), (1130, 190 + OY), (1070, 190 + OY))
+    w((1130, 300 + OY), (1180, 300 + OY))
+    w((1180, 300 + OY), (1180, 460 + OY), (590, 460 + OY))
 
-pot("VR2B", "20k", 1250, 300 + OY)
-w((1180, 300 + OY), (1220, 300 + OY))
-w((1250, 330 + OY), (1250, 360 + OY), (1320, 360 + OY), (1320, 300 + OY))
-w((1280, 300 + OY), (1320, 300 + OY))
-w((1320, 300 + OY), (1340, 300 + OY))
-resistor("R18", "3.3k", 1370, 300 + OY)
-opamp("U4A", 1460, 300 + OY, (2, "-"), (3, "+"), 1, power=(8, 4))
-netlabel("+15V", 1480, 240 + OY, anchor="middle", dy=-8)
-netlabel("-15V", 1480, 360 + OY, anchor="middle", dy=16)
-w((1400, 300 + OY), (1400, 280 + OY), (1440, 280 + OY))
-w((1440, 320 + OY), (1440, 360 + OY))
-gnd(1440, 360 + OY)
-capacitor("C4", "100nF", 1490, 190 + OY, above=True)
-w((1440, 280 + OY), (1440, 190 + OY), (1460, 190 + OY))
-w((1550, 300 + OY), (1580, 300 + OY))
-w((1520, 190 + OY), (1580, 190 + OY))
-w((1580, 40 + OY), (1580, 300 + OY))            # LP2 spine
+    pot("VR2B", "20k", 1250, 300 + OY)
+    w((1180, 300 + OY), (1220, 300 + OY))
+    w((1250, 330 + OY), (1250, 360 + OY), (1320, 360 + OY), (1320, 300 + OY))
+    w((1280, 300 + OY), (1320, 300 + OY))
+    w((1320, 300 + OY), (1340, 300 + OY))
+    resistor("R18", cfg["rs2"], 1370, 300 + OY)
+    opamp("U4A", 1460, 300 + OY, (2, "-"), (3, "+"), 1, power=(8, 4))
+    netlabel("+15V", 1480, 240 + OY, anchor="middle", dy=-8)
+    netlabel("-15V", 1480, 360 + OY, anchor="middle", dy=16)
+    w((1400, 300 + OY), (1400, 280 + OY), (1440, 280 + OY))
+    w((1440, 320 + OY), (1440, 360 + OY))
+    gnd(1440, 360 + OY)
+    capacitor("C4", cfg["c2"], 1490, 190 + OY, above=True)
+    w((1440, 280 + OY), (1440, 190 + OY), (1460, 190 + OY))
+    w((1550, 300 + OY), (1580, 300 + OY))
+    w((1520, 190 + OY), (1580, 190 + OY))
+    w((1580, 40 + OY), (1580, 300 + OY))            # LP2 spine
 
-# TP2 null network and Mid output
-resistor("R24", "10k", 1630, 40 + OY)
-w((1580, 40 + OY), (1600, 40 + OY))
-w((1660, 40 + OY), (1680, 40 + OY))
-resistor("R23", "10k", 1680, 110 + OY, vertical=True)
-w((1680, 80 + OY), (1680, 40 + OY))
-w((1680, 40 + OY), (1680, 20 + OY))
-netlabel("TP2", 1680, 20 + OY, anchor="middle", dy=-8)
-w((1680, 140 + OY), (1720, 140 + OY))
-resistor("R19", "100R", 1750, 140 + OY)
-w((1780, 140 + OY), (1820, 140 + OY))
-netlabel("MID", 1820, 140 + OY, anchor="start", dx=4, dy=3)
+    # TP2 null network and Mid output
+    resistor("R24", "10k", 1630, 40 + OY)
+    w((1580, 40 + OY), (1600, 40 + OY))
+    w((1660, 40 + OY), (1680, 40 + OY))
+    resistor("R23", "10k", 1680, 110 + OY, vertical=True)
+    w((1680, 80 + OY), (1680, 40 + OY))
+    w((1680, 40 + OY), (1680, 20 + OY))
+    netlabel("TP2", 1680, 20 + OY, anchor="middle", dy=-8)
+    w((1680, 140 + OY), (1720, 140 + OY))
+    resistor("R19", "100R", 1750, 140 + OY)
+    w((1780, 140 + OY), (1820, 140 + OY))
+    netlabel("MID", 1820, 140 + OY, anchor="start", dx=4, dy=3)
 
-# output inverter U4B (bass output; U3A already inverts the midrange)
-w((1580, 300 + OY), (1620, 300 + OY))
-resistor("R20", "5.6k", 1650, 300 + OY)
-w((1680, 300 + OY), (1720, 300 + OY), (1720, 280 + OY), (1740, 280 + OY))
-opamp("U4B", 1760, 300 + OY, (6, "-"), (5, "+"), 7)
-w((1740, 320 + OY), (1740, 360 + OY))
-gnd(1740, 360 + OY)
-resistor("R21", "5.6k", 1790, 200 + OY)
-w((1740, 280 + OY), (1740, 200 + OY), (1760, 200 + OY))
-w((1850, 300 + OY), (1880, 300 + OY))
-w((1880, 300 + OY), (1880, 200 + OY), (1820, 200 + OY))
-w((1880, 300 + OY), (1920, 300 + OY))
-resistor("R22", "100R", 1950, 300 + OY)
-w((1980, 300 + OY), (2020, 300 + OY))
-netlabel("LOW", 2020, 300 + OY, anchor="start", dx=4, dy=3)
+    # output inverter U4B (bass output; U3A already inverts the midrange)
+    w((1580, 300 + OY), (1620, 300 + OY))
+    resistor("R20", "5.6k", 1650, 300 + OY)
+    w((1680, 300 + OY), (1720, 300 + OY), (1720, 280 + OY), (1740, 280 + OY))
+    opamp("U4B", 1760, 300 + OY, (6, "-"), (5, "+"), 7)
+    w((1740, 320 + OY), (1740, 360 + OY))
+    gnd(1740, 360 + OY)
+    resistor("R21", "5.6k", 1790, 200 + OY)
+    w((1740, 280 + OY), (1740, 200 + OY), (1760, 200 + OY))
+    w((1850, 300 + OY), (1880, 300 + OY))
+    w((1880, 300 + OY), (1880, 200 + OY), (1820, 200 + OY))
+    w((1880, 300 + OY), (1920, 300 + OY))
+    resistor("R22", "100R", 1950, 300 + OY)
+    w((1980, 300 + OY), (2020, 300 + OY))
+    netlabel("LOW", 2020, 300 + OY, anchor="start", dx=4, dy=3)
 
-note(1000, 85 + OY, "68 Hz - 480 Hz  (VR2 sets the Mid / Low crossover point)",
-     anchor="middle")
-note(60, 60 + OY, "FILTER 2 - state variable, Q = 0.5 (Linkwitz-Riley)", weight="bold")
+    note(1000, 85 + OY, "%s  (VR2 sets the Mid / Low crossover point)" % cfg["range2"],
+         anchor="middle")
+    note(60, 60 + OY, "FILTER 2 - state variable, Q = 0.5 (Linkwitz-Riley)", weight="bold")
 
-# ---------------- power input and supply bypassing ------------------------
-header("J1", "PWR", 110, 1280, ["+15V", "GND", "-15V"])
-w((130, 1290), (180, 1290))
-netlabel("+15V", 180, 1290, anchor="start", dx=4, dy=3)
-w((130, 1320), (180, 1320))
-gnd(180, 1320)
-w((130, 1350), (180, 1350))
-netlabel("-15V", 180, 1350, anchor="start", dx=4, dy=3)
+    # ---------------- power input and supply bypassing ------------------------
+    header("J1", "PWR", 110, 1280, ["+15V", "GND", "-15V"])
+    w((130, 1290), (180, 1290))
+    netlabel("+15V", 180, 1290, anchor="start", dx=4, dy=3)
+    w((130, 1320), (180, 1320))
+    gnd(180, 1320)
+    w((130, 1350), (180, 1350))
+    netlabel("-15V", 180, 1350, anchor="start", dx=4, dy=3)
 
-for i, ic in enumerate(["U1", "U2", "U3", "U4"]):
-    bx = 350 + i * 170
-    netlabel("+15V", bx, 1240, anchor="middle", dy=-14)
-    w((bx, 1240), (bx, 1260))
-    capacitor("C%d" % (5 + 2 * i), "100nF", bx, 1290, vertical=True)
-    w((bx, 1320), (bx, 1350))
-    w((bx, 1350), (bx + 50, 1350))
-    gnd(bx + 50, 1350)
-    w((bx, 1350), (bx, 1380))
-    capacitor("C%d" % (6 + 2 * i), "100nF", bx, 1410, vertical=True)
-    w((bx, 1440), (bx, 1460))
-    netlabel("-15V", bx, 1460, anchor="middle", dy=16)
-    note(bx, 1208, "%s  pins 8 / 4" % ic, size="7pt", anchor="middle")
+    for i, ic in enumerate(["U1", "U2", "U3", "U4"]):
+        bx = 350 + i * 170
+        netlabel("+15V", bx, 1240, anchor="middle", dy=-14)
+        w((bx, 1240), (bx, 1260))
+        capacitor("C%d" % (5 + 2 * i), "100nF", bx, 1290, vertical=True)
+        w((bx, 1320), (bx, 1350))
+        w((bx, 1350), (bx + 50, 1350))
+        gnd(bx + 50, 1350)
+        w((bx, 1350), (bx, 1380))
+        capacitor("C%d" % (6 + 2 * i), "100nF", bx, 1410, vertical=True)
+        w((bx, 1440), (bx, 1460))
+        netlabel("-15V", bx, 1460, anchor="middle", dy=16)
+        note(bx, 1208, "%s  pins 8 / 4" % ic, size="7pt", anchor="middle")
 
-note(60, 1180, "SUPPLY BYPASSING - one 100nF ceramic per rail, at each IC",
-     weight="bold")
+    note(60, 1180, "SUPPLY BYPASSING - one 100nF ceramic per rail, at each IC",
+         weight="bold")
 
-# ---------------- title block --------------------------------------------
-note(60, 30, "3-Way State Variable Electronic Crossover  -  ESP Project 148",
-     size="14pt", weight="bold", color="#000000")
-note(60, 1520, "After Rod Elliott, Elliott Sound Products, Project 148 "
-     "(https://sound-au.com/project148.htm).  Redrawn for EasyEDA.",
-     size="8pt", color="#404040")
-note(60, 1540, "All op-amps NE5532 (dual).  Q = 0.5 Linkwitz-Riley with R3 / R13 = 12k; "
-     "use 11k2 for exact Q = 0.5, or 5k04 for Butterworth (Q = 0.707).",
-     size="8pt", color="#404040")
-note(60, 1560, "VR1 and VR2 are dual-gang 20k linear pots wired as rheostats. "
-     "TP1 / TP2 null at the crossover frequency and may be omitted.",
-     size="8pt", color="#404040")
+    # ---------------- title block --------------------------------------------
+    note(60, 30, cfg["title"], size="14pt", weight="bold", color="#000000")
+    note(60, 1520, "After Rod Elliott, Elliott Sound Products, Project 148 "
+         "(https://sound-au.com/project148.htm).  Redrawn for EasyEDA.",
+         size="8pt", color="#404040")
+    note(60, 1540, "All op-amps NE5532 (dual).  Q = 0.5 Linkwitz-Riley with R3 / R13 = 12k; "
+         "use 11k2 for exact Q = 0.5, or 5k04 for Butterworth (Q = 0.707).",
+         size="8pt", color="#404040")
+    note(60, 1560, "VR1 and VR2 are dual-gang 20k linear pots wired as rheostats. "
+         "TP1 / TP2 null at the crossover frequency and may be omitted.",
+         size="8pt", color="#404040")
 
 
 # ==========================================================================
@@ -611,53 +632,6 @@ def extract_netlist():
         label = "/".join(sorted(names)) if names else "N%s_%s" % root
         out[label] = sorted(members, key=lambda s: (re.sub(r"\d+$", "", s), s))
     return out, touches
-
-
-split_wires()
-junctions = build_junctions()
-for jx, jy in junctions:
-    shapes.append("J~%s~%s~2.5~#CC0000~%s" % (jx, jy, gid()))
-
-for pts in wires:
-    shapes.append("W~%s~%s~1~0~none~%s" %
-                  (" ".join("%d %d" % (x, y) for x, y in pts), WIRE_COLOR, gid()))
-
-W_CANVAS, H_CANVAS = 2200, 1600
-CANVAS = ("CA~%d~%d~#FFFFFF~yes~#CCCCCC~10~%d~%d~line~10~pixel~5~0~0"
-          % (W_CANVAS, H_CANVAS, W_CANVAS, H_CANVAS))
-
-doc_modern = {
-    "head": {
-        "docType": "1",
-        "editorVersion": "6.5.46",
-        "newgId": True,
-        "c_para": {"Prefix Start": "1"},
-        "c_spiceCmd": None,
-        "hasIdFlag": True,
-        "importFlag": 0,
-        "transformList": "",
-    },
-    "canvas": CANVAS,
-    "shape": shapes,
-    "BBox": {"x": 0, "y": 0, "width": W_CANVAS, "height": H_CANVAS},
-    "colors": {},
-}
-doc_legacy = dict(doc_modern, head="1~1.7.5~~")
-
-here = os.path.dirname(os.path.abspath(__file__))
-root = os.path.dirname(here)
-schdir = os.path.join(root, "schematic")
-os.makedirs(schdir, exist_ok=True)
-base = "esp-p148-3way-state-variable-crossover"
-
-with open(os.path.join(schdir, base + ".json"), "w") as f:
-    json.dump(doc_modern, f, indent=1)
-with open(os.path.join(schdir, base + ".legacy.json"), "w") as f:
-    json.dump(doc_legacy, f, indent=1)
-
-
-# --------------------------------------------------------------------------
-# SVG preview rendered from exactly the same shape data
 # --------------------------------------------------------------------------
 def svg_escape(s):
     return (s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
@@ -731,20 +705,8 @@ def render_svg():
     return "\n".join(out)
 
 
-svg = render_svg()
-with open(os.path.join(schdir, "preview.svg"), "w") as f:
-    f.write(svg)
-try:
-    import cairosvg
-    cairosvg.svg2png(bytestring=svg.encode(), write_to=os.path.join(schdir, "preview.png"),
-                     output_width=W_CANVAS, output_height=H_CANVAS)
-except Exception as exc:      # pragma: no cover - preview is a convenience only
-    print("PNG preview skipped:", exc)
-
 # --------------------------------------------------------------------------
-# bill of materials
-# --------------------------------------------------------------------------
-def write_bom():
+def write_bom(filename="bom.csv"):
     seen = {}
     for s in shapes:
         if not s.startswith("LIB~"):
@@ -784,27 +746,110 @@ def write_bom():
         out.append('%d,%s,%s,"%s","%s"' % (qty, val, pkg, refs, notes.get(val, "")))
     bomdir = os.path.join(root, "bom")
     os.makedirs(bomdir, exist_ok=True)
-    with open(os.path.join(bomdir, "bom.csv"), "w") as f:
+    with open(os.path.join(bomdir, filename), "w") as f:
         f.write("\n".join(out) + "\n")
     return len(seen)
 
 
-n_parts = write_bom()
 
-nets, touches = extract_netlist()
-lines = ["Netlist extracted from the generated schematic geometry",
-         "=" * 56, ""]
-for name in sorted(nets):
-    lines.append("%-10s %s" % (name, "  ".join(nets[name])))
-lines.append("")
-lines.append("%d nets, %d parts, %d component pins, %d junctions"
-             % (len(nets), n_parts, len(pins), len(junctions)))
-with open(os.path.join(root, "docs", "netlist.txt"), "w") as f:
-    os.makedirs(os.path.join(root, "docs"), exist_ok=True)
-    f.write("\n".join(lines) + "\n")
+# ==========================================================================
+#  driver
+# ==========================================================================
+here = os.path.dirname(os.path.abspath(__file__))
+root = os.path.dirname(here)
+schdir = os.path.join(root, "schematic")
+docdir = os.path.join(root, "docs")
 
-print("\n".join(lines))
-if touches:
-    print("\nendpoint-on-wire touches (%d):" % len(touches))
-    for t in touches:
-        print("   ", t)
+
+def emit(cfg, primary):
+    """Build one variant and write its schematic, preview, netlist and BOM."""
+    global shapes, pins, netlabels, wires
+    shapes, pins, netlabels, wires = [], [], [], []
+    _next_id[0] = 1
+
+    draw(cfg)
+    split_wires()
+    junctions = build_junctions()
+    for jx, jy in junctions:
+        shapes.append("J~%s~%s~2.5~#CC0000~%s" % (jx, jy, gid()))
+    for pts in wires:
+        shapes.append("W~%s~%s~1~0~none~%s" %
+                      (" ".join("%d %d" % (x, y) for x, y in pts), WIRE_COLOR, gid()))
+
+    canvas = ("CA~%d~%d~#FFFFFF~yes~#CCCCCC~10~%d~%d~line~10~pixel~5~0~0"
+              % (W_CANVAS, H_CANVAS, W_CANVAS, H_CANVAS))
+    doc_modern = {
+        "head": {
+            "docType": "1",
+            "editorVersion": "6.5.46",
+            "newgId": True,
+            "c_para": {"Prefix Start": "1"},
+            "c_spiceCmd": None,
+            "hasIdFlag": True,
+            "importFlag": 0,
+            "transformList": "",
+        },
+        "canvas": canvas,
+        "shape": shapes,
+        "BBox": {"x": 0, "y": 0, "width": W_CANVAS, "height": H_CANVAS},
+        "colors": {},
+    }
+    doc_legacy = dict(doc_modern, head="1~1.7.5~~")
+
+    os.makedirs(schdir, exist_ok=True)
+    os.makedirs(docdir, exist_ok=True)
+    with open(os.path.join(schdir, cfg["slug"] + ".json"), "w") as f:
+        json.dump(doc_modern, f, indent=1)
+    with open(os.path.join(schdir, cfg["slug"] + ".legacy.json"), "w") as f:
+        json.dump(doc_legacy, f, indent=1)
+
+    svg = render_svg()
+    with open(os.path.join(schdir, cfg["slug"] + ".svg"), "w") as f:
+        f.write(svg)
+    try:
+        import cairosvg
+        cairosvg.svg2png(bytestring=svg.encode(),
+                         write_to=os.path.join(schdir, cfg["slug"] + ".png"),
+                         output_width=W_CANVAS, output_height=H_CANVAS)
+    except Exception as exc:   # pragma: no cover - preview is a convenience only
+        print("PNG preview skipped:", exc)
+
+    n_parts = write_bom("bom.csv" if primary else "bom-retuned.csv")
+
+    nets, touches = extract_netlist()
+    lines = ["Netlist extracted from the generated schematic geometry",
+             "variant: %s" % cfg["slug"],
+             "  High/Mid  %s   R7, R8 = %s   C1, C2 = %s" % (cfg["range1"], cfg["rs1"], cfg["c1"]),
+             "  Mid/Low   %s   R17, R18 = %s   C3, C4 = %s" % (cfg["range2"], cfg["rs2"], cfg["c2"]),
+             "=" * 56, ""]
+    for name in sorted(nets):
+        lines.append("%-10s %s" % (name, "  ".join(nets[name])))
+    lines.append("")
+    lines.append("%d nets, %d parts, %d component pins, %d junctions"
+                 % (len(nets), n_parts, len(pins), len(junctions)))
+    name = "netlist.txt" if primary else "netlist-%s.txt" % cfg["slug"].split("retuned-")[-1]
+    with open(os.path.join(docdir, name), "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print("\n".join(lines))
+    if touches:
+        print("\nendpoint-on-wire touches (%d):" % len(touches))
+        for t in touches:
+            print("   ", t)
+    return nets
+
+
+def main():
+    reference = None
+    for i, cfg in enumerate(VARIANTS):
+        nets = emit(cfg, primary=(i == 0))
+        key = {k: sorted(v) for k, v in nets.items()}
+        if reference is None:
+            reference = key
+        elif key != reference:
+            raise SystemExit("variant %s changed the netlist - retuning must only "
+                             "change component values" % cfg["slug"])
+        print()
+    print("all variants share an identical netlist")
+
+
+main()

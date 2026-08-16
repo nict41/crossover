@@ -1,7 +1,7 @@
 Netlist extracted from the generated schematic geometry
-variant: esp-p148-3way-state-variable-crossover
-  High/Mid  680 Hz - 4.8 kHz   R7, R8 = 3.3k   C1, C2 = 10nF
-  Mid/Low   68 Hz - 480 Hz   R17, R18 = 3.3k   C3, C4 = 100nF
+variant: esp-p148-3way-crossover-retuned-200hz-1khz
+  High/Mid  195 Hz - 1.03 kHz   R7, R8 = 4.7k   C1, C2 = 33nF
+  Mid/Low   61 Hz - 257 Hz   R17, R18 = 6.2k   C3, C4 = 100nF
 ========================================================
 
 +15V       C11.1  C5.1  C7.1  C9.1  J1.1  U1A.8  U2A.8  U3A.8  U4A.8

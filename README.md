@@ -5,21 +5,30 @@ crossover** from Elliott Sound Products Project 148
 (<https://sound-au.com/project148.htm>), redrawn from Figure 2.
 
 Two cascaded 2nd-order state variable filters, 12 dB/octave, with continuously
-variable crossover frequencies (680 Hz – 4.8 kHz and 68 Hz – 480 Hz) and
-adjustable Q. One channel — build two for stereo.
+variable crossover frequencies and adjustable Q. One channel — build two for
+stereo.
 
-![Schematic preview](schematic/preview.png)
+Two variants are provided. They are the **same circuit** — identical topology,
+identical netlist — differing only in the six components that set the frequency
+range:
+
+| Variant | High/Mid | Mid/Low | File |
+|---|---|---|---|
+| Stock ESP P148 | 680 Hz – 4.8 kHz | 68 – 480 Hz | `esp-p148-3way-state-variable-crossover.json` |
+| Retuned | 195 Hz – 1.03 kHz | 61 – 257 Hz | `esp-p148-3way-crossover-retuned-200hz-1khz.json` |
+
+![Schematic preview](schematic/esp-p148-3way-crossover-retuned-200hz-1khz.png)
 
 ## Importing into EasyEDA
 
 EasyEDA Std (<https://easyeda.com/editor>):
 
 1. **File → Open → EasyEDA…**, or **File → Import → EasyEDA**.
-2. Choose `schematic/esp-p148-3way-state-variable-crossover.json`.
+2. Choose the `.json` for the variant you want, from `schematic/`.
 
-If that file is rejected by your editor version, try
-`esp-p148-3way-state-variable-crossover.legacy.json` — identical drawing, but
-with the older string-form document header that some builds prefer.
+If that file is rejected by your editor version, try the matching
+`.legacy.json` — identical drawing, but with the older string-form document
+header that some builds prefer.
 
 For EasyEDA Pro: **File → Import → EasyEDA Std**, then pick the same `.json`.
 
@@ -30,10 +39,11 @@ limitations" below.
 ## Repository layout
 
 ```
-schematic/   EasyEDA schematic (.json), plus preview.svg / preview.png
+schematic/   EasyEDA schematics (.json + .legacy.json), one pair per variant,
+             each with a matching .svg / .png preview
 docs/        circuit-notes.md — how the circuit works, design equations
              netlist.txt      — netlist extracted back out of the drawing
-bom/         bom.csv
+bom/         bom.csv, bom-retuned.csv
 tools/       gen_schematic.py — generates everything above
 ```
 
@@ -51,6 +61,10 @@ dots from wire degree, then **re-extracts the netlist from the finished
 geometry** and prints it. That extracted netlist is what's in `docs/netlist.txt`
 — it is a check on the drawing, not a restatement of intent.
 
+It builds every entry in `VARIANTS` and asserts that they all produce the same
+netlist, so a retune that accidentally changed a connection would fail the
+build rather than ship quietly.
+
 ## Circuit summary
 
 | | Filter 1 | Filter 2 |
@@ -59,8 +73,7 @@ geometry** and prints it. That extracted netlist is what's in `docs/netlist.txt`
 | Integrator 1 (bandpass, feedback only) | U2A | U3B |
 | Integrator 2 (low-pass out) | U2B → filter 2 | U4A → U4B → **LOW** |
 | Frequency pot | VR1 (dual 20k) | VR2 (dual 20k) |
-| Integrator caps | C1, C2 = 10 nF | C3, C4 = 100 nF |
-| Range | 680 Hz – 4.8 kHz | 68 Hz – 480 Hz |
+| Integrator caps | C1, C2 | C3, C4 |
 | Q resistor | R3 = 12k | R13 = 12k |
 
 Q = (5.6k + Rq) / (3 × Rq): 11k2 gives exactly 0.5 (Linkwitz-Riley), 12k as
@@ -73,6 +86,21 @@ U3A, the input amplifier of the second filter, is already inverting.
 TP1 and TP2 sum each filter's high-pass and low-pass outputs through 10 k
 resistors; the signal nulls at the crossover frequency, so you can measure it
 exactly with an oscillator. They're optional — the ESP PCB omits them.
+
+### Frequency range
+
+`f = 1/(2πRC)`, where R sweeps from the series resistor alone to series + 20 k
+pot. The series resistor therefore sets both the top frequency *and* the
+max/min ratio:
+
+| Variant | R7, R8 | C1, C2 | High/Mid | R17, R18 | C3, C4 | Mid/Low |
+|---|---|---|---|---|---|---|
+| Stock | 3.3k | 10 nF | 683 Hz – 4.82 kHz | 3.3k | 100 nF | 68.3 – 482 Hz |
+| Retuned | 4.7k | 33 nF | 195 Hz – 1.03 kHz | 6.2k | 100 nF | 60.7 – 257 Hz |
+
+Nothing else differs — same Q, same op-amps, same 20 k pots. Larger series
+resistors also load the previous stage *less*, so this direction is safe; the
+article only warns against going below ~2.2k.
 
 Full explanation, design equations and frequency tables: [`docs/circuit-notes.md`](docs/circuit-notes.md).
 
