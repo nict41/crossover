@@ -14,7 +14,8 @@ The generator routes the board and then checks it with geometry that does not
 reuse the router's own bookkeeping. On the current output:
 
 ```
-board 76.2 x 44.5 mm | 44 footprints | 121 pads | 113 tracks | 46 vias
+board 76.2 x 44.5 mm | 46 footprints | 123 pads | 113 tracks | 48 vias
+board utilisation 65%; largest empty rectangle 5 x 32 mm
 verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
           pads match the schematic exactly
 ```
@@ -29,7 +30,14 @@ The checks are:
 * **Schematic agreement** — the pad set must equal the schematic pin set, both
   directions.
 * **Mounting holes** — nothing may sit within 8 mil of an M3 hole.
-* **Board edge** — every pad inside the outline.
+* **Board edge** — every pad inside the outline, and no copper within 0.5 mm
+  of it.
+* **Wasted area** — the board is gridded and the largest all-empty rectangle
+  found, arithmetically. Utilisation is reported every run, and a single void
+  over 10 % of the board is an error. This is the "why is there a big empty
+  patch" question answered by measurement instead of by squinting at a preview.
+* **Silkscreen** — no silk over an exposed pad (the fab clips it), none running
+  off the board edge.
 
 These caught eight real defects during development that would have reached the
 fab otherwise: vias placed too close to foreign copper (a via is wider than the
@@ -120,8 +128,12 @@ connectors and test points.
 ## Not assembled
 
 * **VR1, VR2** — the frequency pots (above).
-* **J1** ±15 V and ground, **J2** input, **J3** the three outputs plus ground —
-  all on the rear edge, opposite the controls, so the box wires up sensibly.
+* **J1** ±15 V and ground, **J2** input, and **J3 / J4 / J5** — one 2-way
+  screw terminal block per output, each carrying its own signal *and its own
+  ground return*, because each one runs to a separate power amplifier. Sharing
+  a single ground pin between three amplifier feeds invites hum loops. All on
+  the rear edge, opposite the controls, so the box wires up sensibly.
+  Blocks are 3.5 mm pitch (drawn on 3.556 mm, absorbed by the 1.1 mm holes).
 * **TP1, TP2** — the null test points, rear edge.
 
 ## Layout

@@ -186,7 +186,7 @@ part a real LCSC line item.
 ![SMD board](pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.png)
 
 ```
-44 footprints | 121 pads | 113 tracks | 46 vias
+46 footprints | 123 pads | 113 tracks | 48 vias
 verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
           pads match the schematic exactly
 ```

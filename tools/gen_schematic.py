@@ -549,7 +549,8 @@ def draw(cfg):
     note(60, 60 + OY, "FILTER 2 - state variable, Q = 0.5 (Linkwitz-Riley)", weight="bold")
 
     # ---------------- power input and supply bypassing ------------------------
-    header("J1", "PWR", 110, 1280, ["+15V", "GND", "-15V"])
+    header("J1", "PWR", 110, 1280, ["+15V", "GND", "-15V"],
+       package="TB-3P-5.08")
     w((130, 1290), (180, 1290))
     netlabel("+15V", 180, 1290, anchor="start", dx=4, dy=3)
     w((130, 1320), (180, 1320))
@@ -573,19 +574,21 @@ def draw(cfg):
              anchor="middle")
 
     # ---------------- signal connectors and test points -------------------
-    header("J2", "IN", 1050, 1250, ["IN", "GND"], package="HDR-1X2")
+    header("J2", "IN", 1050, 1250, ["IN", "GND"], package="TB-2P-5.08")
     w((1070, 1260), (1130, 1260))
     netlabel("INPUT", 1130, 1260, anchor="start", dx=4, dy=3)
     w((1070, 1290), (1130, 1290))
     gnd(1130, 1290)
 
-    header("J3", "OUT", 1270, 1250, ["HIGH", "MID", "LOW", "GND"],
-           package="HDR-1X4")
-    for i, nm in enumerate(["HIGH", "MID", "LOW"]):
-        w((1290, 1260 + 30 * i), (1350, 1260 + 30 * i))
-        netlabel(nm, 1350, 1260 + 30 * i, anchor="start", dx=4, dy=3)
-    w((1290, 1350), (1350, 1350))
-    gnd(1350, 1350)
+    # One 2-way terminal block per output: each amplifier gets its own signal
+    # and its own ground return, rather than three signals sharing one ground.
+    for k, (ref, nm) in enumerate([("J3", "HIGH"), ("J4", "MID"), ("J5", "LOW")]):
+        oy = 1250 + 80 * k
+        header(ref, nm, 1270, oy, [nm, "GND"], package="TB-2P-5.08")
+        w((1290, oy + 10), (1350, oy + 10))
+        netlabel(nm, 1350, oy + 10, anchor="start", dx=4, dy=3)
+        w((1290, oy + 40), (1350, oy + 40))
+        gnd(1350, oy + 40)
 
     for i, tp in enumerate(["TP1", "TP2"]):
         header(tp, "TP", 1510, 1250 + 80 * i, [tp], package="TESTPOINT")
@@ -837,7 +840,9 @@ def write_bom(filename="bom.csv"):
         "100R": "Output series build-out resistors",
         "TP": "Test points - optional, omit with R10/R11 and R23/R24",
         "IN": "Signal input",
-        "OUT": "Outputs to the three power amplifiers",
+        "HIGH": "Output terminal block to the treble amplifier",
+        "MID": "Output terminal block to the midrange amplifier",
+        "LOW": "Output terminal block to the bass amplifier",
         "10k": "R10/R11/R23/R24 are the TP1/TP2 null network - optional",
     }
     out = ["Qty,Value,Package,Designators,Notes"]

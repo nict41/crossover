@@ -6,12 +6,12 @@ variant: esp-p148-3way-state-variable-crossover
 
 +15V       C11.1  C5.1  C7.1  C9.1  J1.1  U1A.8  U2A.8  U3A.8  U4A.8
 -15V       C10.2  C12.2  C6.2  C8.2  J1.3  U1A.4  U2A.4  U3A.4  U4A.4
-GND        C10.1  C11.2  C12.1  C5.2  C6.1  C7.2  C8.1  C9.2  J1.2  J2.2  J3.4  R1.2  R13.2  R3.2  U2A.3  U2B.5  U3B.5  U4A.3  U4B.5
+GND        C10.1  C11.2  C12.1  C5.2  C6.1  C7.2  C8.1  C9.2  J1.2  J2.2  J3.2  J4.2  J5.2  R1.2  R13.2  R3.2  U2A.3  U2B.5  U3B.5  U4A.3  U4B.5
 HIGH       J3.1  R9.2
 INPUT      C0.1  J2.1
-LOW        J3.3  R22.2
+LOW        J5.1  R22.2
 LP1        C2.2  R11.1  R15.1  R6.2  U2B.7
-MID        J3.2  R19.2
+MID        J4.1  R19.2
 N1100_300  C1.2  R4.2  U2A.1  VR1B.1
 N1100_900  C3.2  R14.2  U3B.7  VR2B.1
 N1280_300  R8.1  VR1B.2  VR1B.3
@@ -36,4 +36,4 @@ N950_900   C3.1  R17.2  U3B.6
 TP1        R10.1  R11.2  TP1.1
 TP2        R23.1  R24.2  TP2.1
 
-31 nets, 54 parts, 129 component pins, 40 junctions
+31 nets, 56 parts, 131 component pins, 40 junctions

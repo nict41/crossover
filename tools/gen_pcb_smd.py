@@ -155,7 +155,7 @@ def fp_soic14(pkg_ref, sections, x, y, net_of, rot=0):
                      net_of(sections[n], n), pw, ph)
         silk_rect(x - 4, y - 7.5, x + 34, y + 7.5)
         track([(x - 4, y + 7.5), (x - 4, y + 4)], TOPSILK, 0.5)
-        silk_ref(x - 4, y - 10, pkg_ref.split()[0], 2.4)
+        silk_ref(x - 4, y - 16, pkg_ref.split()[0], 2.4)   # clear of pad 14
         cx, cy = x + 15, y
         box = (x - 4 - CLEAR, y - row - ph / 2 - CLEAR,
                x + 34 + CLEAR, y + row + ph / 2 + CLEAR)
@@ -201,6 +201,25 @@ def fp_pads(ref, x, y, net_of, n=3, label="", horiz=False, names=None):
     PARTS[ref] = dict(value=label or ref, x=x, y=y, rot=0, assembled=False,
                       pkg="THT-PAD")
     return (e[0] - CLEAR, e[1] - CLEAR, e[2] + CLEAR, e[3] + CLEAR)
+
+
+def fp_term(ref, x, y, net_of, n=2, names=None):
+    """Screw terminal block, 3.5 mm pitch (14 units = 3.556 mm; the 1.1 mm
+    holes absorb the difference).  Wire entry faces the board edge."""
+    _m = fp_begin()
+    for i in range(n):
+        pad_tht(ref, i + 1, x + i * 14.0, y, net_of(ref, i + 1), dia=8.0, hole=4.3)
+        if names and i < len(names):
+            silk(x + i * 14.0 - 1.7 * len(names[i]), y + 15, names[i], 2.0)
+    x1 = x + (n - 1) * 14.0
+    silk_rect(x - 7, y - 16, x1 + 7, y + 10)
+    for i in range(n):
+        silk_rect(x + i * 14.0 - 4, y - 14, x + i * 14.0 + 4, y - 8, 0.4)
+    silk_ref(x - 7, y - 18.5, ref, 2.2)
+    fp_end(ref, _m, (x + x1) / 2, y)
+    PARTS[ref] = dict(value="TB-%dP-3.5" % n, x=(x + x1) / 2, y=y, rot=0,
+                      assembled=False, pkg="TB-%dP-3.5" % n)
+    return (x - 9 - CLEAR, y - 18 - CLEAR, x1 + 9 + CLEAR, y + 12 + CLEAR)
 
 
 def fp_pot(pkg_ref, gang_a, gang_b, x, y, net_of):
@@ -271,15 +290,14 @@ U2S = {1: "U2A", 2: "U2A", 3: "U2A", 4: "U2A", 5: "U2B", 6: "U2B", 7: "U2B",
        8: "U2C", 9: "U2C", 10: "U2C", 11: "U2A", 12: "U2D", 13: "U2D", 14: "U2D"}
 
 FIXED = [
-    ("J2", dict(fn=fp_pads, n=2, label="IN", horiz=True,
-                names=["IN", "GND"]), 26, 14),
-    ("J1", dict(fn=fp_pads, n=3, label="PWR", horiz=True,
-                names=["+15V", "GND", "-15V"]), 66, 14),
-    ("J3", dict(fn=fp_pads, n=4, label="OUT", horiz=True,
-                names=["HIGH", "MID", "LOW", "GND"]), 126, 14),
-    ("C0", dict(fn=fp_elec), 30, 42),
-    ("TP1", dict(fn=fp_pads, n=1, label="TP1"), BW - 100, 14),
-    ("TP2", dict(fn=fp_pads, n=1, label="TP2"), BW - 70, 14),
+    ("J2", dict(fn=fp_term, n=2, names=["IN", "GND"]), 26, 22),
+    ("J1", dict(fn=fp_term, n=3, names=["+15", "GND", "-15"]), 68, 22),
+    ("J3", dict(fn=fp_term, n=2, names=["HI", "GND"]), 136, 22),
+    ("J4", dict(fn=fp_term, n=2, names=["MID", "GND"]), 176, 22),
+    ("J5", dict(fn=fp_term, n=2, names=["LOW", "GND"]), 216, 22),
+    ("C0", dict(fn=fp_elec), 36, 62),
+    ("TP1", dict(fn=fp_pads, n=1, label="TP1"), 258, 22),
+    ("TP2", dict(fn=fp_pads, n=1, label="TP2"), 280, 22),
 ]
 # Stacked, not side by side.  Side by side was tried - it gives each filter its
 # own half with its pot below, and it routes to the same 320x260 board, so it
@@ -315,6 +333,8 @@ def place_fixed():
         fn = spec.pop("fn")
         if fn is fp_elec:
             placed.append(fn(ref, x, y, N, VALUE[ref]))
+        elif fn is fp_term:
+            placed.append(fn(ref, x, y, N, **spec))
         else:
             placed.append(fn(ref, x, y, N, **spec))
         spec["fn"] = fn
@@ -696,6 +716,9 @@ for x, y, name in VIAS:
                          g=(x, y), tag="via"))
 
 
+REPORT = []
+
+
 def verify():
     problems = []
     # -- clearance: every pair of features on a shared layer, different nets
@@ -754,6 +777,92 @@ def verify():
     for p in pads:
         if not (2 < p["x"] < BW - 2 and 2 < p["y"] < BH - 2):
             problems.append("pad %s.%s outside board" % (p["ref"], p["num"]))
+    # -- board utilisation and the largest wasted rectangle.  This is the
+    #    "why is there a big empty patch" check, done arithmetically instead
+    #    of by squinting at the preview.
+    CELL = 5.0
+    nx, ny = int(BW / CELL), int(BH / CELL)
+    used = np.zeros((ny, nx), dtype=bool)
+
+    def mark(x0, y0, x1, y1):
+        used[max(0, int(y0 / CELL)):min(ny, int(y1 / CELL) + 1),
+             max(0, int(x0 / CELL)):min(nx, int(x1 / CELL) + 1)] = True
+
+    for b_ in placed:
+        mark(*b_)
+    for f in FEATURES:
+        if f["k"] == "rect":
+            mark(*f["g"])
+        elif f["k"] == "seg":
+            (ax, ay), (bx, by) = f["g"]
+            mark(min(ax, bx) - 1, min(ay, by) - 1, max(ax, bx) + 1, max(ay, by) + 1)
+        else:
+            mark(f["g"][0] - 2, f["g"][1] - 2, f["g"][0] + 2, f["g"][1] + 2)
+    for hx, hy in MOUNT_HOLES:
+        mark(hx - MOUNT_R, hy - MOUNT_R, hx + MOUNT_R, hy + MOUNT_R)
+
+    # largest all-empty axis-aligned rectangle, by the standard histogram method
+    best = (0, 0, 0, 0, 0)
+    heights = np.zeros(nx, dtype=int)
+    for r in range(ny):
+        heights = np.where(used[r], 0, heights + 1)
+        stack = []
+        for c in range(nx + 1):
+            h = heights[c] if c < nx else 0
+            start = c
+            while stack and stack[-1][1] >= h:
+                sc, sh = stack.pop()
+                area = sh * (c - sc)
+                if area > best[0]:
+                    best = (area, sc, r - sh + 1, c, r + 1)
+                start = sc
+            stack.append((start, h))
+    fill = 100.0 * used.sum() / used.size
+    wa, wx0, wy0, wx1, wy1 = best
+    REPORT.append("board utilisation %.0f%%; largest empty rectangle "
+                  "%.0f x %.0f mm at (%.0f, %.0f)"
+                  % (fill, (wx1 - wx0) * CELL * 0.254, (wy1 - wy0) * CELL * 0.254,
+                     wx0 * CELL * 0.254, wy0 * CELL * 0.254))
+    if wa * CELL * CELL > 0.10 * BW * BH:
+        problems.append("a single empty rectangle is %.0f%% of the board "
+                        "(%.0f x %.0f mm at %.0f,%.0f) - the board can probably "
+                        "be smaller or the parts spread better"
+                        % (100.0 * wa * CELL * CELL / (BW * BH),
+                           (wx1 - wx0) * CELL * 0.254, (wy1 - wy0) * CELL * 0.254,
+                           wx0 * CELL * 0.254, wy0 * CELL * 0.254))
+
+    # -- silkscreen: not over exposed pads, not off the board
+    silks = []
+    for sh in shapes:
+        f = sh.split("~")
+        if f[0] == "TEXT" and f[7] == "3":
+            w_ = 0.62 * float(f[9]) * len(f[10])
+            silks.append((float(f[2]), float(f[3]) - float(f[9]),
+                          float(f[2]) + w_, float(f[3]) + 0.25 * float(f[9]),
+                          f[10]))
+    for sx0, sy0, sx1, sy1, txt in silks:
+        if sx0 < 1 or sy0 < 1 or sx1 > BW - 1 or sy1 > BH - 1:
+            problems.append("silk '%s' runs off the board edge" % txt)
+        for pd in pads:
+            if (sx0 < pd["x"] + pd["w"] / 2 and pd["x"] - pd["w"] / 2 < sx1 and
+                    sy0 < pd["y"] + pd["h"] / 2 and pd["y"] - pd["h"] / 2 < sy1):
+                problems.append("silk '%s' sits over pad %s.%s"
+                                % (txt, pd["ref"], pd["num"]))
+                break
+
+    # -- copper must not crowd the board edge
+    for f in FEATURES:
+        g = f["g"]
+        xs = ([g[0], g[2]] if f["k"] == "rect" else
+              [g[0][0], g[1][0]] if f["k"] == "seg" else [g[0]])
+        ys = ([g[1], g[3]] if f["k"] == "rect" else
+              [g[0][1], g[1][1]] if f["k"] == "seg" else [g[1]])
+        if (min(xs) - f["hw"] < 2 or min(ys) - f["hw"] < 2 or
+                max(xs) + f["hw"] > BW - 2 or max(ys) + f["hw"] > BH - 2):
+            problems.append("%s (%s) is within 0.5 mm of the board edge"
+                            % (f["tag"], f["net"]))
+            break
+
     # -- schematic agreement
     sch = {tuple(m.rpartition(".")[::2]) for mem in netdoc["nets"].values() for m in mem}
     have = {(p["ref"], p["num"]) for p in pads}
@@ -780,10 +889,7 @@ for hx, hy in MOUNT_HOLES:
 for hx, hy in POT_BOSSES:
     shapes.append("HOLE~%g~%g~9.0~%s" % (hx, hy, gid()))
 track([(0, 0), (BW, 0), (BW, BH), (0, BH), (0, 0)], OUTLINE, 0.6)
-silk(124, BH - 46, "ESP P148 3-WAY VARIABLE CROSSOVER", 3.4)
-silk(124, BH - 38, "RETUNED QUAD SMD", 2.6)
-silk(124, BH - 30, "195Hz-1.03kHz / 73-186Hz", 2.6)
-silk(124, BH - 22, "ONE CHANNEL - BUILD TWO FOR STEREO", 2.6)
+silk(26, BH - 4.5, "ESP P148 3-WAY VARIABLE CROSSOVER  -  RETUNED QUAD SMD  -  195Hz-1.03kHz / 73-186Hz  -  ONE CHANNEL", 2.4)
 
 for L in (TOP, BOT):
     shapes.append("COPPERAREA~%g~%d~GND~%s~1~solid~%s~spoke~none~[]~0~2~1~none"
@@ -932,6 +1038,8 @@ except Exception as exc:
 print("board %.1f x %.1f mm | %d footprints | %d pads | %d tracks | %d vias"
       % (BW * 0.254, BH * 0.254, len(FP_SPANS), len(pads), len(ROUTED), len(VIAS)))
 print("ratsnest %.0f -> %.0f mm (placement optimisation)" % (BEFORE / MM, AFTER / MM))
+for r in REPORT:
+    print("  note:", r)
 if FAILED:
     print("UNROUTED:", FAILED)
 if ISSUES:
