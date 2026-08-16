@@ -115,7 +115,7 @@
   "T~L~60~1180~0~#0000A0~Verdana~9pt~bold~~~comment~SUPPLY BYPASSING - one 100nF ceramic per rail, at each IC~1~start~gge471",
   "T~L~60~30~0~#000000~Verdana~14pt~bold~~~comment~3-Way State Variable Electronic Crossover  -  ESP P148, retuned (195 Hz - 1.03 kHz / 71 Hz - 180 Hz)~1~start~gge472",
   "T~L~60~1520~0~#404040~Verdana~8pt~~~~comment~After Rod Elliott, Elliott Sound Products, Project 148 (https://sound-au.com/project148.htm).  Redrawn for EasyEDA.~1~start~gge473",
-  "T~L~60~1540~0~#404040~Verdana~8pt~~~~comment~All op-amps NE5532 (dual).  Q = 0.5 Linkwitz-Riley with R3 / R13 = 12k; use 11k2 for exact Q = 0.5, or 5k04 for Butterworth (Q = 0.707).~1~start~gge474",
+  "T~L~60~1540~0~#404040~Verdana~8pt~~~~comment~All op-amps NE5532 - 4 x DIP-8 packages.  Q = 0.5 Linkwitz-Riley with R3 / R13 = 11k; use 11k2 for exact Q = 0.5, or 5k04 for Butterworth (Q = 0.707).~1~start~gge474",
   "T~L~60~1560~0~#404040~Verdana~8pt~~~~comment~VR1 and VR2 are dual-gang 20k linear pots wired as rheostats. TP1 / TP2 null at the crossover frequency and may be omitted.~1~start~gge475",
   "J~200~280~2.5~#CC0000~gge476",
   "J~350~1350~2.5~#CC0000~gge477",

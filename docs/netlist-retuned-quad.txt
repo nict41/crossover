@@ -1,0 +1,39 @@
+Netlist extracted from the generated schematic geometry
+variant: esp-p148-3way-crossover-retuned-quad
+  High/Mid  195 Hz - 1.03 kHz   R7, R8 = 4.7k   C1, C2 = 33nF
+  Mid/Low   71 Hz - 180 Hz   R17, R18 = 13k   C3, C4 = 68nF
+========================================================
+
++15V       C5.1  C7.1  J1.1  U1A.4  U2A.4
+-15V       C6.2  C8.2  J1.3  U1A.11  U2A.11
+GND        C5.2  C6.1  C7.2  C8.1  J1.2  R1.2  R13.2  R3.2  U1C.10  U1D.12  U2B.5  U2C.10  U2D.12
+HIGH       R9.2
+INPUT      C0.1
+LOW        R22.2
+LP1        C2.2  R11.1  R15.1  R6.2  U1D.14
+MID        R19.2
+N1100_300  C1.2  R4.2  U1C.8  VR1B.1
+N1100_900  C3.2  R14.2  U2B.7  VR2B.1
+N1280_300  R8.1  VR1B.2  VR1B.3
+N1280_900  R18.1  VR2B.2  VR2B.3
+N1400_300  C2.1  R8.2  U1D.13
+N1400_900  C4.1  R18.2  U2C.9
+N1580_640  C4.2  R12.2  R20.1  R24.1  U2C.8
+N160_280   C0.2  R1.1  U1A.3
+N1680_900  R20.2  R21.1  U2D.13
+N1850_900  R21.2  R22.1  U2D.14
+N350_300   R2.1  U1A.1  U1A.2
+N530_100   R2.2  R5.1  R6.1  U1B.6
+N530_700   R12.1  R15.2  R16.1  U2A.2
+N570_320   R3.1  R4.1  U1B.5
+N570_920   R13.1  R14.1  U2A.3
+N680_300   R10.2  R5.2  R9.1  U1B.7  VR1A.1
+N680_900   R16.2  R19.1  R23.2  U2A.1  VR2A.1
+N830_300   R7.1  VR1A.2  VR1A.3
+N830_900   R17.1  VR2A.2  VR2A.3
+N950_300   C1.1  R7.2  U1C.9
+N950_900   C3.1  R17.2  U2B.6
+TP1        R10.1  R11.2
+TP2        R23.1  R24.2
+
+31 nets, 46 parts, 109 component pins, 38 junctions

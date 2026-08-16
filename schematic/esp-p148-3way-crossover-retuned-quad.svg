@@ -28,11 +28,11 @@
 <text x="268" y="286" fill="#000080" font-family="Verdana" font-size="9pt" font-weight="normal" text-anchor="middle">+</text>
 <text x="268" y="322" fill="#000080" font-family="Verdana" font-size="9pt" font-weight="normal" text-anchor="middle">−</text>
 <path d="M 280 240 v 30" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="284" y="256" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">8</text>
+<text x="284" y="256" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">4</text>
 <path d="M 280 360 v -30" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="284" y="352" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">4</text>
+<text x="284" y="352" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">11</text>
 <text x="292" y="252" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">U1A</text>
-<text x="274" y="306" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">NE5532</text>
+<text x="274" y="306" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">MC33079</text>
 <circle cx="280" cy="240" r="2" fill="#0000FF"/>
 <text x="280" y="232" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">+15V</text>
 <circle cx="280" cy="360" r="2" fill="#0000FF"/>
@@ -52,7 +52,7 @@
 <text x="598" y="286" fill="#000080" font-family="Verdana" font-size="9pt" font-weight="normal" text-anchor="middle">−</text>
 <text x="598" y="322" fill="#000080" font-family="Verdana" font-size="9pt" font-weight="normal" text-anchor="middle">+</text>
 <text x="622" y="252" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">U1B</text>
-<text x="604" y="306" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">NE5532</text>
+<text x="604" y="306" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">MC33079</text>
 <rect x="580" y="94" width="40" height="12" stroke="#000080" stroke-width="1" fill="none"/>
 <path d="M 570 100 h 10" stroke="#880000" stroke-width="1" fill="none"/>
 <path d="M 630 100 h -10" stroke="#880000" stroke-width="1" fill="none"/>
@@ -93,23 +93,15 @@
 <text x="920" y="322" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">4.7k</text>
 <polygon points="1010 260 1010 340 1080 300" stroke="#000080" stroke-width="1" fill="none"/>
 <path d="M 990 280 h 20" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="988" y="276" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="end">2</text>
+<text x="988" y="276" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="end">9</text>
 <path d="M 990 320 h 20" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="988" y="332" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="end">3</text>
+<text x="988" y="332" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="end">10</text>
 <path d="M 1100 300 h -20" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="1084" y="294" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">1</text>
+<text x="1084" y="294" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">8</text>
 <text x="1018" y="286" fill="#000080" font-family="Verdana" font-size="9pt" font-weight="normal" text-anchor="middle">−</text>
 <text x="1018" y="322" fill="#000080" font-family="Verdana" font-size="9pt" font-weight="normal" text-anchor="middle">+</text>
-<path d="M 1030 240 v 30" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="1034" y="256" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">8</text>
-<path d="M 1030 360 v -30" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="1034" y="352" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">4</text>
-<text x="1042" y="252" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">U2A</text>
-<text x="1024" y="306" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">NE5532</text>
-<circle cx="1030" cy="240" r="2" fill="#0000FF"/>
-<text x="1030" y="232" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">+15V</text>
-<circle cx="1030" cy="360" r="2" fill="#0000FF"/>
-<text x="1030" y="376" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">-15V</text>
+<text x="1042" y="252" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">U1C</text>
+<text x="1024" y="306" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">MC33079</text>
 <polyline points="990 370 990 360" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="980 370 999 370" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="984 372 997 372" stroke="#000000" stroke-width="1" fill="none"/>
@@ -135,15 +127,15 @@
 <text x="1370" y="322" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">4.7k</text>
 <polygon points="1460 260 1460 340 1530 300" stroke="#000080" stroke-width="1" fill="none"/>
 <path d="M 1440 280 h 20" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="1438" y="276" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="end">6</text>
+<text x="1438" y="276" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="end">13</text>
 <path d="M 1440 320 h 20" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="1438" y="332" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="end">5</text>
+<text x="1438" y="332" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="end">12</text>
 <path d="M 1550 300 h -20" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="1534" y="294" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">7</text>
+<text x="1534" y="294" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">14</text>
 <text x="1468" y="286" fill="#000080" font-family="Verdana" font-size="9pt" font-weight="normal" text-anchor="middle">−</text>
 <text x="1468" y="322" fill="#000080" font-family="Verdana" font-size="9pt" font-weight="normal" text-anchor="middle">+</text>
-<text x="1492" y="252" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">U2B</text>
-<text x="1474" y="306" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">NE5532</text>
+<text x="1492" y="252" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">U1D</text>
+<text x="1474" y="306" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">MC33079</text>
 <polyline points="1440 370 1440 360" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="1430 370 1449 370" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="1434 372 1447 372" stroke="#000000" stroke-width="1" fill="none"/>
@@ -195,11 +187,11 @@
 <text x="598" y="886" fill="#000080" font-family="Verdana" font-size="9pt" font-weight="normal" text-anchor="middle">−</text>
 <text x="598" y="922" fill="#000080" font-family="Verdana" font-size="9pt" font-weight="normal" text-anchor="middle">+</text>
 <path d="M 610 840 v 30" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="614" y="856" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">8</text>
+<text x="614" y="856" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">4</text>
 <path d="M 610 960 v -30" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="614" y="952" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">4</text>
-<text x="622" y="852" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">U3A</text>
-<text x="604" y="906" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">NE5532</text>
+<text x="614" y="952" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">11</text>
+<text x="622" y="852" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">U2A</text>
+<text x="604" y="906" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">MC33079</text>
 <circle cx="610" cy="840" r="2" fill="#0000FF"/>
 <text x="610" y="832" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">+15V</text>
 <circle cx="610" cy="960" r="2" fill="#0000FF"/>
@@ -251,8 +243,8 @@
 <text x="1084" y="894" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">7</text>
 <text x="1018" y="886" fill="#000080" font-family="Verdana" font-size="9pt" font-weight="normal" text-anchor="middle">−</text>
 <text x="1018" y="922" fill="#000080" font-family="Verdana" font-size="9pt" font-weight="normal" text-anchor="middle">+</text>
-<text x="1042" y="852" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">U3B</text>
-<text x="1024" y="906" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">NE5532</text>
+<text x="1042" y="852" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">U2B</text>
+<text x="1024" y="906" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">MC33079</text>
 <polyline points="990 970 990 960" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="980 970 999 970" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="984 972 997 972" stroke="#000000" stroke-width="1" fill="none"/>
@@ -278,23 +270,15 @@
 <text x="1370" y="922" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">13k</text>
 <polygon points="1460 860 1460 940 1530 900" stroke="#000080" stroke-width="1" fill="none"/>
 <path d="M 1440 880 h 20" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="1438" y="876" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="end">2</text>
+<text x="1438" y="876" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="end">9</text>
 <path d="M 1440 920 h 20" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="1438" y="932" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="end">3</text>
+<text x="1438" y="932" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="end">10</text>
 <path d="M 1550 900 h -20" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="1534" y="894" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">1</text>
+<text x="1534" y="894" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">8</text>
 <text x="1468" y="886" fill="#000080" font-family="Verdana" font-size="9pt" font-weight="normal" text-anchor="middle">−</text>
 <text x="1468" y="922" fill="#000080" font-family="Verdana" font-size="9pt" font-weight="normal" text-anchor="middle">+</text>
-<path d="M 1480 840 v 30" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="1484" y="856" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">8</text>
-<path d="M 1480 960 v -30" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="1484" y="952" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">4</text>
-<text x="1492" y="852" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">U4A</text>
-<text x="1474" y="906" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">NE5532</text>
-<circle cx="1480" cy="840" r="2" fill="#0000FF"/>
-<text x="1480" y="832" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">+15V</text>
-<circle cx="1480" cy="960" r="2" fill="#0000FF"/>
-<text x="1480" y="976" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">-15V</text>
+<text x="1492" y="852" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">U2C</text>
+<text x="1474" y="906" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">MC33079</text>
 <polyline points="1440 970 1440 960" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="1430 970 1449 970" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="1434 972 1447 972" stroke="#000000" stroke-width="1" fill="none"/>
@@ -332,15 +316,15 @@
 <text x="1650" y="922" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">5.6k</text>
 <polygon points="1760 860 1760 940 1830 900" stroke="#000080" stroke-width="1" fill="none"/>
 <path d="M 1740 880 h 20" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="1738" y="876" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="end">6</text>
+<text x="1738" y="876" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="end">13</text>
 <path d="M 1740 920 h 20" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="1738" y="932" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="end">5</text>
+<text x="1738" y="932" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="end">12</text>
 <path d="M 1850 900 h -20" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="1834" y="894" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">7</text>
+<text x="1834" y="894" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">14</text>
 <text x="1768" y="886" fill="#000080" font-family="Verdana" font-size="9pt" font-weight="normal" text-anchor="middle">−</text>
 <text x="1768" y="922" fill="#000080" font-family="Verdana" font-size="9pt" font-weight="normal" text-anchor="middle">+</text>
-<text x="1792" y="852" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">U4B</text>
-<text x="1774" y="906" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">NE5532</text>
+<text x="1792" y="852" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">U2D</text>
+<text x="1774" y="906" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">MC33079</text>
 <polyline points="1740 970 1740 960" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="1730 970 1749 970" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="1734 972 1747 972" stroke="#000000" stroke-width="1" fill="none"/>
@@ -402,7 +386,7 @@
 <text x="368" y="1422" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">100nF</text>
 <circle cx="350" cy="1460" r="2" fill="#0000FF"/>
 <text x="350" y="1476" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">-15V</text>
-<text x="350" y="1208" fill="#0000A0" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">U1  pins 8 / 4</text>
+<text x="350" y="1208" fill="#0000A0" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">U1  pins 4 / 11</text>
 <circle cx="520" cy="1240" r="2" fill="#0000FF"/>
 <text x="520" y="1226" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">+15V</text>
 <polyline points="508 1286 532 1286" stroke="#000080" stroke-width="2" fill="none"/>
@@ -424,55 +408,11 @@
 <text x="538" y="1422" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">100nF</text>
 <circle cx="520" cy="1460" r="2" fill="#0000FF"/>
 <text x="520" y="1476" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">-15V</text>
-<text x="520" y="1208" fill="#0000A0" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">U2  pins 8 / 4</text>
-<circle cx="690" cy="1240" r="2" fill="#0000FF"/>
-<text x="690" y="1226" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">+15V</text>
-<polyline points="678 1286 702 1286" stroke="#000080" stroke-width="2" fill="none"/>
-<polyline points="678 1294 702 1294" stroke="#000080" stroke-width="2" fill="none"/>
-<path d="M 690 1260 v 26" stroke="#880000" stroke-width="1" fill="none"/>
-<path d="M 690 1320 v -26" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="708" y="1288" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">C9</text>
-<text x="708" y="1302" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">100nF</text>
-<polyline points="740 1360 740 1350" stroke="#000000" stroke-width="1" fill="none"/>
-<polyline points="730 1360 749 1360" stroke="#000000" stroke-width="1" fill="none"/>
-<polyline points="734 1362 747 1362" stroke="#000000" stroke-width="1" fill="none"/>
-<polyline points="736 1364 743 1364" stroke="#000000" stroke-width="1" fill="none"/>
-<polyline points="739 1366 741 1366" stroke="#000000" stroke-width="1" fill="none"/>
-<polyline points="678 1406 702 1406" stroke="#000080" stroke-width="2" fill="none"/>
-<polyline points="678 1414 702 1414" stroke="#000080" stroke-width="2" fill="none"/>
-<path d="M 690 1380 v 26" stroke="#880000" stroke-width="1" fill="none"/>
-<path d="M 690 1440 v -26" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="708" y="1408" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">C10</text>
-<text x="708" y="1422" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">100nF</text>
-<circle cx="690" cy="1460" r="2" fill="#0000FF"/>
-<text x="690" y="1476" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">-15V</text>
-<text x="690" y="1208" fill="#0000A0" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">U3  pins 8 / 4</text>
-<circle cx="860" cy="1240" r="2" fill="#0000FF"/>
-<text x="860" y="1226" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">+15V</text>
-<polyline points="848 1286 872 1286" stroke="#000080" stroke-width="2" fill="none"/>
-<polyline points="848 1294 872 1294" stroke="#000080" stroke-width="2" fill="none"/>
-<path d="M 860 1260 v 26" stroke="#880000" stroke-width="1" fill="none"/>
-<path d="M 860 1320 v -26" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="878" y="1288" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">C11</text>
-<text x="878" y="1302" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">100nF</text>
-<polyline points="910 1360 910 1350" stroke="#000000" stroke-width="1" fill="none"/>
-<polyline points="900 1360 919 1360" stroke="#000000" stroke-width="1" fill="none"/>
-<polyline points="904 1362 917 1362" stroke="#000000" stroke-width="1" fill="none"/>
-<polyline points="906 1364 913 1364" stroke="#000000" stroke-width="1" fill="none"/>
-<polyline points="909 1366 911 1366" stroke="#000000" stroke-width="1" fill="none"/>
-<polyline points="848 1406 872 1406" stroke="#000080" stroke-width="2" fill="none"/>
-<polyline points="848 1414 872 1414" stroke="#000080" stroke-width="2" fill="none"/>
-<path d="M 860 1380 v 26" stroke="#880000" stroke-width="1" fill="none"/>
-<path d="M 860 1440 v -26" stroke="#880000" stroke-width="1" fill="none"/>
-<text x="878" y="1408" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">C12</text>
-<text x="878" y="1422" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">100nF</text>
-<circle cx="860" cy="1460" r="2" fill="#0000FF"/>
-<text x="860" y="1476" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">-15V</text>
-<text x="860" y="1208" fill="#0000A0" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">U4  pins 8 / 4</text>
+<text x="520" y="1208" fill="#0000A0" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">U2  pins 4 / 11</text>
 <text x="60" y="1180" fill="#0000A0" font-family="Verdana" font-size="9pt" font-weight="bold" text-anchor="start">SUPPLY BYPASSING - one 100nF ceramic per rail, at each IC</text>
-<text x="60" y="30" fill="#000000" font-family="Verdana" font-size="14pt" font-weight="bold" text-anchor="start">3-Way State Variable Electronic Crossover  -  ESP P148, retuned (195 Hz - 1.03 kHz / 71 Hz - 180 Hz)</text>
+<text x="60" y="30" fill="#000000" font-family="Verdana" font-size="14pt" font-weight="bold" text-anchor="start">3-Way State Variable Electronic Crossover  -  ESP P148, retuned, two quad op-amps</text>
 <text x="60" y="1520" fill="#404040" font-family="Verdana" font-size="8pt" font-weight="normal" text-anchor="start">After Rod Elliott, Elliott Sound Products, Project 148 (https://sound-au.com/project148.htm).  Redrawn for EasyEDA.</text>
-<text x="60" y="1540" fill="#404040" font-family="Verdana" font-size="8pt" font-weight="normal" text-anchor="start">All op-amps NE5532 - 4 x DIP-8 packages.  Q = 0.5 Linkwitz-Riley with R3 / R13 = 11k; use 11k2 for exact Q = 0.5, or 5k04 for Butterworth (Q = 0.707).</text>
+<text x="60" y="1540" fill="#404040" font-family="Verdana" font-size="8pt" font-weight="normal" text-anchor="start">All op-amps MC33079 - 2 x DIP-14 packages.  Q = 0.5 Linkwitz-Riley with R3 / R13 = 11k; use 11k2 for exact Q = 0.5, or 5k04 for Butterworth (Q = 0.707).</text>
 <text x="60" y="1560" fill="#404040" font-family="Verdana" font-size="8pt" font-weight="normal" text-anchor="start">VR1 and VR2 are dual-gang 20k linear pots wired as rheostats. TP1 / TP2 null at the crossover frequency and may be omitted.</text>
 <circle cx="200" cy="280" r="2.5" fill="#CC0000"/>
 <circle cx="350" cy="1350" r="2.5" fill="#CC0000"/>
@@ -484,12 +424,10 @@
 <circle cx="530" cy="200" r="2.5" fill="#CC0000"/>
 <circle cx="530" cy="740" r="2.5" fill="#CC0000"/>
 <circle cx="530" cy="800" r="2.5" fill="#CC0000"/>
-<circle cx="690" cy="1350" r="2.5" fill="#CC0000"/>
 <circle cx="720" cy="140" r="2.5" fill="#CC0000"/>
 <circle cx="720" cy="300" r="2.5" fill="#CC0000"/>
 <circle cx="720" cy="740" r="2.5" fill="#CC0000"/>
 <circle cx="720" cy="900" r="2.5" fill="#CC0000"/>
-<circle cx="860" cy="1350" r="2.5" fill="#CC0000"/>
 <circle cx="870" cy="300" r="2.5" fill="#CC0000"/>
 <circle cx="870" cy="900" r="2.5" fill="#CC0000"/>
 <circle cx="990" cy="280" r="2.5" fill="#CC0000"/>
@@ -619,14 +557,4 @@
 <polyline points="520 1350 570 1350" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="520 1350 520 1380" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="520 1440 520 1460" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="690 1240 690 1260" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="690 1320 690 1350" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="690 1350 740 1350" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="690 1350 690 1380" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="690 1440 690 1460" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="860 1240 860 1260" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="860 1320 860 1350" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="860 1350 910 1350" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="860 1350 860 1380" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="860 1440 860 1460" stroke="#008800" stroke-width="1" fill="none"/>
 </svg>

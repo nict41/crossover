@@ -472,7 +472,7 @@
 <text x="60" y="1180" fill="#0000A0" font-family="Verdana" font-size="9pt" font-weight="bold" text-anchor="start">SUPPLY BYPASSING - one 100nF ceramic per rail, at each IC</text>
 <text x="60" y="30" fill="#000000" font-family="Verdana" font-size="14pt" font-weight="bold" text-anchor="start">3-Way State Variable Electronic Crossover  -  ESP Project 148</text>
 <text x="60" y="1520" fill="#404040" font-family="Verdana" font-size="8pt" font-weight="normal" text-anchor="start">After Rod Elliott, Elliott Sound Products, Project 148 (https://sound-au.com/project148.htm).  Redrawn for EasyEDA.</text>
-<text x="60" y="1540" fill="#404040" font-family="Verdana" font-size="8pt" font-weight="normal" text-anchor="start">All op-amps NE5532 (dual).  Q = 0.5 Linkwitz-Riley with R3 / R13 = 12k; use 11k2 for exact Q = 0.5, or 5k04 for Butterworth (Q = 0.707).</text>
+<text x="60" y="1540" fill="#404040" font-family="Verdana" font-size="8pt" font-weight="normal" text-anchor="start">All op-amps NE5532 - 4 x DIP-8 packages.  Q = 0.5 Linkwitz-Riley with R3 / R13 = 12k; use 11k2 for exact Q = 0.5, or 5k04 for Butterworth (Q = 0.707).</text>
 <text x="60" y="1560" fill="#404040" font-family="Verdana" font-size="8pt" font-weight="normal" text-anchor="start">VR1 and VR2 are dual-gang 20k linear pots wired as rheostats. TP1 / TP2 null at the crossover frequency and may be omitted.</text>
 <circle cx="200" cy="280" r="2.5" fill="#CC0000"/>
 <circle cx="350" cy="1350" r="2.5" fill="#CC0000"/>

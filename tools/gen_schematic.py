@@ -48,16 +48,56 @@ wires = []           # list of point lists [(x, y), ...]
 # with rs sets R, and c is the integrator capacitor, so f = 1 / (2*pi*R*C) with
 # R sweeping from rs to rs + 20k.  Q, topology and every other value are shared.
 # --------------------------------------------------------------------------
+DUAL_ICS = {
+    # role:   (refdes, top pin, bottom pin, out pin, power pins)
+    "buf":  ("U1A", (3, "+"), (2, "-"), 1, (8, 4)),
+    "sum1": ("U1B", (6, "-"), (5, "+"), 7, None),
+    "int1": ("U2A", (2, "-"), (3, "+"), 1, (8, 4)),
+    "int2": ("U2B", (6, "-"), (5, "+"), 7, None),
+    "sum2": ("U3A", (2, "-"), (3, "+"), 1, (8, 4)),
+    "int3": ("U3B", (6, "-"), (5, "+"), 7, None),
+    "int4": ("U4A", (2, "-"), (3, "+"), 1, (8, 4)),
+    "inv":  ("U4B", (6, "-"), (5, "+"), 7, None),
+}
+
+# Standard 14-pin quad pinout (TL074 / MC33079 / OPA4134 / LME49740):
+#   A out 1, -in 2, +in 3 | V+ 4 | B +in 5, -in 6, out 7
+#   C out 8, -in 9, +in 10 | V- 11 | D +in 12, -in 13, out 14
+# Filter 1 fills U1 exactly; filter 2 fills U2 exactly.
+QUAD_ICS = {
+    "buf":  ("U1A", (3, "+"), (2, "-"), 1, (4, 11)),
+    "sum1": ("U1B", (6, "-"), (5, "+"), 7, None),
+    "int1": ("U1C", (9, "-"), (10, "+"), 8, None),
+    "int2": ("U1D", (13, "-"), (12, "+"), 14, None),
+    "sum2": ("U2A", (2, "-"), (3, "+"), 1, (4, 11)),
+    "int3": ("U2B", (6, "-"), (5, "+"), 7, None),
+    "int4": ("U2C", (9, "-"), (10, "+"), 8, None),
+    "inv":  ("U2D", (13, "-"), (12, "+"), 14, None),
+}
+
+PIN_ROLE = {}      # (refdes, pin) -> "role.function", for cross-variant checks
+
 VARIANTS = [
     dict(slug="esp-p148-3way-state-variable-crossover",
          title="3-Way State Variable Electronic Crossover  -  ESP Project 148",
          rs1="3.3k", c1="10nF", range1="680 Hz - 4.8 kHz",
-         rs2="3.3k", c2="100nF", range2="68 Hz - 480 Hz", rq="12k"),
+         rs2="3.3k", c2="100nF", range2="68 Hz - 480 Hz", rq="12k",
+         ics=DUAL_ICS, model="NE5532", pkg="DIP-8", pwr="pins 8 / 4",
+         packages=["U1", "U2", "U3", "U4"]),
     dict(slug="esp-p148-3way-crossover-retuned-200hz-1khz",
          title="3-Way State Variable Electronic Crossover  -  ESP P148, retuned "
                "(195 Hz - 1.03 kHz / 71 Hz - 180 Hz)",
          rs1="4.7k", c1="33nF", range1="195 Hz - 1.03 kHz",
-         rs2="13k", c2="68nF", range2="71 Hz - 180 Hz", rq="11k"),
+         rs2="13k", c2="68nF", range2="71 Hz - 180 Hz", rq="11k",
+         ics=DUAL_ICS, model="NE5532", pkg="DIP-8", pwr="pins 8 / 4",
+         packages=["U1", "U2", "U3", "U4"]),
+    dict(slug="esp-p148-3way-crossover-retuned-quad",
+         title="3-Way State Variable Electronic Crossover  -  ESP P148, "
+               "retuned, two quad op-amps",
+         rs1="4.7k", c1="33nF", range1="195 Hz - 1.03 kHz",
+         rs2="13k", c2="68nF", range2="71 Hz - 180 Hz", rq="11k",
+         ics=QUAD_ICS, model="MC33079", pkg="DIP-14", pwr="pins 4 / 11",
+         packages=["U1", "U2"]),
 ]
 
 W_CANVAS, H_CANVAS = 2200, 1600
@@ -286,6 +326,21 @@ def note(x, y, text, size="9pt", weight="", anchor="start", color="#0000A0"):
 # ==========================================================================
 #  T H E   S C H E M A T I C
 # ==========================================================================
+def amp(cfg, role, x0, cy):
+    """Place one op-amp section by its role, with supply labels if it carries them."""
+    ref, top, bot, outp, pwr = cfg["ics"][role]
+    opamp(ref, x0, cy, top, bot, outp, power=pwr, model=cfg["model"],
+          package=cfg["pkg"])
+    PIN_ROLE[(ref, str(top[0]))] = "%s.in%s" % (role, top[1])
+    PIN_ROLE[(ref, str(bot[0]))] = "%s.in%s" % (role, bot[1])
+    PIN_ROLE[(ref, str(outp))] = "%s.out" % role
+    if pwr:
+        PIN_ROLE[(ref, str(pwr[0]))] = "%s.V+" % role
+        PIN_ROLE[(ref, str(pwr[1]))] = "%s.V-" % role
+        netlabel("+15V", x0 + 20, cy - 60, anchor="middle", dy=-8)
+        netlabel("-15V", x0 + 20, cy + 60, anchor="middle", dy=16)
+
+
 def draw(cfg):
     """Place every component and wire for one variant of the crossover."""
     OY = 600        # vertical offset of the second (lower frequency) filter
@@ -301,9 +356,7 @@ def draw(cfg):
     w((200, 380), (200, 400))
     gnd(200, 400)
 
-    opamp("U1A", 260, 300, (3, "+"), (2, "-"), 1, power=(8, 4))
-    netlabel("+15V", 280, 240, anchor="middle", dy=-8)
-    netlabel("-15V", 280, 360, anchor="middle", dy=16)
+    amp(cfg, "buf", 260, 300)
     w((350, 300), (390, 300))
     w((390, 300), (390, 400), (240, 400), (240, 320))       # unity-gain feedback
     w((390, 300), (390, 200), (430, 200))                   # buffer out -> R2
@@ -312,7 +365,7 @@ def draw(cfg):
     w((490, 200), (530, 200))
 
     # summing amplifier U1B
-    opamp("U1B", 590, 300, (6, "-"), (5, "+"), 7)
+    amp(cfg, "sum1", 590, 300)
     w((530, 100), (530, 280), (570, 280))           # SUM1N spine
     resistor("R6", "5.6k", 600, 100, above=True)                # feedback from 2nd integrator (LP1)
     resistor("R5", "5.6k", 600, 140)                # local negative feedback (HP1)
@@ -338,9 +391,7 @@ def draw(cfg):
     w((830, 300), (870, 300))
     w((870, 300), (890, 300))
     resistor("R7", cfg["rs1"], 920, 300)
-    opamp("U2A", 1010, 300, (2, "-"), (3, "+"), 1, power=(8, 4))
-    netlabel("+15V", 1030, 240, anchor="middle", dy=-8)
-    netlabel("-15V", 1030, 360, anchor="middle", dy=16)
+    amp(cfg, "int1", 1010, 300)
     w((950, 300), (950, 280), (990, 280))
     w((990, 320), (990, 360))
     gnd(990, 360)
@@ -358,7 +409,7 @@ def draw(cfg):
     w((1280, 300), (1320, 300))
     w((1320, 300), (1340, 300))
     resistor("R8", cfg["rs1"], 1370, 300)
-    opamp("U2B", 1460, 300, (6, "-"), (5, "+"), 7)
+    amp(cfg, "int2", 1460, 300)
     w((1400, 300), (1400, 280), (1440, 280))
     w((1440, 320), (1440, 360))
     gnd(1440, 360)
@@ -392,9 +443,7 @@ def draw(cfg):
     w((370, 200 + OY), (430, 200 + OY))
     w((490, 200 + OY), (530, 200 + OY))
 
-    opamp("U3A", 590, 300 + OY, (2, "-"), (3, "+"), 1, power=(8, 4))
-    netlabel("+15V", 610, 240 + OY, anchor="middle", dy=-8)
-    netlabel("-15V", 610, 360 + OY, anchor="middle", dy=16)
+    amp(cfg, "sum2", 590, 300 + OY)
     w((530, 100 + OY), (530, 280 + OY), (570, 280 + OY))
     resistor("R12", "5.6k", 600, 100 + OY, above=True)          # feedback from 2nd integrator (LP2)
     resistor("R16", "5.6k", 600, 140 + OY)          # local negative feedback (HP2)
@@ -419,7 +468,7 @@ def draw(cfg):
     w((830, 300 + OY), (870, 300 + OY))
     w((870, 300 + OY), (890, 300 + OY))
     resistor("R17", cfg["rs2"], 920, 300 + OY)
-    opamp("U3B", 1010, 300 + OY, (6, "-"), (5, "+"), 7)
+    amp(cfg, "int3", 1010, 300 + OY)
     w((950, 300 + OY), (950, 280 + OY), (990, 280 + OY))
     w((990, 320 + OY), (990, 360 + OY))
     gnd(990, 360 + OY)
@@ -436,9 +485,7 @@ def draw(cfg):
     w((1280, 300 + OY), (1320, 300 + OY))
     w((1320, 300 + OY), (1340, 300 + OY))
     resistor("R18", cfg["rs2"], 1370, 300 + OY)
-    opamp("U4A", 1460, 300 + OY, (2, "-"), (3, "+"), 1, power=(8, 4))
-    netlabel("+15V", 1480, 240 + OY, anchor="middle", dy=-8)
-    netlabel("-15V", 1480, 360 + OY, anchor="middle", dy=16)
+    amp(cfg, "int4", 1460, 300 + OY)
     w((1400, 300 + OY), (1400, 280 + OY), (1440, 280 + OY))
     w((1440, 320 + OY), (1440, 360 + OY))
     gnd(1440, 360 + OY)
@@ -465,7 +512,7 @@ def draw(cfg):
     w((1580, 300 + OY), (1620, 300 + OY))
     resistor("R20", "5.6k", 1650, 300 + OY)
     w((1680, 300 + OY), (1720, 300 + OY), (1720, 280 + OY), (1740, 280 + OY))
-    opamp("U4B", 1760, 300 + OY, (6, "-"), (5, "+"), 7)
+    amp(cfg, "inv", 1760, 300 + OY)
     w((1740, 320 + OY), (1740, 360 + OY))
     gnd(1740, 360 + OY)
     resistor("R21", "5.6k", 1790, 200 + OY)
@@ -490,7 +537,7 @@ def draw(cfg):
     w((130, 1350), (180, 1350))
     netlabel("-15V", 180, 1350, anchor="start", dx=4, dy=3)
 
-    for i, ic in enumerate(["U1", "U2", "U3", "U4"]):
+    for i, ic in enumerate(cfg["packages"]):
         bx = 350 + i * 170
         netlabel("+15V", bx, 1240, anchor="middle", dy=-14)
         w((bx, 1240), (bx, 1260))
@@ -502,7 +549,8 @@ def draw(cfg):
         capacitor("C%d" % (6 + 2 * i), "100nF", bx, 1410, vertical=True)
         w((bx, 1440), (bx, 1460))
         netlabel("-15V", bx, 1460, anchor="middle", dy=16)
-        note(bx, 1208, "%s  pins 8 / 4" % ic, size="7pt", anchor="middle")
+        note(bx, 1208, "%s  %s" % (ic, cfg["pwr"]), size="7pt",
+             anchor="middle")
 
     note(60, 1180, "SUPPLY BYPASSING - one 100nF ceramic per rail, at each IC",
          weight="bold")
@@ -512,8 +560,11 @@ def draw(cfg):
     note(60, 1520, "After Rod Elliott, Elliott Sound Products, Project 148 "
          "(https://sound-au.com/project148.htm).  Redrawn for EasyEDA.",
          size="8pt", color="#404040")
-    note(60, 1540, "All op-amps NE5532 (dual).  Q = 0.5 Linkwitz-Riley with R3 / R13 = 12k; "
-         "use 11k2 for exact Q = 0.5, or 5k04 for Butterworth (Q = 0.707).",
+    note(60, 1540, "All op-amps %s - %d x %s package%s.  Q = 0.5 Linkwitz-Riley "
+         "with R3 / R13 = %s; use 11k2 for exact Q = 0.5, or 5k04 for "
+         "Butterworth (Q = 0.707)."
+         % (cfg["model"], len(cfg["packages"]), cfg["pkg"],
+            "" if len(cfg["packages"]) == 1 else "s", cfg["rq"]),
          size="8pt", color="#404040")
     note(60, 1560, "VR1 and VR2 are dual-gang 20k linear pots wired as rheostats. "
          "TP1 / TP2 null at the crossover frequency and may be omitted.",
@@ -736,6 +787,9 @@ def write_bom(filename="bom.csv"):
     rows.sort(key=lambda r: (r[2], sort_key(r[3].split(",")[0])))
     notes = {
         "NE5532": "4 x dual op-amp packages (U1-U4); each drawn as two sections",
+        "MC33079": "2 x quad op-amp packages (U1 = filter 1, U2 = filter 2); "
+                   "each drawn as four sections. Any standard quad pinout fits: "
+                   "OPA1644, OPA4134, LME49740, TL074",
         "20k": "2 x dual-gang 20k linear pots (VR1, VR2); wired as rheostats",
         "12k": "Sets filter Q (0.489); 11k2 = exact Q 0.5, 5k04 = Butterworth",
         "11k": "Sets filter Q (0.503); 11k2 = exact Q 0.5, 5k04 = Butterworth",
@@ -766,6 +820,7 @@ def emit(cfg, primary):
     """Build one variant and write its schematic, preview, netlist and BOM."""
     global shapes, pins, netlabels, wires
     shapes, pins, netlabels, wires = [], [], [], []
+    PIN_ROLE.clear()
     _next_id[0] = 1
 
     draw(cfg)
@@ -815,7 +870,8 @@ def emit(cfg, primary):
     except Exception as exc:   # pragma: no cover - preview is a convenience only
         print("PNG preview skipped:", exc)
 
-    n_parts = write_bom("bom.csv" if primary else "bom-retuned.csv")
+    n_parts = write_bom("bom.csv" if primary else
+                        "bom-%s.csv" % cfg["slug"].split("crossover-")[-1])
 
     nets, touches = extract_netlist()
     lines = ["Netlist extracted from the generated schematic geometry",
@@ -828,7 +884,7 @@ def emit(cfg, primary):
     lines.append("")
     lines.append("%d nets, %d parts, %d component pins, %d junctions"
                  % (len(nets), n_parts, len(pins), len(junctions)))
-    name = "netlist.txt" if primary else "netlist-%s.txt" % cfg["slug"].split("retuned-")[-1]
+    name = "netlist.txt" if primary else "netlist-%s.txt" % cfg["slug"].split("crossover-")[-1]
     with open(os.path.join(docdir, name), "w") as f:
         f.write("\n".join(lines) + "\n")
     print("\n".join(lines))
@@ -839,18 +895,56 @@ def emit(cfg, primary):
     return nets
 
 
+def signal_map(nets):
+    """{pin -> net} for every signal pin, with op-amp pins named by role.
+
+    Supply pins and bypass caps are excluded: a quad-packaged build genuinely
+    has fewer of both, while its signal connectivity must be identical.
+    """
+    out = {}
+    for name, members in nets.items():
+        for m in members:
+            ref, _, num = m.rpartition(".")
+            alias = PIN_ROLE.get((ref, num))
+            if alias:
+                if alias.endswith(".V+") or alias.endswith(".V-"):
+                    continue
+                out[alias] = name
+            else:
+                if re.fullmatch(r"C([5-9]|[1-9]\d+)", ref):
+                    continue            # C5 and up are supply bypass
+                out[m] = name
+    return out
+
+
+def check_power(nets, cfg):
+    """Every package gets both rails and one bypass cap per rail."""
+    n = len(cfg["packages"])
+    for rail, want in (("+15V", n), ("-15V", n)):
+        caps = [m for m in nets[rail] if m.startswith("C")]
+        amps = [m for m in nets[rail] if m.startswith("U")]
+        if len(caps) != want or len(amps) != want:
+            raise SystemExit("%s: %s has %d bypass caps and %d supply pins, "
+                             "expected %d of each" % (cfg["slug"], rail,
+                                                      len(caps), len(amps), want))
+
+
 def main():
     reference = None
     for i, cfg in enumerate(VARIANTS):
         nets = emit(cfg, primary=(i == 0))
-        key = {k: sorted(v) for k, v in nets.items()}
+        check_power(nets, cfg)
+        key = signal_map(nets)
         if reference is None:
             reference = key
         elif key != reference:
-            raise SystemExit("variant %s changed the netlist - retuning must only "
-                             "change component values" % cfg["slug"])
+            diff = [k for k in set(key) | set(reference)
+                    if key.get(k) != reference.get(k)]
+            raise SystemExit("variant %s changed signal connectivity at: %s"
+                             % (cfg["slug"], sorted(diff)))
         print()
-    print("all variants share an identical netlist")
+    print("all variants share identical signal connectivity; "
+          "supply wiring checked per package")
 
 
 main()

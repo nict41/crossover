@@ -12,10 +12,16 @@ Two variants are provided. They are the **same circuit** — identical topology,
 identical netlist — differing only in the six components that set the frequency
 range:
 
-| Variant | High/Mid | Mid/Low | File |
-|---|---|---|---|
-| Stock ESP P148 | 680 Hz – 4.8 kHz | 68 – 480 Hz | `esp-p148-3way-state-variable-crossover.json` |
-| Retuned | 195 Hz – 1.03 kHz | 71 – 180 Hz | `esp-p148-3way-crossover-retuned-200hz-1khz.json` |
+| Variant | High/Mid | Mid/Low | Op-amps | File |
+|---|---|---|---|---|
+| Stock ESP P148 | 680 Hz – 4.8 kHz | 68 – 480 Hz | 4 × NE5532 dual | `esp-p148-3way-state-variable-crossover.json` |
+| Retuned | 195 Hz – 1.03 kHz | 71 – 180 Hz | 4 × NE5532 dual | `esp-p148-3way-crossover-retuned-200hz-1khz.json` |
+| Retuned, quad | 195 Hz – 1.03 kHz | 71 – 180 Hz | 2 × MC33079 quad | `esp-p148-3way-crossover-retuned-quad.json` |
+
+The quad variant is electrically identical to the retuned one — it just packs
+the same eight sections into two 14-pin quads instead of four duals, which also
+halves the bypass caps (8 → 4). One quad per filter, so the sections sharing a
+package are the ones already coupled by design.
 
 ![Schematic preview](schematic/esp-p148-3way-crossover-retuned-200hz-1khz.png)
 
@@ -44,7 +50,7 @@ schematic/   EasyEDA schematics (.json + .legacy.json), one pair per variant,
 docs/        circuit-notes.md      — how the circuit works, design equations
              crossover-ranges.svg  — tuning-range diagram (+ .png)
              netlist.txt           — netlist extracted back out of the drawing
-bom/         bom.csv, bom-retuned.csv
+bom/         one bom-*.csv per variant
 tools/       gen_schematic.py     — generates the schematics
              gen_range_diagram.py — generates the range diagram
 ```
@@ -174,11 +180,12 @@ place. In order of what actually measures:
    gangs. And don't fit log-taper pots for a more even frequency scale — their
    gang tracking is much worse, and it lands straight on Q.
 3. **Q resistor 11k, not 12k** — already done in the retuned variant. Free.
-4. **Two quads instead of four duals.** The circuit splits perfectly at the
-   filter boundary, four sections each, so one quad per filter: half the ICs,
-   half the bypass caps, smaller board, no circuit change. MC33079 is the
-   closest in character to the NE5532; OPA1644 / LME49740 also fit. The pinout
-   differs (14-pin, V+ = 4, V− = 11) so the power pins need remapping.
+4. **Two quads instead of four duals** — shipped as the `retuned-quad`
+   variant. The circuit splits perfectly at the filter boundary, four sections
+   each, so one quad per filter: half the ICs, half the bypass caps, smaller
+   board, no circuit change. Drawn with the MC33079 (closest in character to
+   the NE5532); any standard quad pinout drops in — OPA1644, OPA4134,
+   LME49740, TL074.
 
 Things that look like simplifications but aren't: the input buffer U1A keeps
 source impedance out of the Q and gain; the integrators have no DC feedback of

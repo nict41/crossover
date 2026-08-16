@@ -258,9 +258,24 @@ package are the ones already tightly coupled by design, so the extra
 inter-section crosstalk of a quad lands where it does no harm.
 
 Suitable parts: **MC33079** (bipolar, low noise, closest in character to the
-NE5532), or **OPA1644** / **OPA4134** / **LME49740**. Note the pinout differs —
-14-pin, V+ on pin 4 and V− on pin 11 — so the schematic's power pins need
-remapping before layout.
+NE5532), or **OPA1644** / **OPA4134** / **LME49740** / **TL074**. All use the
+standard 14-pin quad pinout:
+
+| | A | B | C | D |
+|---|---|---|---|---|
+| output | 1 | 7 | 8 | 14 |
+| inverting in | 2 | 6 | 9 | 13 |
+| non-inverting in | 3 | 5 | 10 | 12 |
+
+with V+ on pin 4 and V− on pin 11. This packaging is drawn in the
+`retuned-quad` variant, where filter 1 fills U1 (buffer, summing amp,
+integrator 1, integrator 2) and filter 2 fills U2 (summing amp, integrator 1,
+integrator 2, output inverter).
+
+The generator checks that the quad and dual variants have identical *signal*
+connectivity — comparing op-amp pins by their role rather than their number,
+since the numbers necessarily differ — while verifying the supply wiring
+per package, where the quad genuinely has fewer pins and fewer bypass caps.
 
 ## Things not to "simplify"
 
