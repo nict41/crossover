@@ -83,21 +83,30 @@ VARIANTS = [
          rs1="3.3k", c1="10nF", range1="680 Hz - 4.8 kHz",
          rs2="3.3k", c2="100nF", range2="68 Hz - 480 Hz", rq="12k",
          ics=DUAL_ICS, model="NE5532", pkg="DIP-8", pwr="pins 8 / 4",
-         packages=["U1", "U2", "U3", "U4"]),
+         packages=["U1", "U2", "U3", "U4"], caps={"C1": ["C1"], "C2": ["C2"], "C3": ["C3"], "C4": ["C4"]}),
     dict(slug="esp-p148-3way-crossover-retuned-200hz-1khz",
          title="3-Way State Variable Electronic Crossover  -  ESP P148, retuned "
                "(195 Hz - 1.03 kHz / 71 Hz - 180 Hz)",
          rs1="4.7k", c1="33nF", range1="195 Hz - 1.03 kHz",
          rs2="13k", c2="68nF", range2="71 Hz - 180 Hz", rq="11k",
          ics=DUAL_ICS, model="NE5532", pkg="DIP-8", pwr="pins 8 / 4",
-         packages=["U1", "U2", "U3", "U4"]),
+         packages=["U1", "U2", "U3", "U4"], caps={"C1": ["C1"], "C2": ["C2"], "C3": ["C3"], "C4": ["C4"]}),
     dict(slug="esp-p148-3way-crossover-retuned-quad",
          title="3-Way State Variable Electronic Crossover  -  ESP P148, "
                "retuned, two quad op-amps",
          rs1="4.7k", c1="33nF", range1="195 Hz - 1.03 kHz",
          rs2="13k", c2="68nF", range2="71 Hz - 180 Hz", rq="11k",
          ics=QUAD_ICS, model="MC33079", pkg="DIP-14", pwr="pins 4 / 11",
-         packages=["U1", "U2"]),
+         packages=["U1", "U2"], caps={"C1": ["C1"], "C2": ["C2"], "C3": ["C3"], "C4": ["C4"]}),
+    dict(slug="esp-p148-3way-crossover-retuned-quad-smd",
+         title="3-Way State Variable Electronic Crossover  -  ESP P148, "
+               "retuned, two quad op-amps, SMD build for JLCPCB assembly",
+         rs1="4.7k", c1="33nF", range1="195 Hz - 1.03 kHz",
+         rs2="13k", c2="33nF", range2="73 Hz - 186 Hz  (C3, C4 = 2 x 33nF)", rq="11k",
+         ics=QUAD_ICS, model="MC33079", pkg="SOIC-14", pwr="pins 4 / 11",
+         packages=["U1", "U2"],
+         caps={"C1": ["C1"], "C2": ["C2"],
+               "C3": ["C3A", "C3B"], "C4": ["C4A", "C4B"]}),
 ]
 
 W_CANVAS, H_CANVAS = 2200, 1600
@@ -341,6 +350,17 @@ def amp(cfg, role, x0, cy):
         netlabel("-15V", x0 + 20, cy + 60, anchor="middle", dy=16)
 
 
+def cap_bank(cfg, slot, x, y):
+    """The integrator capacitor: one part, or two in parallel for the SMD build."""
+    refs = cfg["caps"][slot]
+    value = cfg["c1"] if slot in ("C1", "C2") else cfg["c2"]
+    capacitor(refs[0], value, x, y, above=True)
+    for k, ref in enumerate(refs[1:], start=1):
+        capacitor(ref, value, x, y + 40 * k, above=True)
+        w((x - 30, y + 40 * (k - 1)), (x - 30, y + 40 * k))
+        w((x + 30, y + 40 * (k - 1)), (x + 30, y + 40 * k))
+
+
 def draw(cfg):
     """Place every component and wire for one variant of the crossover."""
     OY = 600        # vertical offset of the second (lower frequency) filter
@@ -395,7 +415,7 @@ def draw(cfg):
     w((950, 300), (950, 280), (990, 280))
     w((990, 320), (990, 360))
     gnd(990, 360)
-    capacitor("C1", cfg["c1"], 1040, 190, above=True)
+    cap_bank(cfg, "C1", 1040, 190)
     w((990, 280), (990, 190), (1010, 190))
     w((1100, 300), (1130, 300))
     w((1130, 300), (1130, 190), (1070, 190))
@@ -413,7 +433,7 @@ def draw(cfg):
     w((1400, 300), (1400, 280), (1440, 280))
     w((1440, 320), (1440, 360))
     gnd(1440, 360)
-    capacitor("C2", cfg["c1"], 1490, 190, above=True)
+    cap_bank(cfg, "C2", 1490, 190)
     w((1440, 280), (1440, 190), (1460, 190))
     w((1550, 300), (1580, 300))
     w((1520, 190), (1580, 190))
@@ -472,7 +492,7 @@ def draw(cfg):
     w((950, 300 + OY), (950, 280 + OY), (990, 280 + OY))
     w((990, 320 + OY), (990, 360 + OY))
     gnd(990, 360 + OY)
-    capacitor("C3", cfg["c2"], 1040, 190 + OY, above=True)
+    cap_bank(cfg, "C3", 1040, 190 + OY)
     w((990, 280 + OY), (990, 190 + OY), (1010, 190 + OY))
     w((1100, 300 + OY), (1130, 300 + OY))
     w((1130, 300 + OY), (1130, 190 + OY), (1070, 190 + OY))
@@ -489,7 +509,7 @@ def draw(cfg):
     w((1400, 300 + OY), (1400, 280 + OY), (1440, 280 + OY))
     w((1440, 320 + OY), (1440, 360 + OY))
     gnd(1440, 360 + OY)
-    capacitor("C4", cfg["c2"], 1490, 190 + OY, above=True)
+    cap_bank(cfg, "C4", 1490, 190 + OY)
     w((1440, 280 + OY), (1440, 190 + OY), (1460, 190 + OY))
     w((1550, 300 + OY), (1580, 300 + OY))
     w((1520, 190 + OY), (1580, 190 + OY))
@@ -939,16 +959,20 @@ def emit(cfg, primary):
     return nets
 
 
-def signal_map(nets):
+def signal_map(nets, cfg):
     """{pin -> net} for every signal pin, with op-amp pins named by role.
 
     Supply pins and bypass caps are excluded: a quad-packaged build genuinely
     has fewer of both, while its signal connectivity must be identical.
     """
+    # parallel parts (the SMD build's 2 x 33nF) fold onto their slot name:
+    # they span the same two nets, so folding keeps the comparison exact
+    fold = {r: slot for slot, refs in cfg["caps"].items() for r in refs}
     out = {}
     for name, members in nets.items():
         for m in members:
             ref, _, num = m.rpartition(".")
+            ref = fold.get(ref, ref)
             alias = PIN_ROLE.get((ref, num))
             if alias:
                 if alias.endswith(".V+") or alias.endswith(".V-"):
@@ -957,7 +981,7 @@ def signal_map(nets):
             else:
                 if re.fullmatch(r"C([5-9]|[1-9]\d+)", ref):
                     continue            # C5 and up are supply bypass
-                out[m] = name
+                out["%s.%s" % (ref, num)] = name
     return out
 
 
@@ -978,7 +1002,7 @@ def main():
     for i, cfg in enumerate(VARIANTS):
         nets = emit(cfg, primary=(i == 0))
         check_power(nets, cfg)
-        key = signal_map(nets)
+        key = signal_map(nets, cfg)
         if reference is None:
             reference = key
         elif key != reference:

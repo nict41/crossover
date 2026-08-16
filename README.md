@@ -17,6 +17,7 @@ range:
 | Stock ESP P148 | 680 Hz – 4.8 kHz | 68 – 480 Hz | 4 × NE5532 dual | `esp-p148-3way-state-variable-crossover.json` |
 | Retuned | 195 Hz – 1.03 kHz | 71 – 180 Hz | 4 × NE5532 dual | `esp-p148-3way-crossover-retuned-200hz-1khz.json` |
 | Retuned, quad | 195 Hz – 1.03 kHz | 71 – 180 Hz | 2 × MC33079 quad | `esp-p148-3way-crossover-retuned-quad.json` |
+| Retuned, quad, **SMD** | 195 Hz – 1.03 kHz | 73 – 186 Hz | 2 × MC33079 SOIC-14 | `esp-p148-3way-crossover-retuned-quad-smd.json` |
 
 The quad variant is electrically identical to the retuned one — it just packs
 the same eight sections into two 14-pin quads instead of four duals, which also
@@ -53,7 +54,8 @@ docs/        circuit-notes.md      — how the circuit works, design equations
              netlist.txt           — netlist extracted back out of the drawing
 bom/         one bom-*.csv per variant
 tools/       gen_schematic.py     — generates the schematics
-             gen_pcb.py           — generates the PCB
+             gen_pcb.py           — through-hole PCB (placement only)
+             gen_pcb_smd.py       — SMD PCB, routed + verified
              gen_range_diagram.py — generates the range diagram
 ```
 
@@ -64,7 +66,8 @@ can't drift apart:
 
 ```sh
 python3 tools/gen_schematic.py      # schematics, previews, netlists, BOMs
-python3 tools/gen_pcb.py            # PCB for the retuned-quad variant
+python3 tools/gen_pcb.py            # through-hole board (placement)
+python3 tools/gen_pcb_smd.py        # SMD board (routed; needs numpy)
 python3 tools/gen_range_diagram.py  # docs/crossover-ranges.svg + .png
 ```
 
@@ -174,7 +177,36 @@ the netlist is complete:
 
 ## PCB
 
-A board for the **retuned-quad** variant is in
+### SMD board, routed, for JLCPCB fab + assembly
+
+`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **81.3 × 61.0 mm**,
+two layers, **fully routed**, every part a real LCSC line item.
+
+![SMD board](pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.png)
+
+```
+46 footprints | 121 pads | 109 tracks | 38 vias
+verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
+          pads match the schematic exactly
+```
+
+Routing is checked by geometry that doesn't reuse the router's own bookkeeping:
+exact pairwise clearance between every copper feature, union-find connectivity
+per net, mounting-hole keepout, and pad-set equality with the schematic. Those
+checks caught four defects that would otherwise have reached the fab — see
+[`docs/pcb-notes-smd.md`](docs/pcb-notes-smd.md).
+
+Part numbers were looked up live against the JLCPCB parts API; **re-check stock
+before ordering**. Export Gerbers, BOM *and* CPL from EasyEDA rather than using
+the CPL in this repo — a CPL's origin has to match the Gerbers, and only EasyEDA
+knows that at export time.
+
+The pots, power, I/O and test points are through-hole pads you wire yourself —
+unavoidable, since the frequency controls belong on the front panel.
+
+### Through-hole board, placement only
+
+A board for the **retuned-quad** (DIP) variant is in
 `pcb/esp-p148-3way-crossover-retuned-quad-pcb.json` — 101.6 × 83.8 mm, two
 layers, all through-hole. Open it the same way as a schematic.
 
