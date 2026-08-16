@@ -179,16 +179,22 @@ the netlist is complete:
 
 ### SMD board, routed, for JLCPCB fab + assembly
 
-`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **81.3 × 61.0 mm**,
-two layers, **fully routed**, every part a real LCSC line item.
+`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **86.4 × 71.1 mm**,
+two layers, **fully routed**, frequency pots mounted on the board, every SMD
+part a real LCSC line item.
 
 ![SMD board](pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.png)
 
 ```
-46 footprints | 121 pads | 109 tracks | 38 vias
+44 footprints | 121 pads | 108 tracks | 54 vias
 verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
           pads match the schematic exactly
 ```
+
+Sockets on the rear edge, the two frequency pots on the front edge 25 mm apart
+for knob clearance — the board mounts flat behind the front panel. The pot
+footprint is the standard 9 mm dual-gang pattern and **needs checking against
+your pot's datasheet**; see the notes.
 
 Routing is checked by geometry that doesn't reuse the router's own bookkeeping:
 exact pairwise clearance between every copper feature, union-find connectivity
@@ -201,8 +207,8 @@ before ordering**. Export Gerbers, BOM *and* CPL from EasyEDA rather than using
 the CPL in this repo — a CPL's origin has to match the Gerbers, and only EasyEDA
 knows that at export time.
 
-The pots, power, I/O and test points are through-hole pads you wire yourself —
-unavoidable, since the frequency controls belong on the front panel.
+JLCPCB won't assemble through-hole parts, so the pots, power, I/O and test
+points are yours to solder — but there is no off-board pot wiring any more.
 
 ### Through-hole board, placement only
 

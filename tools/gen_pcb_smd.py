@@ -31,7 +31,7 @@ TOP, BOT, TOPSILK, OUTLINE, MULTI = 1, 2, 3, 10, 11
 
 TRACK_W, CLEAR = 0.8, 0.8            # 8 mil track, 8 mil clearance
 VIA_PAD, VIA_DRILL = 2.4, 1.2
-GRID = 0.5                            # routing grid, units
+GRID = 0.25                           # routing grid, units
 
 _next = [100]
 
@@ -181,6 +181,35 @@ def fp_pads(ref, x, y, net_of, n=3, label="", horiz=False):
     return (e[0] - CLEAR, e[1] - CLEAR, e[2] + CLEAR, e[3] + CLEAR)
 
 
+def fp_pot(pkg_ref, gang_a, gang_b, x, y, net_of):
+    """Board-mount 9 mm dual-gang pot.
+
+    Six terminals in two rows of three on 0.2 in (5.08 mm) centres - the
+    near-universal 9 mm dual pattern (Alps RK09K12, RV09 dual and the many
+    equivalents).  Real parts are on 5.00 mm; the 0.08 mm/pitch difference is
+    absorbed by the 1.2 mm holes.  VERIFY against your pot's datasheet.
+    Two non-plated holes take the locating bosses.
+    """
+    _m = fp_begin()
+    for i, dx in enumerate((-20.0, 0.0, 20.0)):
+        pad_tht(gang_a, i + 1, x + dx, y, net_of(gang_a, i + 1), dia=7.0, hole=4.7)
+        pad_tht(gang_b, i + 1, x + dx, y + 20.0, net_of(gang_b, i + 1),
+                dia=7.0, hole=4.7)
+    silk_rect(x - 24, y - 30, x + 24, y + 28)
+    n = 20
+    track([(x + 17 * math.cos(2 * math.pi * i / n),
+            y - 4 + 17 * math.sin(2 * math.pi * i / n)) for i in range(n + 1)],
+          TOPSILK, 0.5)
+    silk_ref(x - 24, y - 32.5, pkg_ref, 2.6)
+    fp_end(pkg_ref, _m, x, y + 10)
+    PARTS[pkg_ref] = dict(value="20k dual", x=x, y=y + 10, rot=0,
+                          assembled=False, pkg="POT-9MM-DUAL")
+    return (x - 26 - CLEAR, y - 32 - CLEAR, x + 26 + CLEAR, y + 30 + CLEAR)
+
+
+POT_BOSSES = []          # non-plated locating holes, filled in at placement
+
+
 # ==========================================================================
 #  netlist and placement
 # ==========================================================================
@@ -200,7 +229,10 @@ def N(ref, num):
 
 
 VALUE = {r: netdoc["parts"][r]["value"] for r in netdoc["parts"]}
-BW, BH = 320.0, 240.0            # 81.3 x 61.0 mm
+BW, BH = 340.0, 280.0            # 86.4 x 71.1 mm
+MOUNT_HOLES = [(9, 9), (BW - 9, 9), (9, BH - 9), (BW - 9, BH - 9)]
+MOUNT_R = 12.6 / 2
+BOSS_R = 4.5
 
 U1S = {1: "U1A", 2: "U1A", 3: "U1A", 4: "U1A", 5: "U1B", 6: "U1B", 7: "U1B",
        8: "U1C", 9: "U1C", 10: "U1C", 11: "U1A", 12: "U1D", 13: "U1D", 14: "U1D"}
@@ -208,22 +240,19 @@ U2S = {1: "U2A", 2: "U2A", 3: "U2A", 4: "U2A", 5: "U2B", 6: "U2B", 7: "U2B",
        8: "U2C", 9: "U2C", 10: "U2C", 11: "U2A", 12: "U2D", 13: "U2D", 14: "U2D"}
 
 FIXED = [
-    ("J2", dict(fn=fp_pads, n=2, label="IN"), 14, 20),
-    ("J1", dict(fn=fp_pads, n=3, label="PWR"), 14, 100),
-    ("J3", dict(fn=fp_pads, n=4, label="OUT"), 14, 170),
-    ("C0", dict(fn=fp_elec), 45, 20),
-    ("VR1A", dict(fn=fp_pads, n=3, label="VR1A", horiz=True), 105, 14),
-    ("VR1B", dict(fn=fp_pads, n=3, label="VR1B", horiz=True), 160, 14),
-    ("VR2A", dict(fn=fp_pads, n=3, label="VR2A", horiz=True), 105, 226),
-    ("VR2B", dict(fn=fp_pads, n=3, label="VR2B", horiz=True), 160, 226),
-    ("TP1", dict(fn=fp_pads, n=1, label="TP1"), 306, 45),
-    ("TP2", dict(fn=fp_pads, n=1, label="TP2"), 306, 195),
+    ("J2", dict(fn=fp_pads, n=2, label="IN", horiz=True), 26, 14),
+    ("J1", dict(fn=fp_pads, n=3, label="PWR", horiz=True), 66, 14),
+    ("J3", dict(fn=fp_pads, n=4, label="OUT", horiz=True), 126, 14),
+    ("C0", dict(fn=fp_elec), 30, 42),
+    ("TP1", dict(fn=fp_pads, n=1, label="TP1"), 240, 14),
+    ("TP2", dict(fn=fp_pads, n=1, label="TP2"), 270, 14),
 ]
-SOICS = [("U1", U1S, 110, 55), ("U2", U2S, 110, 150)]
+SOICS = [("U1", U1S, 110, 62), ("U2", U2S, 110, 150)]
+POTS = [("VR1", "VR1A", "VR1B", 105, 240), ("VR2", "VR2A", "VR2B", 215, 240)]
 
 # candidate slots for the movable chip parts, 18 x 18 grid over the interior
-SLOT_XS = [x for x in range(40, 305, 18)]
-SLOT_YS = [y for y in range(38, 215, 18)]
+SLOT_XS = [x for x in range(34, 330, 18)]
+SLOT_YS = [y for y in range(36, 205, 18)]
 
 
 def place_fixed():
@@ -236,6 +265,9 @@ def place_fixed():
         spec["fn"] = fn
     for pkg, sec, x, y in SOICS:
         placed.append(fp_soic14(pkg, sec, x, y, N))
+    for pkg, ga, gb, x, y in POTS:
+        placed.append(fp_pot(pkg, ga, gb, x, y, N))
+        POT_BOSSES.extend([(x - 14, y - 22), (x + 14, y - 22)])
 
 
 def boxes_overlap(a, b):
@@ -258,6 +290,9 @@ def auto_place():
     take the nearest free slot; afterwards improve by pairwise swaps."""
     place_fixed()
     fixed_boxes = list(placed)
+    # SOIC pads can only break out sideways, so reserve elbow room beside each
+    for _pkg, _sec, _sx, _sy in SOICS:
+        fixed_boxes.append((_sx - 26, _sy - 8, _sx + 26, _sy + 38))
     anchors = {}
     padpos = {(p["ref"], p["num"]): (p["x"], p["y"]) for p in pads}
     for ref in CHIPS:
@@ -346,7 +381,10 @@ VIAS = []            # (x, y, net)
 # Dilation radii: a cell left unstamped guarantees that a track centreline
 # placed there clears foreign copper.  GRID is added so that quantising a
 # centreline onto the grid cannot eat into the clearance.
-PAD_DIL = CLEAR + TRACK_W / 2 + GRID
+# No grid margin here: pad centres and the routing grid are both multiples of
+# 0.5, so a centreline between two SOIC pads lands exactly on the midpoint.
+# Keeping the margin would close every channel between adjacent SOIC pins.
+PAD_DIL = CLEAR + TRACK_W / 2
 TRK_DIL = TRACK_W / 2 + CLEAR + TRACK_W / 2 + GRID
 VIA_DIL = VIA_PAD / 2 + CLEAR + TRACK_W / 2 + GRID
 # a via is fatter than a track, so a cell that is safe for a track is not
@@ -377,6 +415,12 @@ def stamp_disc(layer, x, y, r, netid):
         csub |= m & (sub != 0) & (sub != netid)
         sub[m & (sub == 0)] = netid
 
+
+HOLE_NET = 10 ** 6           # matches no net, so nothing can route through
+for _hx, _hy in MOUNT_HOLES:
+    stamp_disc(MULTI, _hx, _hy, MOUNT_R + CLEAR + TRACK_W / 2 + GRID, HOLE_NET)
+for _hx, _hy in POT_BOSSES:
+    stamp_disc(MULTI, _hx, _hy, BOSS_R + CLEAR + TRACK_W / 2 + GRID, HOLE_NET)
 
 for p in pads:
     if p["net"]:
@@ -478,8 +522,15 @@ def emit_path(path, net, nid):
         ROUTED.append((run[0][0] + 1, pts, net))
 
 
+def route_order(n):
+    """IC pins first.  An SOIC pad can only break out sideways, so if the
+    general nets take those channels first the op-amp pins are trapped."""
+    members = netdoc["nets"][n]
+    return (0 if any(m.startswith("U") for m in members) else 1, len(members))
+
+
 FAILED = []
-for name in sorted(netdoc["nets"], key=lambda n: len(netdoc["nets"][n])):
+for name in sorted(netdoc["nets"], key=route_order):
     nid = NETID[name]
     mine = [p for p in pads if p["net"] == name]
     if len(mine) < 2:
@@ -569,9 +620,6 @@ def gap(f, g):
     return d - f["hw"] - g["hw"]
 
 
-MOUNT_HOLES = [(9, 9), (BW - 9, 9), (9, BH - 9), (BW - 9, BH - 9)]
-MOUNT_R = 12.6 / 2
-
 FEATURES = []
 for p in pads:
     FEATURES.append(dict(net=p["net"], k="rect", hw=0.0,
@@ -629,7 +677,7 @@ def verify():
             problems.append("net %s is in %d pieces: %s"
                             % (name, len(roots), list(groups.values())))
     # -- nothing may sit under a mounting hole
-    for hx, hy in MOUNT_HOLES:
+    for hx, hy in MOUNT_HOLES + [(a, b) for a, b in POT_BOSSES]:
         for f in FEATURES:
             if f["k"] == "rect":
                 d = d_pt_rect(hx, hy, f["g"])
@@ -638,8 +686,9 @@ def verify():
                              f["g"][1][0], f["g"][1][1])
             else:
                 d = math.dist((hx, hy), f["g"])
-            if d - f["hw"] < MOUNT_R + CLEAR:
-                problems.append("%s (%s) is %.1f mil from the mounting hole at "
+            r = MOUNT_R if (hx, hy) in MOUNT_HOLES else BOSS_R
+            if d - f["hw"] < r + CLEAR:
+                problems.append("%s (%s) is %.1f mil from the hole at "
                                 "%g,%g" % (f["tag"], f["net"], (d - f["hw"]) * 10,
                                            hx, hy))
     # -- everything inside the board
@@ -669,11 +718,13 @@ for x, y, name in VIAS:
 
 for hx, hy in MOUNT_HOLES:
     shapes.append("HOLE~%g~%g~12.6~%s" % (hx, hy, gid()))
+for hx, hy in POT_BOSSES:
+    shapes.append("HOLE~%g~%g~9.0~%s" % (hx, hy, gid()))
 track([(0, 0), (BW, 0), (BW, BH), (0, BH), (0, 0)], OUTLINE, 0.6)
-silk(196, 128, "ESP P148 3-WAY VARIABLE CROSSOVER", 3.4)
-silk(196, 136, "RETUNED QUAD SMD", 2.6)
-silk(196, 143, "195Hz-1.03kHz / 73-186Hz", 2.6)
-silk(196, 150, "ONE CHANNEL - BUILD TWO FOR STEREO", 2.6)
+silk(196, 96, "ESP P148 3-WAY VARIABLE CROSSOVER", 3.4)
+silk(196, 104, "RETUNED QUAD SMD", 2.6)
+silk(196, 112, "195Hz-1.03kHz / 73-186Hz", 2.6)
+silk(196, 120, "ONE CHANNEL - BUILD TWO FOR STEREO", 2.6)
 
 for L in (TOP, BOT):
     shapes.append("COPPERAREA~%g~%d~GND~%s~1~solid~%s~spoke~none~[]~0~2~1~none"
