@@ -30,9 +30,9 @@ W, H = 1180, 800
 
 VARIANTS = [
     ("Stock  ESP P148", [("VR1", "High / Mid", 683.0, 4820.0, S1),
-                         ("VR2", "Mid / Low", 68.3, 482.0, S2)], None),
+                         ("VR2", "Mid / Low", 68.3, 482.0, S2)]),
     ("Retuned  (this repo)", [("VR1", "High / Mid", 195.3, 1026.0, S1),
-                              ("VR2", "Mid / Low", 60.7, 256.7, S2)], (195.3, 256.7)),
+                              ("VR2", "Mid / Low", 70.9, 180.0, S2)]),
 ]
 
 FMIN, FMAX = 30.0, 12000.0
@@ -62,6 +62,16 @@ def outputs(f, f1, f2):
 
 def db(x):
     return 20 * math.log10(abs(x)) if abs(x) > 1e-12 else -99.0
+
+
+def worst_sum_error_pair(f1, f2):
+    worst = 0.0
+    for i in range(900):
+        f = 10 * 10 ** (3.5 * i / 899)
+        e = db(sum(outputs(f, f1, f2)))
+        if abs(e) > abs(worst):
+            worst = e
+    return worst
 
 
 def worst_sum_error(ratio, f2=200.0):
@@ -102,7 +112,7 @@ text(48, 88, "ESP Project 148 3-way state variable crossover — the span each "
 
 # ---------------- panel A -------------------------------------------------
 AY = 150
-text(48, AY - 22, "A.  WHAT EACH POT COVERS", size=12, fill=MUTED,
+text(48, AY - 22, "A.  WHAT EACH POT COVERS, AND HOW CLOSE THE TWO CAN GET", size=12, fill=MUTED,
      weight="bold", spacing="1.2")
 
 # axis gridlines
@@ -128,21 +138,9 @@ for i, (lab, colour) in enumerate([("VR1 — high/mid crossover", S1),
 
 BAR = 26
 row_y = AY + 24
-for vname, bars, overlap in VARIANTS:
+for vi, (vname, bars) in enumerate(VARIANTS):
     grp_top = row_y - 6
-    if overlap:
-        ox0, ox1 = fx(overlap[0]), fx(overlap[1])
-        oh = 2 * BAR + 22
-        add('<clipPath id="ovl"><rect x="%.1f" y="%.1f" width="%.1f" '
-            'height="%.1f"/></clipPath>' % (ox0, grp_top - 4, ox1 - ox0, oh))
-        add('<g clip-path="url(#ovl)">')
-        add('<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s" '
-            'fill-opacity="0.16"/>' % (ox0, grp_top - 4, ox1 - ox0, oh, WARN))
-        for dx in range(0, int(ox1 - ox0) + 40, 8):     # texture, not colour alone
-            add('<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" '
-                'stroke-width="1" stroke-opacity="0.55"/>'
-                % (ox0 + dx, grp_top - 4, ox0 + dx - oh, grp_top - 4 + oh, WARN))
-        add('</g>')
+    f1_min, f2_max = bars[0][2], bars[1][3]
     text(48, row_y + 17, vname, size=14, fill=INK, weight="bold")
     for label, band, f_lo, f_hi, colour in bars:
         x0, x1 = fx(f_lo), fx(f_hi)
@@ -157,17 +155,37 @@ for vname, bars, overlap in VARIANTS:
         text(x0 - 12, row_y + 16, hz(f_lo), size=12, fill=INK2, anchor="end")
         text(x1 + 12, row_y + 16, hz(f_hi), size=12, fill=INK2)
         row_y += BAR + 6
-    if overlap:
-        cx = (fx(overlap[0]) + fx(overlap[1])) / 2
-        ty = grp_top + 2 * BAR + 32
-        add('<path d="M %.1f %.1f L %.1f %.1f L %.1f %.1f Z" fill="%s"/>'
-            % (cx - 46, ty + 1, cx - 36, ty + 1, cx - 41, ty - 8, "#b07d00"))
-        text(cx - 41, ty, "!", size=8, fill=SURFACE, anchor="middle",
-             weight="bold")
-        text(cx - 30, ty, "ranges overlap, %s–%s"
-             % (hz(overlap[0]).split()[0], hz(overlap[1])), size=12,
-             fill="#7a5600", weight="bold")
-    row_y += 30
+
+    # the closest the two crossover points can be set: VR1 min vs VR2 max
+    lo, hi = min(f1_min, f2_max), max(f1_min, f2_max)
+    xa, xb = fx(lo), fx(hi)
+    oh = 2 * BAR + 18
+    add('<clipPath id="ovl%d"><rect x="%.1f" y="%.1f" width="%.1f" '
+        'height="%.1f"/></clipPath>' % (vi, xa - 1, grp_top - 4,
+                                        max(xb - xa, 3) + 2, oh))
+    add('<g clip-path="url(#ovl%d)">' % vi)
+    add('<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s" '
+        'fill-opacity="0.11"/>' % (xa, grp_top - 4, max(xb - xa, 3), oh, WARN))
+    for dx in range(0, int(xb - xa) + 40, 8):
+        add('<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" '
+            'stroke-width="1" stroke-opacity="0.35"/>'
+            % (xa + dx, grp_top - 4, xa + dx - oh, grp_top - 4 + oh, WARN))
+    add('</g>')
+    for x in (xa, xb):
+        add('<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" '
+            'stroke-width="1.5" stroke-dasharray="3 2"/>'
+            % (x, grp_top - 4, x, grp_top - 4 + oh, "#b07d00"))
+
+    sep = f1_min / f2_max
+    err = worst_sum_error_pair(f1_min, f2_max)
+    ty = grp_top + oh + 22
+    tx = min(xb + 14, PX1 - 360)
+    add('<path d="M %.1f %.1f L %.1f %.1f L %.1f %.1f Z" fill="%s"/>'
+        % (tx, ty + 1, tx + 10, ty + 1, tx + 5, ty - 8, "#b07d00"))
+    text(tx + 5, ty, "!", size=8, fill=SURFACE, anchor="middle", weight="bold")
+    text(tx + 18, ty, "closest setting %.2f : 1  gives  %+.1f dB in the sum"
+         % (sep, err), size=12, fill="#7a5600", weight="bold")
+    row_y += 34
 
 # ---------------- panel B -------------------------------------------------
 BY = 530
@@ -179,9 +197,10 @@ text(48, BY + 48, "The mid band is squeezed", size=12, fill=INK2)
 text(48, BY + 65, "between the two roll-offs;", size=12, fill=INK2)
 text(48, BY + 82, "as they approach, it thins", size=12, fill=INK2)
 text(48, BY + 99, "and the sum dips.", size=12, fill=INK2)
-text(48, BY + 128, "Worst case of the retuned", size=12, fill=INK2)
-text(48, BY + 145, "ranges (195 Hz vs 257 Hz):", size=12, fill=INK2)
-text(48, BY + 166, "-5.2 dB", size=15, fill=INK, weight="bold")
+text(48, BY + 128, "Removing the overlap barely", size=12, fill=INK2)
+text(48, BY + 145, "helps: abutting ranges still", size=12, fill=INK2)
+text(48, BY + 162, "meet at 1 : 1. Separation is", size=12, fill=INK2)
+text(48, BY + 179, "what matters, not overlap.", size=12, fill=INK2)
 
 BX0, BX1 = 380, 1110
 BY0, BY1 = BY, BY + 170
@@ -222,14 +241,13 @@ while r <= RMAX + 1e-9:
 add('<polyline points="%s" fill="none" stroke="%s" stroke-width="2" '
     'stroke-linejoin="round"/>' % (" ".join("%.1f,%.1f" % p for p in pts), S1))
 
-for r, note, dy in [(0.76, "", 24), (3.0, "1.5 octaves apart", 34)]:
+for r, note, dy in [(3.0, "1.5 octaves apart - the target", 34)]:
     e = worst_sum_error(r)
     add('<circle cx="%.1f" cy="%.1f" r="5" fill="%s" stroke="%s" '
         'stroke-width="2"/>' % (bx(r), by(e), S1, SURFACE))
     text(bx(r) + 11, by(e) + dy, "%+.1f dB" % e, size=12, fill=INK,
          weight="bold")
-    if note:
-        text(bx(r) + 11, by(e) + dy + 15, note, size=11.5, fill=INK2)
+    text(bx(r) + 11, by(e) + dy + 15, note, size=11.5, fill=INK2)
 
 for r in [0.5, 1, 2, 4, 8, 16]:
     text(bx(r), BY1 + 22, ("1 : 1" if r == 1 else

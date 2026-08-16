@@ -55,9 +55,9 @@ VARIANTS = [
          rs2="3.3k", c2="100nF", range2="68 Hz - 480 Hz"),
     dict(slug="esp-p148-3way-crossover-retuned-200hz-1khz",
          title="3-Way State Variable Electronic Crossover  -  ESP P148, retuned "
-               "(195 Hz - 1.03 kHz / 61 Hz - 257 Hz)",
+               "(195 Hz - 1.03 kHz / 71 Hz - 180 Hz)",
          rs1="4.7k", c1="33nF", range1="195 Hz - 1.03 kHz",
-         rs2="6.2k", c2="100nF", range2="61 Hz - 257 Hz"),
+         rs2="13k", c2="68nF", range2="71 Hz - 180 Hz"),
 ]
 
 W_CANVAS, H_CANVAS = 2200, 1600

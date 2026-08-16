@@ -112,28 +112,20 @@ With the stock 3.3 k and a 20 k pot the ratio is 7.06 — a very wide sweep. The
 | Filter 1, stock | 3.3 k | 10 nF | 683 Hz … 4.82 kHz | 7.06 |
 | Filter 1, retuned | 4.7 k | 33 nF | 195 Hz … 1.03 kHz | 5.26 |
 | Filter 2, stock | 3.3 k | 100 nF | 68.3 Hz … 482 Hz | 7.06 |
-| Filter 2, retuned | 6.2 k | 100 nF | 60.7 Hz … 257 Hz | 4.23 |
+| Filter 2, retuned | 13 k | 68 nF | 70.9 Hz … 180 Hz | 2.54 |
 
-Six components change in total (R7, R8, C1, C2, R17, R18) and nothing else —
-Q, topology, op-amps and pots are untouched, because the Q network and the
-frequency network are independent.
+Eight components change in total (R7, R8, C1, C2, R17, R18, C3, C4) and nothing
+else — Q, topology, op-amps and pots are untouched, because the Q network and
+the frequency network are independent.
 
 Raising the series resistors also *reduces* loading on the preceding stage, so
 this direction is always safe. The article's warning is about the opposite:
 don't go much below 2.2 k.
 
-Two consequences of narrowing the ranges are worth knowing:
-
-* The two ranges now **overlap** (filter 1 goes down to 195 Hz, filter 2 up to
-  257 Hz), so it is possible to set the Mid/Low point above the High/Mid point.
-  See "Setting the two points too close together" below — the outputs don't
-  swap, but the midrange band collapses.
-* Filter 2's ratio can't be narrowed to exactly 250/68 = 3.68 while keeping
-  100 nF, because with C fixed the series resistor sets the ratio and the
-  absolute frequency together. If you want the tighter range, use
-  R17/R18 = 7.5 k with C3/C4 = 82 nF, which gives 70.6 Hz … 259 Hz — ratio
-  3.67, essentially exact. The 6.2 k / 100 nF choice above was preferred
-  because it reuses the 100 nF caps and still covers the whole target span.
+The retuned ranges don't overlap: filter 2 stops at 180 Hz, filter 1 starts at
+195 Hz. Note that this does **not** stop you setting the two crossover points
+too close together — see the next section, which is the thing that actually
+matters.
 
 Other ranges from the article: 4.7 nF in filter 1 with the stock 3.3 k gives
 roughly 1.45 kHz … 10 kHz; dropping the series resistors to 2.2 k widens the
@@ -170,21 +162,38 @@ summed response (HIGH + MID + LOW) develops a broad suck-out at the same time.
 | 1 : 1 (coincident) | −3.90 dB | −12.0 dB |
 | 1 : 1.3 (inverted, worst of the retuned ranges) | −5.18 dB | −14.6 dB |
 
-Two things to take from this:
+Three things to take from this:
 
 * **The degradation is gradual and starts well before the points cross.** At a
   1.6 : 1 separation — still correctly ordered — the sum is already 2.3 dB down
   and the mid band is 8 dB below the others. There is no cliff edge at 1 : 1;
   crossing over is just further along the same curve.
+* **Making the ranges non-overlapping does not fix this**, which is worth being
+  clear about because it is the obvious thing to try. Two ranges that merely
+  abut still meet at the boundary, so the pots can still be set ~1 : 1 apart:
+
+  | Range layout | Closest possible setting | Sum error there |
+  |---|---|---|
+  | Stock ESP P148 (68–482 / 683–4820, no overlap) | 1.42 : 1 | −2.62 dB |
+  | Overlapping (61–257 / 195–1026) | 0.76 : 1 | −5.17 dB |
+  | Retuned, non-overlapping (71–180 / 195–1026) | 1.08 : 1 | −3.57 dB |
+
+  Removing the overlap buys about 1.6 dB in the worst case. It does not make
+  a bad setting unreachable — and note that **Rod Elliott's own values have the
+  same property**, at 1.42 : 1. Nothing in this topology enforces separation;
+  the two filters are tuned independently and neither knows about the other.
 * **Nothing is damaged or unstable.** No oscillation, no clipping, no latch-up.
   It is simply a filter setting that produces a poor response, and it undoes
   itself the moment you turn VR2 back down.
 
 Practical rule: **keep the two crossover points at least 3 : 1 apart** (about
-1.5 octaves) to stay inside 1 dB, and prefer 4 : 1 or more. For the retuned
-values that means using VR2 in its lower half whenever VR1 is near the bottom
-of its range. That's a normal constraint for any 3-way — a real 3-way speaker
-would not want the two points closer than that regardless of the electronics.
+1.5 octaves) to stay inside 1 dB, and prefer 4 : 1 or more. This is a setting
+discipline, not something the hardware can guarantee. If you did want the
+hardware to enforce it, the only lever is to give up range — with mid/low
+topping out at 180 Hz, high/mid would have to start at 540 Hz for 3 : 1, or
+360 Hz for 2 : 1. That is a real cost, and for a test instrument whose whole
+point is a free sweep it isn't obviously worth paying. Use TP1 and TP2 to set
+the two frequencies accurately, and keep them apart.
 
 ## Test points
 

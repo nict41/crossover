@@ -15,7 +15,7 @@ range:
 | Variant | High/Mid | Mid/Low | File |
 |---|---|---|---|
 | Stock ESP P148 | 680 Hz – 4.8 kHz | 68 – 480 Hz | `esp-p148-3way-state-variable-crossover.json` |
-| Retuned | 195 Hz – 1.03 kHz | 61 – 257 Hz | `esp-p148-3way-crossover-retuned-200hz-1khz.json` |
+| Retuned | 195 Hz – 1.03 kHz | 71 – 180 Hz | `esp-p148-3way-crossover-retuned-200hz-1khz.json` |
 
 ![Schematic preview](schematic/esp-p148-3way-crossover-retuned-200hz-1khz.png)
 
@@ -97,16 +97,25 @@ exactly with an oscillator. They're optional — the ESP PCB omits them.
 
 ![Crossover tuning ranges](docs/crossover-ranges.png)
 
-Because the two filters are tuned independently, the retuned ranges overlap
-(195–257 Hz) and the mid/low point can be set above the high/mid point. The
-outputs never swap — filter 1 is unaware of filter 2, so HIGH is unaffected.
-What collapses is MID, whose passband *is* the gap between the two corners:
-squeeze that gap and it thins out (−14.6 dB at worst), and the summed response
-develops a broad suck-out (−5.2 dB at worst). The degradation is gradual and
-already measurable at 1.6 : 1 separation, so the useful rule is **keep the two
-points at least 3 : 1 apart** (~1.5 octaves) for under 1 dB, not "keep them in
-order". Nothing is damaged or unstable — turn VR2 back down and it recovers.
-Full table in [`docs/circuit-notes.md`](docs/circuit-notes.md#setting-the-two-points-too-close-together).
+The retuned ranges don't overlap, but that is **not** what keeps the response
+flat — separation is. Because the two filters are tuned independently, nothing
+stops you setting them close together, and ranges that merely abut still meet
+at the boundary:
+
+| Range layout | Closest possible setting | Sum error there |
+|---|---|---|
+| Stock ESP P148 | 1.42 : 1 | −2.62 dB |
+| Retuned | 1.08 : 1 | −3.57 dB |
+
+The outputs never swap — filter 1 is unaware of filter 2, so HIGH is
+unaffected. What collapses is MID, whose passband *is* the gap between the two
+corners: squeeze that gap and it thins out, and the summed response develops a
+broad suck-out. The degradation is gradual and already measurable at 1.6 : 1,
+so the rule is **keep the two points at least 3 : 1 apart** (~1.5 octaves) for
+under 1 dB. That's setting discipline, not something the hardware enforces —
+note the stock ESP values have the same exposure. Nothing is damaged or
+unstable; turn VR2 back down and it recovers. Full detail in
+[`docs/circuit-notes.md`](docs/circuit-notes.md#setting-the-two-points-too-close-together).
 
 ### Frequency range
 
@@ -117,7 +126,7 @@ max/min ratio:
 | Variant | R7, R8 | C1, C2 | High/Mid | R17, R18 | C3, C4 | Mid/Low |
 |---|---|---|---|---|---|---|
 | Stock | 3.3k | 10 nF | 683 Hz – 4.82 kHz | 3.3k | 100 nF | 68.3 – 482 Hz |
-| Retuned | 4.7k | 33 nF | 195 Hz – 1.03 kHz | 6.2k | 100 nF | 60.7 – 257 Hz |
+| Retuned | 4.7k | 33 nF | 195 Hz – 1.03 kHz | 13k | 68 nF | 70.9 – 180 Hz |
 
 Nothing else differs — same Q, same op-amps, same 20 k pots. Larger series
 resistors also load the previous stage *less*, so this direction is safe; the
