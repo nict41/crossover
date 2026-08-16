@@ -126,6 +126,11 @@ connectors and test points.
 
 ## Layout
 
+Silkscreen names every off-board connection: J1 pins are marked `+15V GND -15V`,
+J2 `IN GND`, J3 `HIGH MID LOW GND`, and each pot carries the crossover it sets
+(`HIGH/MID` on VR1, `MID/LOW` on VR2). You should not need the schematic to
+wire it up.
+
 Sockets along the rear edge, controls along the front, circuitry between.
 Filter 1 upper, filter 2 lower, each quad amongst its own parts. Placement is generated: parts are anchored at the centroid of the
 fixed pads they connect to, assigned to the nearest free slot, then improved by
@@ -138,6 +143,12 @@ not the pour is rebuilt.
 
 ## Known limitations
 
+* **The two quads are stacked, not side by side.** Side by side is the more
+  natural arrangement — it gives each filter its own half with its frequency pot
+  directly below — and it routes to the same 320 × 260 board, so it costs
+  nothing in area. But at that size one ground pin (U1D.12) is left unroutable,
+  so it is not what ships. It is a one-line change in `SOICS` and worth
+  revisiting with more routing effort or a slightly larger board.
 * **Board size is searched, not chosen.** `BOARD_W`, `BOARD_H` and
   `SLOT_PITCH` are environment overrides, so the generator can be swept for the
   smallest size that still routes *and* verifies. 81.3 × 66.0 mm is the smallest

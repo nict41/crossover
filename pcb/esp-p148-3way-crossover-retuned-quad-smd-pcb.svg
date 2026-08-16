@@ -398,9 +398,11 @@
 <polyline points="71 190 119 190 119 248 71 248 71 190" fill="none" stroke="#f2f0e6" stroke-width="0.5"/>
 <polyline points="112 216 111.168 221.253 108.753 225.992 104.992 229.753 100.253 232.168 95 233 89.7467 232.168 85.0077 229.753 81.2467 225.992 78.832 221.253 78 216 78.832 210.747 81.2467 206.008 85.0077 202.247 89.7467 199.832 95 199 100.253 199.832 104.992 202.247 108.753 206.008 111.168 210.747 112 216" fill="none" stroke="#f2f0e6" stroke-width="0.5"/>
 <text x="71" y="187.5" font-family="DejaVu Sans" font-size="2.6" fill="#f2f0e6">VR1</text>
+<text x="71" y="194.5" font-family="DejaVu Sans" font-size="2.2" fill="#f2f0e6">HIGH/MID</text>
 <polyline points="181 190 229 190 229 248 181 248 181 190" fill="none" stroke="#f2f0e6" stroke-width="0.5"/>
 <polyline points="222 216 221.168 221.253 218.753 225.992 214.992 229.753 210.253 232.168 205 233 199.747 232.168 195.008 229.753 191.247 225.992 188.832 221.253 188 216 188.832 210.747 191.247 206.008 195.008 202.247 199.747 199.832 205 199 210.253 199.832 214.992 202.247 218.753 206.008 221.168 210.747 222 216" fill="none" stroke="#f2f0e6" stroke-width="0.5"/>
 <text x="181" y="187.5" font-family="DejaVu Sans" font-size="2.6" fill="#f2f0e6">VR2</text>
+<text x="181" y="194.5" font-family="DejaVu Sans" font-size="2.2" fill="#f2f0e6">MID/LOW</text>
 <text x="66" y="137.5" font-family="DejaVu Sans" font-size="2.2" fill="#f2f0e6">C1</text>
 <text x="138" y="29.5" font-family="DejaVu Sans" font-size="2.2" fill="#f2f0e6">C2</text>
 <text x="192" y="173.5" font-family="DejaVu Sans" font-size="2.2" fill="#f2f0e6">C3A</text>
@@ -444,8 +446,8 @@
 <circle cx="191" cy="198" r="4.5" fill="#0b3d2e" stroke="#f2f0e6" stroke-width="0.4"/>
 <circle cx="219" cy="198" r="4.5" fill="#0b3d2e" stroke="#f2f0e6" stroke-width="0.4"/>
 <polyline points="0 0 320 0 320 260 0 260 0 0" fill="none" stroke="#ff66ff" stroke-width="0.6"/>
-<text x="196" y="96" font-family="DejaVu Sans" font-size="3.4" fill="#f2f0e6">ESP P148 3-WAY VARIABLE CROSSOVER</text>
-<text x="196" y="104" font-family="DejaVu Sans" font-size="2.6" fill="#f2f0e6">RETUNED QUAD SMD</text>
-<text x="196" y="112" font-family="DejaVu Sans" font-size="2.6" fill="#f2f0e6">195Hz-1.03kHz / 73-186Hz</text>
-<text x="196" y="120" font-family="DejaVu Sans" font-size="2.6" fill="#f2f0e6">ONE CHANNEL - BUILD TWO FOR STEREO</text>
+<text x="124" y="214" font-family="DejaVu Sans" font-size="3.4" fill="#f2f0e6">ESP P148 3-WAY VARIABLE CROSSOVER</text>
+<text x="124" y="222" font-family="DejaVu Sans" font-size="2.6" fill="#f2f0e6">RETUNED QUAD SMD</text>
+<text x="124" y="230" font-family="DejaVu Sans" font-size="2.6" fill="#f2f0e6">195Hz-1.03kHz / 73-186Hz</text>
+<text x="124" y="238" font-family="DejaVu Sans" font-size="2.6" fill="#f2f0e6">ONE CHANNEL - BUILD TWO FOR STEREO</text>
 </svg>

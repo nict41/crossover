@@ -162,11 +162,14 @@ def fp_elec(ref, x, y, net_of, value):
     return (x - 13 - CLEAR, y - 6 - CLEAR, x + 13 + CLEAR, y + 6 + CLEAR)
 
 
-def fp_pads(ref, x, y, net_of, n=3, label="", horiz=False):
+def fp_pads(ref, x, y, net_of, n=3, label="", horiz=False, names=None):
     _m = fp_begin()
     for i in range(n):
         px, py = (x + i * 10.0, y) if horiz else (x, y + i * 10.0)
         pad_tht(ref, i + 1, px, py, net_of(ref, i + 1))
+        if names and i < len(names):
+            silk(px - 1.6 * len(names[i]), py + 9.5 if horiz else py + 1.6,
+                 names[i], 2.0)
     if horiz:
         silk_rect(x - 5, y - 5, x + (n - 1) * 10 + 5, y + 5)
         silk_ref(x - 5, y - 7.5, ref, 2.2)
@@ -201,6 +204,7 @@ def fp_pot(pkg_ref, gang_a, gang_b, x, y, net_of):
             y - 4 + 17 * math.sin(2 * math.pi * i / n)) for i in range(n + 1)],
           TOPSILK, 0.5)
     silk_ref(x - 24, y - 32.5, pkg_ref, 2.6)
+    silk(x - 24, y - 25.5, "HIGH/MID" if pkg_ref == "VR1" else "MID/LOW", 2.2)
     fp_end(pkg_ref, _m, x, y + 10)
     PARTS[pkg_ref] = dict(value="20k dual", x=x, y=y + 10, rot=0,
                           assembled=False, pkg="POT-9MM-DUAL")
@@ -255,6 +259,11 @@ FIXED = [
     ("TP1", dict(fn=fp_pads, n=1, label="TP1"), BW - 100, 14),
     ("TP2", dict(fn=fp_pads, n=1, label="TP2"), BW - 70, 14),
 ]
+# Stacked, not side by side.  Side by side was tried - it gives each filter its
+# own half with its pot below, and it routes to the same 320x260 board, so it
+# costs nothing in area - but at that size one ground pin (U1D.12) is left
+# unroutable.  Worth revisiting with more routing effort; it is a one-line
+# change here.
 SOICS = [("U1", U1S, 110, 62), ("U2", U2S, 110, 150)]
 POTS = [("VR1", "VR1A", "VR1B", BW / 2 - 65, BH - 40),
         ("VR2", "VR2A", "VR2B", BW / 2 + 45, BH - 40)]
@@ -301,7 +310,7 @@ def auto_place():
     fixed_boxes = list(placed)
     # SOIC pads can only break out sideways, so reserve elbow room beside each
     for _pkg, _sec, _sx, _sy in SOICS:
-        fixed_boxes.append((_sx - 26, _sy - 8, _sx + 26, _sy + 38))
+        fixed_boxes.append((_sx - 24, _sy - 8, _sx + 24, _sy + 38))
     anchors = {}
     padpos = {(p["ref"], p["num"]): (p["x"], p["y"]) for p in pads}
     for ref in CHIPS:
@@ -730,10 +739,10 @@ for hx, hy in MOUNT_HOLES:
 for hx, hy in POT_BOSSES:
     shapes.append("HOLE~%g~%g~9.0~%s" % (hx, hy, gid()))
 track([(0, 0), (BW, 0), (BW, BH), (0, BH), (0, 0)], OUTLINE, 0.6)
-silk(196, 96, "ESP P148 3-WAY VARIABLE CROSSOVER", 3.4)
-silk(196, 104, "RETUNED QUAD SMD", 2.6)
-silk(196, 112, "195Hz-1.03kHz / 73-186Hz", 2.6)
-silk(196, 120, "ONE CHANNEL - BUILD TWO FOR STEREO", 2.6)
+silk(124, BH - 46, "ESP P148 3-WAY VARIABLE CROSSOVER", 3.4)
+silk(124, BH - 38, "RETUNED QUAD SMD", 2.6)
+silk(124, BH - 30, "195Hz-1.03kHz / 73-186Hz", 2.6)
+silk(124, BH - 22, "ONE CHANNEL - BUILD TWO FOR STEREO", 2.6)
 
 for L in (TOP, BOT):
     shapes.append("COPPERAREA~%g~%d~GND~%s~1~solid~%s~spoke~none~[]~0~2~1~none"
