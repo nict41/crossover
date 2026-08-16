@@ -240,7 +240,7 @@ VALUE = {r: netdoc["parts"][r]["value"] for r in netdoc["parts"]}
 # board - the rest is routing headroom, and on two layers with this router it
 # is what sets the floor, not the parts.
 BW = float(os.environ.get("BOARD_W", 320.0))
-BH = float(os.environ.get("BOARD_H", 260.0))
+BH = float(os.environ.get("BOARD_H", 270.0))
 SLOT_PITCH = int(os.environ.get("SLOT_PITCH", 18))
 MOUNT_HOLES = [(9, 9), (BW - 9, 9), (9, BH - 9), (BW - 9, BH - 9)]
 MOUNT_R = 12.6 / 2
@@ -267,7 +267,14 @@ FIXED = [
 # costs nothing in area - but at that size one ground pin (U1D.12) is left
 # unroutable.  Worth revisiting with more routing effort; it is a one-line
 # change here.
-SOICS = [("U1", U1S, 110, 62), ("U2", U2S, 110, 150)]
+# Two arrangements: stacked (one quad above the other) or side by side, which
+# uses the board's long dimension and gives each filter its own half with its
+# frequency pot below it.  Switchable so both can be swept for a size that
+# routes.
+if os.environ.get("IC_LAYOUT", "side") == "side":
+    SOICS = [("U1", U1S, 88, 60), ("U2", U2S, 198, 60)]
+else:
+    SOICS = [("U1", U1S, 110, 62), ("U2", U2S, 110, 150)]
 POTS = [("VR1", "VR1A", "VR1B", BW / 2 - 65, BH - 40),
         ("VR2", "VR2A", "VR2B", BW / 2 + 45, BH - 40)]
 
