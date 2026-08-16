@@ -469,6 +469,65 @@
 <circle cx="860" cy="1460" r="2" fill="#0000FF"/>
 <text x="860" y="1476" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">-15V</text>
 <text x="860" y="1208" fill="#0000A0" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">U4  pins 8 / 4</text>
+<rect x="1000" y="1245" width="50" height="70" stroke="#000080" stroke-width="1" fill="none"/>
+<path d="M 1070 1260 h -20" stroke="#880000" stroke-width="1" fill="none"/>
+<text x="1054" y="1256" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">1</text>
+<text x="1005" y="1263" fill="#666" font-family="Verdana" font-size="6pt" text-anchor="start">IN</text>
+<path d="M 1070 1290 h -20" stroke="#880000" stroke-width="1" fill="none"/>
+<text x="1054" y="1286" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">2</text>
+<text x="1005" y="1293" fill="#666" font-family="Verdana" font-size="6pt" text-anchor="start">GND</text>
+<text x="1000" y="1238" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">J2</text>
+<text x="1040" y="1238" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">IN</text>
+<circle cx="1130" cy="1260" r="2" fill="#0000FF"/>
+<text x="1134" y="1263" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">INPUT</text>
+<polyline points="1130 1300 1130 1290" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1120 1300 1139 1300" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1124 1302 1137 1302" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1126 1304 1133 1304" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1129 1306 1131 1306" stroke="#000000" stroke-width="1" fill="none"/>
+<rect x="1220" y="1245" width="50" height="130" stroke="#000080" stroke-width="1" fill="none"/>
+<path d="M 1290 1260 h -20" stroke="#880000" stroke-width="1" fill="none"/>
+<text x="1274" y="1256" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">1</text>
+<text x="1225" y="1263" fill="#666" font-family="Verdana" font-size="6pt" text-anchor="start">HIGH</text>
+<path d="M 1290 1290 h -20" stroke="#880000" stroke-width="1" fill="none"/>
+<text x="1274" y="1286" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">2</text>
+<text x="1225" y="1293" fill="#666" font-family="Verdana" font-size="6pt" text-anchor="start">MID</text>
+<path d="M 1290 1320 h -20" stroke="#880000" stroke-width="1" fill="none"/>
+<text x="1274" y="1316" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">3</text>
+<text x="1225" y="1323" fill="#666" font-family="Verdana" font-size="6pt" text-anchor="start">LOW</text>
+<path d="M 1290 1350 h -20" stroke="#880000" stroke-width="1" fill="none"/>
+<text x="1274" y="1346" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">4</text>
+<text x="1225" y="1353" fill="#666" font-family="Verdana" font-size="6pt" text-anchor="start">GND</text>
+<text x="1220" y="1238" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">J3</text>
+<text x="1260" y="1238" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">OUT</text>
+<circle cx="1350" cy="1260" r="2" fill="#0000FF"/>
+<text x="1354" y="1263" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">HIGH</text>
+<circle cx="1350" cy="1290" r="2" fill="#0000FF"/>
+<text x="1354" y="1293" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">MID</text>
+<circle cx="1350" cy="1320" r="2" fill="#0000FF"/>
+<text x="1354" y="1323" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">LOW</text>
+<polyline points="1350 1360 1350 1350" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1340 1360 1359 1360" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1344 1362 1357 1362" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1346 1364 1353 1364" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1349 1366 1351 1366" stroke="#000000" stroke-width="1" fill="none"/>
+<rect x="1460" y="1245" width="50" height="40" stroke="#000080" stroke-width="1" fill="none"/>
+<path d="M 1530 1260 h -20" stroke="#880000" stroke-width="1" fill="none"/>
+<text x="1514" y="1256" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">1</text>
+<text x="1465" y="1263" fill="#666" font-family="Verdana" font-size="6pt" text-anchor="start">TP1</text>
+<text x="1460" y="1238" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">TP1</text>
+<text x="1500" y="1238" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">TP</text>
+<circle cx="1590" cy="1260" r="2" fill="#0000FF"/>
+<text x="1594" y="1263" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">TP1</text>
+<rect x="1460" y="1325" width="50" height="40" stroke="#000080" stroke-width="1" fill="none"/>
+<path d="M 1530 1340 h -20" stroke="#880000" stroke-width="1" fill="none"/>
+<text x="1514" y="1336" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">1</text>
+<text x="1465" y="1343" fill="#666" font-family="Verdana" font-size="6pt" text-anchor="start">TP2</text>
+<text x="1460" y="1318" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">TP2</text>
+<text x="1500" y="1318" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">TP</text>
+<circle cx="1590" cy="1340" r="2" fill="#0000FF"/>
+<text x="1594" y="1343" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">TP2</text>
+<text x="1050" y="1215" fill="#0000A0" font-family="Verdana" font-size="9pt" font-weight="bold" text-anchor="start">SIGNAL CONNECTORS AND TEST POINTS</text>
 <text x="60" y="1180" fill="#0000A0" font-family="Verdana" font-size="9pt" font-weight="bold" text-anchor="start">SUPPLY BYPASSING - one 100nF ceramic per rail, at each IC</text>
 <text x="60" y="30" fill="#000000" font-family="Verdana" font-size="14pt" font-weight="bold" text-anchor="start">3-Way State Variable Electronic Crossover  -  ESP Project 148</text>
 <text x="60" y="1520" fill="#404040" font-family="Verdana" font-size="8pt" font-weight="normal" text-anchor="start">After Rod Elliott, Elliott Sound Products, Project 148 (https://sound-au.com/project148.htm).  Redrawn for EasyEDA.</text>
@@ -629,4 +688,12 @@
 <polyline points="860 1350 910 1350" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="860 1350 860 1380" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="860 1440 860 1460" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="1070 1260 1130 1260" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="1070 1290 1130 1290" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="1290 1260 1350 1260" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="1290 1290 1350 1290" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="1290 1320 1350 1320" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="1290 1350 1350 1350" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="1530 1260 1590 1260" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="1530 1340 1590 1340" stroke="#008800" stroke-width="1" fill="none"/>
 </svg>

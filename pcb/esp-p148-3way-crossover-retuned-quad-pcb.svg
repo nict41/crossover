@@ -1,0 +1,384 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1056" viewBox="0 0 400 330">
+<rect width="400" height="330" fill="#0b3d2e"/>
+<rect x="29" y="27" width="6" height="6" fill="#d8a13a"/>
+<circle cx="32" cy="30" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="32" cy="40" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="32" cy="40" r="1.6" fill="#0b3d2e"/>
+<polyline points="27 25 37 25 37 45 27 45 27 25" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="39" y="27" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">IN</text>
+<rect x="19" y="72" width="6" height="6" fill="#d8a13a"/>
+<circle cx="22" cy="75" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="42" cy="75" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="42" cy="75" r="1.6" fill="#0b3d2e"/>
+<polyline points="43 75 42.6252 77.847 41.5263 80.5 39.7782 82.7782 37.5 84.5263 34.847 85.6252 32 86 29.153 85.6252 26.5 84.5263 24.2218 82.7782 22.4737 80.5 21.3748 77.847 21 75 21.3748 72.153 22.4737 69.5 24.2218 67.2218 26.5 65.4737 29.153 64.3748 32 64 34.847 64.3748 37.5 65.4737 39.7782 67.2218 41.5263 69.5 42.6252 72.153 43 75" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="21" y="62" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">C0</text>
+<text x="17" y="73" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">+</text>
+<ellipse cx="32" cy="105" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="32" cy="105" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="32" cy="145" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="32" cy="145" r="1.6" fill="#0b3d2e"/>
+<polyline points="28 112.5 36 112.5 36 137.5 28 137.5 28 112.5" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="32 105 32 112.5" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="32 137.5 32 145" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="38" y="111.5" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R1</text>
+<rect x="29" y="162" width="6" height="6" fill="#d8a13a"/>
+<circle cx="32" cy="165" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="32" cy="175" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="32" cy="175" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="32" cy="185" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="32" cy="185" r="1.6" fill="#0b3d2e"/>
+<polyline points="27 160 37 160 37 190 27 190 27 160" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="39" y="162" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">PWR</text>
+<rect x="29" y="222" width="6" height="6" fill="#d8a13a"/>
+<circle cx="32" cy="225" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="32" cy="235" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="32" cy="235" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="32" cy="245" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="32" cy="245" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="32" cy="255" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="32" cy="255" r="1.6" fill="#0b3d2e"/>
+<polyline points="27 220 37 220 37 260 27 260 27 220" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="39" y="222" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">OUT</text>
+<ellipse cx="225" cy="115" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="225" cy="115" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="245" cy="115" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="245" cy="115" r="1.6" fill="#0b3d2e"/>
+<polyline points="230 111 240 111 240 119 230 119 230 111" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="230" y="109" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">C5</text>
+<ellipse cx="225" cy="85" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="225" cy="85" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="245" cy="85" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="245" cy="85" r="1.6" fill="#0b3d2e"/>
+<polyline points="230 81 240 81 240 89 230 89 230 81" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="230" y="79" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">C6</text>
+<ellipse cx="225" cy="300" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="225" cy="300" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="245" cy="300" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="245" cy="300" r="1.6" fill="#0b3d2e"/>
+<polyline points="230 296 240 296 240 304 230 304 230 296" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="230" y="294" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">C7</text>
+<ellipse cx="225" cy="270" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="225" cy="270" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="245" cy="270" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="245" cy="270" r="1.6" fill="#0b3d2e"/>
+<polyline points="230 266 240 266 240 274 230 274 230 266" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="230" y="264" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">C8</text>
+<rect x="367" y="92" width="6" height="6" fill="#d8a13a"/>
+<circle cx="370" cy="95" r="1.6" fill="#0b3d2e"/>
+<polyline points="365 90 375 90 375 100 365 100 365 90" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="377" y="92" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">TP1</text>
+<rect x="367" y="277" width="6" height="6" fill="#d8a13a"/>
+<circle cx="370" cy="280" r="1.6" fill="#0b3d2e"/>
+<polyline points="365 275 375 275 375 285 365 285 365 275" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="377" y="277" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">TP2</text>
+<ellipse cx="140" cy="145" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="140" cy="145" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="180" cy="145" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="180" cy="145" r="1.6" fill="#0b3d2e"/>
+<polyline points="147.5 141 172.5 141 172.5 149 147.5 149 147.5 141" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="140 145 147.5 145" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="172.5 145 180 145" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="147.5" y="139" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R2</text>
+<ellipse cx="260" cy="52" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="260" cy="52" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="300" cy="52" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="300" cy="52" r="1.6" fill="#0b3d2e"/>
+<polyline points="267.5 48 292.5 48 292.5 56 267.5 56 267.5 48" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="260 52 267.5 52" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="292.5 52 300 52" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="267.5" y="46" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R5</text>
+<ellipse cx="210" cy="25" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="210" cy="25" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="250" cy="25" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="250" cy="25" r="1.6" fill="#0b3d2e"/>
+<polyline points="217.5 21 242.5 21 242.5 29 217.5 29 217.5 21" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="210 25 217.5 25" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="242.5 25 250 25" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="217.5" y="19" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R6</text>
+<ellipse cx="350" cy="25" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="350" cy="25" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="390" cy="25" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="390" cy="25" r="1.6" fill="#0b3d2e"/>
+<polyline points="357.5 21 382.5 21 382.5 29 357.5 29 357.5 21" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="350 25 357.5 25" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="382.5 25 390 25" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="357.5" y="19" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R10</text>
+<ellipse cx="280" cy="25" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="280" cy="25" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="320" cy="25" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="320" cy="25" r="1.6" fill="#0b3d2e"/>
+<polyline points="287.5 21 312.5 21 312.5 29 287.5 29 287.5 21" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="280 25 287.5 25" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="312.5 25 320 25" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="287.5" y="19" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R11</text>
+<ellipse cx="190" cy="52" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="190" cy="52" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="230" cy="52" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="230" cy="52" r="1.6" fill="#0b3d2e"/>
+<polyline points="197.5 48 222.5 48 222.5 56 197.5 56 197.5 48" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="190 52 197.5 52" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="222.5 52 230 52" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="197.5" y="46" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R7</text>
+<ellipse cx="330" cy="52" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="330" cy="52" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="370" cy="52" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="370" cy="52" r="1.6" fill="#0b3d2e"/>
+<polyline points="337.5 48 362.5 48 362.5 56 337.5 56 337.5 48" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="330 52 337.5 52" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="362.5 52 370 52" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="337.5" y="46" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R8</text>
+<ellipse cx="70" cy="145" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="70" cy="145" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="110" cy="145" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="110" cy="145" r="1.6" fill="#0b3d2e"/>
+<polyline points="77.5 141 102.5 141 102.5 149 77.5 149 77.5 141" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="70 145 77.5 145" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="102.5 145 110 145" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="77.5" y="139" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R9</text>
+<ellipse cx="140" cy="25" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="140" cy="25" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="180" cy="25" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="180" cy="25" r="1.6" fill="#0b3d2e"/>
+<polyline points="147.5 21 172.5 21 172.5 29 147.5 29 147.5 21" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="140 25 147.5 25" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="172.5 25 180 25" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="147.5" y="19" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R3</text>
+<ellipse cx="70" cy="25" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="70" cy="25" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="110" cy="25" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="110" cy="25" r="1.6" fill="#0b3d2e"/>
+<polyline points="77.5 21 102.5 21 102.5 29 77.5 29 77.5 21" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="70 25 77.5 25" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="102.5 25 110 25" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="77.5" y="19" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R4</text>
+<ellipse cx="80" cy="52" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="80" cy="52" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="100" cy="52" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="100" cy="52" r="1.6" fill="#0b3d2e"/>
+<polyline points="85 48 95 48 95 56 85 56 85 48" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="85" y="46" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">C1</text>
+<ellipse cx="130" cy="52" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="130" cy="52" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="150" cy="52" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="150" cy="52" r="1.6" fill="#0b3d2e"/>
+<polyline points="135 48 145 48 145 56 135 56 135 48" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="135" y="46" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">C2</text>
+<rect x="287" y="92" width="6" height="6" fill="#d8a13a"/>
+<circle cx="290" cy="95" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="290" cy="105" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="290" cy="105" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="290" cy="115" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="290" cy="115" r="1.6" fill="#0b3d2e"/>
+<polyline points="285 90 295 90 295 120 285 120 285 90" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="297" y="92" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">VR1A</text>
+<rect x="327" y="92" width="6" height="6" fill="#d8a13a"/>
+<circle cx="330" cy="95" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="330" cy="105" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="330" cy="105" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="330" cy="115" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="330" cy="115" r="1.6" fill="#0b3d2e"/>
+<polyline points="325 90 335 90 335 120 325 120 325 90" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="337" y="92" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">VR1B</text>
+<ellipse cx="140" cy="210" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="140" cy="210" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="180" cy="210" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="180" cy="210" r="1.6" fill="#0b3d2e"/>
+<polyline points="147.5 206 172.5 206 172.5 214 147.5 214 147.5 206" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="140 210 147.5 210" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="172.5 210 180 210" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="147.5" y="204" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R15</text>
+<ellipse cx="280" cy="210" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="280" cy="210" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="320" cy="210" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="320" cy="210" r="1.6" fill="#0b3d2e"/>
+<polyline points="287.5 206 312.5 206 312.5 214 287.5 214 287.5 206" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="280 210 287.5 210" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="312.5 210 320 210" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="287.5" y="204" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R16</text>
+<ellipse cx="210" cy="210" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="210" cy="210" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="250" cy="210" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="250" cy="210" r="1.6" fill="#0b3d2e"/>
+<polyline points="217.5 206 242.5 206 242.5 214 217.5 214 217.5 206" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="210 210 217.5 210" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="242.5 210 250 210" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="217.5" y="204" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R12</text>
+<ellipse cx="350" cy="210" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="350" cy="210" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="390" cy="210" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="390" cy="210" r="1.6" fill="#0b3d2e"/>
+<polyline points="357.5 206 382.5 206 382.5 214 357.5 214 357.5 206" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="350 210 357.5 210" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="382.5 210 390 210" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="357.5" y="204" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R23</text>
+<ellipse cx="330" cy="235" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="330" cy="235" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="370" cy="235" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="370" cy="235" r="1.6" fill="#0b3d2e"/>
+<polyline points="337.5 231 362.5 231 362.5 239 337.5 239 337.5 231" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="330 235 337.5 235" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="362.5 235 370 235" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="337.5" y="229" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R24</text>
+<ellipse cx="140" cy="320" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="140" cy="320" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="180" cy="320" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="180" cy="320" r="1.6" fill="#0b3d2e"/>
+<polyline points="147.5 316 172.5 316 172.5 324 147.5 324 147.5 316" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="140 320 147.5 320" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="172.5 320 180 320" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="147.5" y="314" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R17</text>
+<ellipse cx="330" cy="254" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="330" cy="254" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="370" cy="254" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="370" cy="254" r="1.6" fill="#0b3d2e"/>
+<polyline points="337.5 250 362.5 250 362.5 258 337.5 258 337.5 250" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="330 254 337.5 254" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="362.5 254 370 254" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="337.5" y="248" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R18</text>
+<ellipse cx="70" cy="320" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="70" cy="320" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="110" cy="320" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="110" cy="320" r="1.6" fill="#0b3d2e"/>
+<polyline points="77.5 316 102.5 316 102.5 324 77.5 324 77.5 316" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="70 320 77.5 320" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="102.5 320 110 320" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="77.5" y="314" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R19</text>
+<ellipse cx="70" cy="210" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="70" cy="210" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="110" cy="210" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="110" cy="210" r="1.6" fill="#0b3d2e"/>
+<polyline points="77.5 206 102.5 206 102.5 214 77.5 214 77.5 206" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="70 210 77.5 210" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="102.5 210 110 210" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="77.5" y="204" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R22</text>
+<ellipse cx="190" cy="235" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="190" cy="235" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="230" cy="235" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="230" cy="235" r="1.6" fill="#0b3d2e"/>
+<polyline points="197.5 231 222.5 231 222.5 239 197.5 239 197.5 231" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="190 235 197.5 235" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="222.5 235 230 235" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="197.5" y="229" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R20</text>
+<ellipse cx="190" cy="254" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="190" cy="254" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="230" cy="254" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="230" cy="254" r="1.6" fill="#0b3d2e"/>
+<polyline points="197.5 250 222.5 250 222.5 258 197.5 258 197.5 250" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="190 254 197.5 254" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="222.5 254 230 254" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="197.5" y="248" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R21</text>
+<ellipse cx="260" cy="235" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="260" cy="235" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="300" cy="235" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="300" cy="235" r="1.6" fill="#0b3d2e"/>
+<polyline points="267.5 231 292.5 231 292.5 239 267.5 239 267.5 231" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="260 235 267.5 235" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="292.5 235 300 235" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="267.5" y="229" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R13</text>
+<ellipse cx="260" cy="254" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="260" cy="254" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="300" cy="254" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="300" cy="254" r="1.6" fill="#0b3d2e"/>
+<polyline points="267.5 250 292.5 250 292.5 258 267.5 258 267.5 250" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="260 254 267.5 254" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="292.5 254 300 254" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="267.5" y="248" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">R14</text>
+<ellipse cx="80" cy="235" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="80" cy="235" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="100" cy="235" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="100" cy="235" r="1.6" fill="#0b3d2e"/>
+<polyline points="85 231 95 231 95 239 85 239 85 231" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="85" y="229" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">C3</text>
+<ellipse cx="130" cy="235" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="130" cy="235" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="150" cy="235" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="150" cy="235" r="1.6" fill="#0b3d2e"/>
+<polyline points="135 231 145 231 145 239 135 239 135 231" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="135" y="229" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">C4</text>
+<rect x="287" y="277" width="6" height="6" fill="#d8a13a"/>
+<circle cx="290" cy="280" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="290" cy="290" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="290" cy="290" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="290" cy="300" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="290" cy="300" r="1.6" fill="#0b3d2e"/>
+<polyline points="285 275 295 275 295 305 285 305 285 275" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="297" y="277" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">VR2A</text>
+<rect x="327" y="277" width="6" height="6" fill="#d8a13a"/>
+<circle cx="330" cy="280" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="330" cy="290" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="330" cy="290" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="330" cy="300" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="330" cy="300" r="1.6" fill="#0b3d2e"/>
+<polyline points="325 275 335 275 335 305 325 305 325 275" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="337" y="277" font-family="DejaVu Sans" font-size="3" fill="#f2f0e6">VR2B</text>
+<rect x="147" y="112" width="6" height="6" fill="#d8a13a"/>
+<circle cx="150" cy="115" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="160" cy="115" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="160" cy="115" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="170" cy="115" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="170" cy="115" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="180" cy="115" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="180" cy="115" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="190" cy="115" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="190" cy="115" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="200" cy="115" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="200" cy="115" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="210" cy="115" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="210" cy="115" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="210" cy="85" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="210" cy="85" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="200" cy="85" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="200" cy="85" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="190" cy="85" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="190" cy="85" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="180" cy="85" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="180" cy="85" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="170" cy="85" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="170" cy="85" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="160" cy="85" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="160" cy="85" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="150" cy="85" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="150" cy="85" r="1.6" fill="#0b3d2e"/>
+<polyline points="144 79 216 79 216 121 144 121 144 79" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="144 97 148 97" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="144" y="73" font-family="DejaVu Sans" font-size="3.5" fill="#f2f0e6">U1  MC33079</text>
+<rect x="147" y="297" width="6" height="6" fill="#d8a13a"/>
+<circle cx="150" cy="300" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="160" cy="300" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="160" cy="300" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="170" cy="300" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="170" cy="300" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="180" cy="300" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="180" cy="300" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="190" cy="300" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="190" cy="300" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="200" cy="300" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="200" cy="300" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="210" cy="300" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="210" cy="300" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="210" cy="270" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="210" cy="270" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="200" cy="270" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="200" cy="270" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="190" cy="270" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="190" cy="270" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="180" cy="270" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="180" cy="270" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="170" cy="270" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="170" cy="270" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="160" cy="270" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="160" cy="270" r="1.6" fill="#0b3d2e"/>
+<ellipse cx="150" cy="270" rx="3" ry="3" fill="#d8a13a"/>
+<circle cx="150" cy="270" r="1.6" fill="#0b3d2e"/>
+<polyline points="144 264 216 264 216 306 144 306 144 264" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<polyline points="144 282 148 282" fill="none" stroke="#f2f0e6" stroke-width="0.8"/>
+<text x="144" y="258" font-family="DejaVu Sans" font-size="3.5" fill="#f2f0e6">U2  MC33079</text>
+<polyline points="0 0 400 0 400 330 0 330 0 0" fill="none" stroke="#ff00ff" stroke-width="0.6"/>
+<circle cx="12" cy="12" r="6.3" fill="#0b3d2e" stroke="#f2f0e6" stroke-width="0.5"/>
+<circle cx="388" cy="12" r="6.3" fill="#0b3d2e" stroke="#f2f0e6" stroke-width="0.5"/>
+<circle cx="12" cy="318" r="6.3" fill="#0b3d2e" stroke="#f2f0e6" stroke-width="0.5"/>
+<circle cx="388" cy="318" r="6.3" fill="#0b3d2e" stroke="#f2f0e6" stroke-width="0.5"/>
+<text x="180" y="168" font-family="DejaVu Sans" font-size="4.5" fill="#f2f0e6">ESP P148 3-WAY VARIABLE CROSSOVER</text>
+<text x="180" y="178" font-family="DejaVu Sans" font-size="3.5" fill="#f2f0e6">RETUNED QUAD  195Hz-1.03kHz / 71-180Hz</text>
+<text x="180" y="187" font-family="DejaVu Sans" font-size="3.5" fill="#f2f0e6">PLACEMENT ONLY - SIGNALS NOT ROUTED</text>
+</svg>

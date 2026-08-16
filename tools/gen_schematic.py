@@ -552,6 +552,27 @@ def draw(cfg):
         note(bx, 1208, "%s  %s" % (ic, cfg["pwr"]), size="7pt",
              anchor="middle")
 
+    # ---------------- signal connectors and test points -------------------
+    header("J2", "IN", 1050, 1250, ["IN", "GND"], package="HDR-1X2")
+    w((1070, 1260), (1130, 1260))
+    netlabel("INPUT", 1130, 1260, anchor="start", dx=4, dy=3)
+    w((1070, 1290), (1130, 1290))
+    gnd(1130, 1290)
+
+    header("J3", "OUT", 1270, 1250, ["HIGH", "MID", "LOW", "GND"],
+           package="HDR-1X4")
+    for i, nm in enumerate(["HIGH", "MID", "LOW"]):
+        w((1290, 1260 + 30 * i), (1350, 1260 + 30 * i))
+        netlabel(nm, 1350, 1260 + 30 * i, anchor="start", dx=4, dy=3)
+    w((1290, 1350), (1350, 1350))
+    gnd(1350, 1350)
+
+    for i, tp in enumerate(["TP1", "TP2"]):
+        header(tp, "TP", 1510, 1250 + 80 * i, [tp], package="TESTPOINT")
+        w((1530, 1260 + 80 * i), (1590, 1260 + 80 * i))
+        netlabel(tp, 1590, 1260 + 80 * i, anchor="start", dx=4, dy=3)
+    note(1050, 1215, "SIGNAL CONNECTORS AND TEST POINTS", weight="bold")
+
     note(60, 1180, "SUPPLY BYPASSING - one 100nF ceramic per rail, at each IC",
          weight="bold")
 
@@ -794,6 +815,9 @@ def write_bom(filename="bom.csv"):
         "12k": "Sets filter Q (0.489); 11k2 = exact Q 0.5, 5k04 = Butterworth",
         "11k": "Sets filter Q (0.503); 11k2 = exact Q 0.5, 5k04 = Butterworth",
         "100R": "Output series build-out resistors",
+        "TP": "Test points - optional, omit with R10/R11 and R23/R24",
+        "IN": "Signal input",
+        "OUT": "Outputs to the three power amplifiers",
         "10k": "R10/R11/R23/R24 are the TP1/TP2 null network - optional",
     }
     out = ["Qty,Value,Package,Designators,Notes"]
@@ -887,6 +911,26 @@ def emit(cfg, primary):
     name = "netlist.txt" if primary else "netlist-%s.txt" % cfg["slug"].split("crossover-")[-1]
     with open(os.path.join(docdir, name), "w") as f:
         f.write("\n".join(lines) + "\n")
+
+    # machine-readable form, consumed by tools/gen_pcb.py
+    parts = {}
+    for sh in shapes:
+        if not sh.startswith("LIB~"):
+            continue
+        ref = val = pkg = ""
+        for k, v in zip(sh.split("~")[3].split("`")[0::2],
+                        sh.split("~")[3].split("`")[1::2]):
+            if k == "package":
+                pkg = v
+        for part in sh.split("#@$"):
+            if part.startswith("T~P~"):
+                ref = part.split("~")[12]
+            elif part.startswith("T~N~"):
+                val = part.split("~")[12]
+        parts[ref] = {"value": val, "package": pkg}
+    with open(os.path.join(docdir, "netlist-%s.json" % cfg["slug"]), "w") as f:
+        json.dump({"variant": cfg["slug"], "parts": parts,
+                   "nets": {k: sorted(v) for k, v in nets.items()}}, f, indent=1)
     print("\n".join(lines))
     if touches:
         print("\nendpoint-on-wire touches (%d):" % len(touches))

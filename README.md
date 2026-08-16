@@ -47,11 +47,13 @@ limitations" below.
 ```
 schematic/   EasyEDA schematics (.json + .legacy.json), one pair per variant,
              each with a matching .svg / .png preview
+pcb/         EasyEDA PCB for the retuned-quad variant (+ .svg / .png preview)
 docs/        circuit-notes.md      — how the circuit works, design equations
              crossover-ranges.svg  — tuning-range diagram (+ .png)
              netlist.txt           — netlist extracted back out of the drawing
 bom/         one bom-*.csv per variant
 tools/       gen_schematic.py     — generates the schematics
+             gen_pcb.py           — generates the PCB
              gen_range_diagram.py — generates the range diagram
 ```
 
@@ -62,8 +64,12 @@ can't drift apart:
 
 ```sh
 python3 tools/gen_schematic.py      # schematics, previews, netlists, BOMs
+python3 tools/gen_pcb.py            # PCB for the retuned-quad variant
 python3 tools/gen_range_diagram.py  # docs/crossover-ranges.svg + .png
 ```
+
+`gen_pcb.py` reads the netlist JSON that `gen_schematic.py` writes, so the board
+cannot drift from the schematic — run them in that order.
 
 Both need `cairosvg` for PNG output (`pip install cairosvg`); the SVGs are
 written regardless.
@@ -165,6 +171,29 @@ the netlist is complete:
   library for your parts (axial vs. 0805, pot body, etc.).
 * One deliberate wire crossing per filter, where the low-pass feedback rail
   crosses the high-pass rail. Crossings without a junction dot do not connect.
+
+## PCB
+
+A board for the **retuned-quad** variant is in
+`pcb/esp-p148-3way-crossover-retuned-quad-pcb.json` — 101.6 × 83.8 mm, two
+layers, all through-hole. Open it the same way as a schematic.
+
+![Board placement](pcb/esp-p148-3way-crossover-retuned-quad-pcb.png)
+
+It contains the outline, mounting holes, all 44 footprints placed, all 117 pads
+netted, silkscreen, and a bottom-side ground pour — but **no routed signal
+traces**. Route in EasyEDA once you're happy with the placement.
+
+That split is deliberate: placement is checkable here (pad-to-net agreement with
+the schematic, courtyard overlaps, coincident pads, parts inside the outline,
+and total ratsnest length are all verified on every run) whereas routing needs a
+real DRC against a real fabricator's rules. A board carrying unverified copper
+is worse than one carrying none, because it looks finished.
+
+Placement isn't a plain grid — parts are permuted within each functional group
+and scored on ratsnest length, which took it from 1663 mm to 1422 mm. Layout
+rationale, routing order and the pre-order checklist are in
+[`docs/pcb-notes.md`](docs/pcb-notes.md).
 
 ## Getting the most out of it
 
