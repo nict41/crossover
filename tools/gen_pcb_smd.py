@@ -252,9 +252,12 @@ U2S = {1: "U2A", 2: "U2A", 3: "U2A", 4: "U2A", 5: "U2B", 6: "U2B", 7: "U2B",
        8: "U2C", 9: "U2C", 10: "U2C", 11: "U2A", 12: "U2D", 13: "U2D", 14: "U2D"}
 
 FIXED = [
-    ("J2", dict(fn=fp_pads, n=2, label="IN", horiz=True), 26, 14),
-    ("J1", dict(fn=fp_pads, n=3, label="PWR", horiz=True), 66, 14),
-    ("J3", dict(fn=fp_pads, n=4, label="OUT", horiz=True), 126, 14),
+    ("J2", dict(fn=fp_pads, n=2, label="IN", horiz=True,
+                names=["IN", "GND"]), 26, 14),
+    ("J1", dict(fn=fp_pads, n=3, label="PWR", horiz=True,
+                names=["+15V", "GND", "-15V"]), 66, 14),
+    ("J3", dict(fn=fp_pads, n=4, label="OUT", horiz=True,
+                names=["HIGH", "MID", "LOW", "GND"]), 126, 14),
     ("C0", dict(fn=fp_elec), 30, 42),
     ("TP1", dict(fn=fp_pads, n=1, label="TP1"), BW - 100, 14),
     ("TP2", dict(fn=fp_pads, n=1, label="TP2"), BW - 70, 14),

@@ -376,10 +376,19 @@
 <circle cx="192" cy="125" r="0.6" fill="#0b3d2e"/>
 <circle cx="182" cy="125" r="1.2" fill="#c9c9c9"/>
 <circle cx="182" cy="125" r="0.6" fill="#0b3d2e"/>
+<text x="22.8" y="23.5" font-family="DejaVu Sans" font-size="2" fill="#f2f0e6">IN</text>
+<text x="31.2" y="23.5" font-family="DejaVu Sans" font-size="2" fill="#f2f0e6">GND</text>
 <polyline points="21 9 41 9 41 19 21 19 21 9" fill="none" stroke="#f2f0e6" stroke-width="0.5"/>
 <text x="21" y="6.5" font-family="DejaVu Sans" font-size="2.2" fill="#f2f0e6">J2</text>
+<text x="59.6" y="23.5" font-family="DejaVu Sans" font-size="2" fill="#f2f0e6">+15V</text>
+<text x="71.2" y="23.5" font-family="DejaVu Sans" font-size="2" fill="#f2f0e6">GND</text>
+<text x="79.6" y="23.5" font-family="DejaVu Sans" font-size="2" fill="#f2f0e6">-15V</text>
 <polyline points="61 9 91 9 91 19 61 19 61 9" fill="none" stroke="#f2f0e6" stroke-width="0.5"/>
 <text x="61" y="6.5" font-family="DejaVu Sans" font-size="2.2" fill="#f2f0e6">J1</text>
+<text x="119.6" y="23.5" font-family="DejaVu Sans" font-size="2" fill="#f2f0e6">HIGH</text>
+<text x="131.2" y="23.5" font-family="DejaVu Sans" font-size="2" fill="#f2f0e6">MID</text>
+<text x="141.2" y="23.5" font-family="DejaVu Sans" font-size="2" fill="#f2f0e6">LOW</text>
+<text x="151.2" y="23.5" font-family="DejaVu Sans" font-size="2" fill="#f2f0e6">GND</text>
 <polyline points="121 9 161 9 161 19 121 19 121 9" fill="none" stroke="#f2f0e6" stroke-width="0.5"/>
 <text x="121" y="6.5" font-family="DejaVu Sans" font-size="2.2" fill="#f2f0e6">J3</text>
 <polyline points="40 42 39.5106 45.0902 38.0902 47.8779 35.8779 50.0902 33.0902 51.5106 30 52 26.9098 51.5106 24.1221 50.0902 21.9098 47.8779 20.4894 45.0902 20 42 20.4894 38.9098 21.9098 36.1221 24.1221 33.9098 26.9098 32.4894 30 32 33.0902 32.4894 35.8779 33.9098 38.0902 36.1221 39.5106 38.9098 40 42" fill="none" stroke="#f2f0e6" stroke-width="0.5"/>
