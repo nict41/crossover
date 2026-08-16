@@ -52,12 +52,12 @@ VARIANTS = [
     dict(slug="esp-p148-3way-state-variable-crossover",
          title="3-Way State Variable Electronic Crossover  -  ESP Project 148",
          rs1="3.3k", c1="10nF", range1="680 Hz - 4.8 kHz",
-         rs2="3.3k", c2="100nF", range2="68 Hz - 480 Hz"),
+         rs2="3.3k", c2="100nF", range2="68 Hz - 480 Hz", rq="12k"),
     dict(slug="esp-p148-3way-crossover-retuned-200hz-1khz",
          title="3-Way State Variable Electronic Crossover  -  ESP P148, retuned "
                "(195 Hz - 1.03 kHz / 71 Hz - 180 Hz)",
          rs1="4.7k", c1="33nF", range1="195 Hz - 1.03 kHz",
-         rs2="13k", c2="68nF", range2="71 Hz - 180 Hz"),
+         rs2="13k", c2="68nF", range2="71 Hz - 180 Hz", rq="11k"),
 ]
 
 W_CANVAS, H_CANVAS = 2200, 1600
@@ -325,7 +325,7 @@ def draw(cfg):
     w((570, 320), (490, 320), (490, 460))           # SUM1P spine
     resistor("R4", "5.6k", 560, 460)                # feedback from 1st integrator (BP1)
     w((490, 460), (530, 460))
-    resistor("R3", "12k", 490, 530, vertical=True)  # sets Q
+    resistor("R3", cfg["rq"], 490, 530, vertical=True)  # sets Q
     w((490, 460), (490, 500))
     w((490, 560), (490, 580))
     gnd(490, 580)
@@ -407,7 +407,7 @@ def draw(cfg):
     w((570, 320 + OY), (490, 320 + OY), (490, 460 + OY))
     resistor("R14", "5.6k", 560, 460 + OY)          # feedback from 1st integrator (BP2)
     w((490, 460 + OY), (530, 460 + OY))
-    resistor("R13", "12k", 490, 530 + OY, vertical=True)
+    resistor("R13", cfg["rq"], 490, 530 + OY, vertical=True)
     w((490, 460 + OY), (490, 500 + OY))
     w((490, 560 + OY), (490, 580 + OY))
     gnd(490, 580 + OY)
@@ -737,7 +737,8 @@ def write_bom(filename="bom.csv"):
     notes = {
         "NE5532": "4 x dual op-amp packages (U1-U4); each drawn as two sections",
         "20k": "2 x dual-gang 20k linear pots (VR1, VR2); wired as rheostats",
-        "12k": "Sets filter Q; 11k2 = exact Q 0.5, 5k04 = Butterworth",
+        "12k": "Sets filter Q (0.489); 11k2 = exact Q 0.5, 5k04 = Butterworth",
+        "11k": "Sets filter Q (0.503); 11k2 = exact Q 0.5, 5k04 = Butterworth",
         "100R": "Output series build-out resistors",
         "10k": "R10/R11/R23/R24 are the TP1/TP2 null network - optional",
     }

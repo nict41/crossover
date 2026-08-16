@@ -195,6 +195,92 @@ topping out at 180 Hz, high/mid would have to start at 540 Hz for 3 : 1, or
 point is a free sweep it isn't obviously worth paying. Use TP1 and TP2 to set
 the two frequencies accurately, and keep them apart.
 
+## Where accuracy actually pays
+
+The circuit is already lean — 40 years of iteration by its author — but the
+build effort is easy to spend in the wrong places. What matters, in order:
+
+**Matching beats absolute accuracy.** Within one filter, the two integrator
+capacitors (C1/C2, or C3/C4) and the two series resistors (R7/R8, R17/R18) need
+to match *each other*. Their absolute value only sets where the range sits; a
+mismatch between them behaves exactly like pot gang mistracking — it moves both
+f0 and Q by the square root of the mismatch:
+
+| Mismatch between the two halves | Resulting Q (from 0.5) | Summed response |
+|---|---|---|
+| 5 % | 0.488 | −0.21 dB |
+| 10 % | 0.477 | −0.41 dB |
+| 20 % | 0.456 | −0.79 dB |
+
+So: 1 % resistors, and either 2.5 % capacitors or 5 % ones sorted into matched
+pairs with a cheap meter. Everything else in the circuit can be 5 % without
+anyone noticing.
+
+**Pot tracking matters more than the op-amp.** The same table applies to the
+two gangs of VR1 and VR2. A good dual-gang pot buys more measurable performance
+than an exotic op-amp does. For the same reason, **don't** substitute log-taper
+pots to get a more even frequency scale across the rotation — tempting on a
+test instrument, but their gang tracking is far worse than a linear pot's, and
+it lands straight on Q.
+
+**The Q resistor is free accuracy.** R3/R13 set Q against the 5.6 k bandpass
+feedback resistor:
+
+| R3 / R13 | Q | Worst summed response |
+|---|---|---|
+| 12k (ESP drawing) | 0.489 | −0.20 dB |
+| **11k (E12)** | **0.503** | **+0.05 dB** |
+| 11k2 (11k + 200R) | 0.500 | 0.00 dB |
+| 11.3k (E96, 1 %) | 0.4985 | −0.03 dB |
+
+11k is a stock value and four times closer than 12k, so the `retuned` variant
+uses it. The article makes the same point. (The `stock` variant keeps 12k, to
+stay faithful to the published drawing.)
+
+**Diminishing returns below 5.6 k.** The article dropped the feedback network
+from 10 k to 5.6 k for thermal noise. Going lower gains little here, because
+the largest resistance in the signal path is the 20 k pot plus its series
+resistor, not the 5.6 k network.
+
+## Two quad op-amps instead of four duals
+
+The circuit partitions perfectly into two groups of four sections:
+
+| Package | Sections | Filter |
+|---|---|---|
+| 1 | input buffer, summing amp, integrator 1, integrator 2 | Filter 1 |
+| 2 | summing amp, integrator 1, integrator 2, output inverter | Filter 2 |
+
+So two quad op-amps replace four duals: half the ICs, half the bypass caps
+(4 instead of 8), and a smaller board — with no change to the circuit itself.
+Because the split falls on the filter boundary, the sections that share a
+package are the ones already tightly coupled by design, so the extra
+inter-section crosstalk of a quad lands where it does no harm.
+
+Suitable parts: **MC33079** (bipolar, low noise, closest in character to the
+NE5532), or **OPA1644** / **OPA4134** / **LME49740**. Note the pinout differs —
+14-pin, V+ on pin 4 and V− on pin 11 — so the schematic's power pins need
+remapping before layout.
+
+## Things not to "simplify"
+
+* **Don't delete the input buffer U1A.** It looks redundant, but it is what
+  keeps the source impedance out of the filter: any impedance in series with
+  the input resistor changes both the gain and the Q.
+* **Don't break the loop for DC.** The integrators have no DC feedback resistor
+  of their own — an integrator alone would drift to a rail. What holds them is
+  the overall state-variable loop, through the low-pass feedback resistor
+  (R6 / R12). It must stay intact.
+* **The output inverter U4B can go** if you invert the woofer's polarity at the
+  amplifier instead, saving U4B, R20 and R21. It doesn't save a package (seven
+  sections still need two quads), and it leaves an unused section that must be
+  wired as a grounded unity-gain follower rather than left floating. Rarely
+  worth it.
+* **The test point networks (R10/R11, R23/R24) can be omitted** — the ESP PCB
+  omits them, and they permanently load the outputs. But given how much the
+  separation between the two crossover points matters, being able to measure
+  each one exactly is worth four resistors.
+
 ## Test points
 
 TP1 and TP2 each sum that filter's high-pass and low-pass outputs through two

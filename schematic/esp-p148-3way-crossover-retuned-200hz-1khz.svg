@@ -72,7 +72,7 @@
 <path d="M 490 500 v 10" stroke="#880000" stroke-width="1" fill="none"/>
 <path d="M 490 560 v -10" stroke="#880000" stroke-width="1" fill="none"/>
 <text x="502" y="528" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">R3</text>
-<text x="502" y="542" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">12k</text>
+<text x="502" y="542" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">11k</text>
 <polyline points="490 590 490 580" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="480 590 499 590" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="484 592 497 592" stroke="#000000" stroke-width="1" fill="none"/>
@@ -223,7 +223,7 @@
 <path d="M 490 1100 v 10" stroke="#880000" stroke-width="1" fill="none"/>
 <path d="M 490 1160 v -10" stroke="#880000" stroke-width="1" fill="none"/>
 <text x="502" y="1128" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">R13</text>
-<text x="502" y="1142" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">12k</text>
+<text x="502" y="1142" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">11k</text>
 <polyline points="490 1190 490 1180" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="480 1190 499 1190" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="484 1192 497 1192" stroke="#000000" stroke-width="1" fill="none"/>

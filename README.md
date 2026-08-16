@@ -82,9 +82,10 @@ build rather than ship quietly.
 | Integrator caps | C1, C2 | C3, C4 |
 | Q resistor | R3 = 12k | R13 = 12k |
 
-Q = (5.6k + Rq) / (3 × Rq): 11k2 gives exactly 0.5 (Linkwitz-Riley), 12k as
-drawn gives 0.489 (< 0.2 dB ripple), 5k04 gives Butterworth (Q = 0.707, 3 dB
-peak in the summed response).
+Q = (5.6k + Rq) / (3 × Rq): 11k2 gives exactly 0.5 (Linkwitz-Riley), 11k gives
+0.503, 12k gives 0.489, 5k04 gives Butterworth (Q = 0.707, 3 dB peak in the
+summed response). The stock variant keeps the published 12k; the retuned
+variant uses 11k, which is a stock value and four times closer to ideal.
 
 The inverter U4B sits on the **bass** output rather than the midrange because
 U3A, the input amplifier of the second filter, is already inverting.
@@ -158,6 +159,31 @@ the netlist is complete:
   library for your parts (axial vs. 0805, pot body, etc.).
 * One deliberate wire crossing per filter, where the low-pass feedback rail
   crosses the high-pass rail. Crossings without a junction dot do not connect.
+
+## Getting the most out of it
+
+The circuit is already lean, so build effort is easy to spend in the wrong
+place. In order of what actually measures:
+
+1. **Match within each filter.** The two integrator caps (C1/C2, C3/C4) and the
+   two series resistors need to match *each other* — absolute value only sets
+   the range. A mismatch acts exactly like pot mistracking, moving f0 and Q by
+   its square root: 10 % costs −0.41 dB, 20 % costs −0.79 dB. Use 1 % resistors
+   and matched caps; 5 % is fine everywhere else.
+2. **Buy pot tracking, not exotic op-amps.** Same maths applies to the two
+   gangs. And don't fit log-taper pots for a more even frequency scale — their
+   gang tracking is much worse, and it lands straight on Q.
+3. **Q resistor 11k, not 12k** — already done in the retuned variant. Free.
+4. **Two quads instead of four duals.** The circuit splits perfectly at the
+   filter boundary, four sections each, so one quad per filter: half the ICs,
+   half the bypass caps, smaller board, no circuit change. MC33079 is the
+   closest in character to the NE5532; OPA1644 / LME49740 also fit. The pinout
+   differs (14-pin, V+ = 4, V− = 11) so the power pins need remapping.
+
+Things that look like simplifications but aren't: the input buffer U1A keeps
+source impedance out of the Q and gain; the integrators have no DC feedback of
+their own, so the state-variable loop must stay intact. Detail in
+[`docs/circuit-notes.md`](docs/circuit-notes.md#where-accuracy-actually-pays).
 
 ## Building notes
 
