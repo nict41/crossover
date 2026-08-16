@@ -31,13 +31,16 @@ The checks are:
 * **Mounting holes** — nothing may sit within 8 mil of an M3 hole.
 * **Board edge** — every pad inside the outline.
 
-These caught four real defects during development that would have reached the
+These caught eight real defects during development that would have reached the
 fab otherwise: vias placed too close to foreign copper (a via is wider than the
 track that leads to it, so a cell that is safe for a track is not automatically
 safe for a via); an occupancy grid that recorded only the first net to claim a
 cell, letting a second net route into the same keep-out; two test-point pads
-sitting on top of mounting holes; and the parallel tuning caps carrying an
-0805 footprint when they are 1210 parts.
+sitting on top of mounting holes; the parallel tuning caps carrying an 0805
+footprint when they are 1210 parts; tracks routed straight through the pot
+locating holes; and, when the pots were added, eight nets left unrouted and
+three left in disconnected pieces. Not one of those was visible in the preview
+image.
 
 ## Parts
 
@@ -126,7 +129,7 @@ connectors and test points.
 Sockets along the rear edge, controls along the front, circuitry between.
 Filter 1 upper, filter 2 lower, each quad amongst its own parts. Placement is generated: parts are anchored at the centroid of the
 fixed pads they connect to, assigned to the nearest free slot, then improved by
-pairwise swaps scored on ratsnest length (843 → 789 mm).
+pairwise swaps scored on ratsnest length (1088 → 955 mm).
 
 Ground is poured on both layers *and* routed explicitly. The pour alone would be
 enough electrically, but only if the person importing the file remembers to
