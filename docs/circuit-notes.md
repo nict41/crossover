@@ -125,8 +125,9 @@ don't go much below 2.2 k.
 Two consequences of narrowing the ranges are worth knowing:
 
 * The two ranges now **overlap** (filter 1 goes down to 195 Hz, filter 2 up to
-  257 Hz). That's harmless and gives useful adjustment room, but you must keep
-  the Mid/Low point below the High/Mid point, or the bands invert.
+  257 Hz), so it is possible to set the Mid/Low point above the High/Mid point.
+  See "Setting the two points too close together" below — the outputs don't
+  swap, but the midrange band collapses.
 * Filter 2's ratio can't be narrowed to exactly 250/68 = 3.68 while keeping
   100 nF, because with C fixed the series resistor sets the ratio and the
   absolute frequency together. If you want the tighter range, use
@@ -137,6 +138,53 @@ Two consequences of narrowing the ranges are worth knowing:
 Other ranges from the article: 4.7 nF in filter 1 with the stock 3.3 k gives
 roughly 1.45 kHz … 10 kHz; dropping the series resistors to 2.2 k widens the
 sweep.
+
+## Setting the two points too close together
+
+![Crossover tuning ranges](crossover-ranges.png)
+
+Because the two filters are cascaded and tuned independently, nothing stops you
+setting the Mid/Low point *above* the High/Mid point. It's worth being precise
+about what happens, because the intuitive answer — "the bands swap over" — is
+wrong.
+
+The outputs never swap. Filter 1 has no knowledge of filter 2, so **HIGH is
+unaffected** whatever VR2 does. What suffers is the midrange:
+
+> MID is the high-pass output of filter 2, taken from a signal that filter 1 has
+> already low-passed. Its passband is the gap between the two corner
+> frequencies. Close that gap and the two 12 dB/octave roll-offs start to
+> overlap, so the mid band gets thinner and quieter; invert the order and there
+> is no passband left at all — only the region where both slopes are falling.
+
+Because MID is the term that reconstructs the middle of the audio band, the
+summed response (HIGH + MID + LOW) develops a broad suck-out at the same time.
+
+| Separation (High/Mid : Mid/Low) | Worst error in the summed response | MID band peaks at |
+|---|---|---|
+| 16 : 1 | −0.06 dB | −1.1 dB |
+| 8 : 1 | −0.20 dB | −2.0 dB |
+| 4 : 1 (2 octaves) | −0.62 dB | −3.9 dB |
+| 3 : 1 (1.5 octaves) | −0.96 dB | −5.0 dB |
+| 2 : 1 (1 octave) | −1.69 dB | −7.0 dB |
+| 1 : 1 (coincident) | −3.90 dB | −12.0 dB |
+| 1 : 1.3 (inverted, worst of the retuned ranges) | −5.18 dB | −14.6 dB |
+
+Two things to take from this:
+
+* **The degradation is gradual and starts well before the points cross.** At a
+  1.6 : 1 separation — still correctly ordered — the sum is already 2.3 dB down
+  and the mid band is 8 dB below the others. There is no cliff edge at 1 : 1;
+  crossing over is just further along the same curve.
+* **Nothing is damaged or unstable.** No oscillation, no clipping, no latch-up.
+  It is simply a filter setting that produces a poor response, and it undoes
+  itself the moment you turn VR2 back down.
+
+Practical rule: **keep the two crossover points at least 3 : 1 apart** (about
+1.5 octaves) to stay inside 1 dB, and prefer 4 : 1 or more. For the retuned
+values that means using VR2 in its lower half whenever VR1 is near the bottom
+of its range. That's a normal constraint for any 3-way — a real 3-way speaker
+would not want the two points closer than that regardless of the electronics.
 
 ## Test points
 
