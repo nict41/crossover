@@ -229,7 +229,15 @@ def N(ref, num):
 
 
 VALUE = {r: netdoc["parts"][r]["value"] for r in netdoc["parts"]}
-BW, BH = 340.0, 280.0            # 86.4 x 71.1 mm
+# Board size and slot pitch are overridable, so the smallest size that still
+# routes and verifies can be searched for rather than guessed.  The defaults
+# are the smallest found by that search: sweeping down from 340x280, sizes at
+# and below 310x250 leave nets unroutable.  Component area is only ~13% of the
+# board - the rest is routing headroom, and on two layers with this router it
+# is what sets the floor, not the parts.
+BW = float(os.environ.get("BOARD_W", 320.0))
+BH = float(os.environ.get("BOARD_H", 260.0))
+SLOT_PITCH = int(os.environ.get("SLOT_PITCH", 18))
 MOUNT_HOLES = [(9, 9), (BW - 9, 9), (9, BH - 9), (BW - 9, BH - 9)]
 MOUNT_R = 12.6 / 2
 BOSS_R = 4.5
@@ -244,15 +252,16 @@ FIXED = [
     ("J1", dict(fn=fp_pads, n=3, label="PWR", horiz=True), 66, 14),
     ("J3", dict(fn=fp_pads, n=4, label="OUT", horiz=True), 126, 14),
     ("C0", dict(fn=fp_elec), 30, 42),
-    ("TP1", dict(fn=fp_pads, n=1, label="TP1"), 240, 14),
-    ("TP2", dict(fn=fp_pads, n=1, label="TP2"), 270, 14),
+    ("TP1", dict(fn=fp_pads, n=1, label="TP1"), BW - 100, 14),
+    ("TP2", dict(fn=fp_pads, n=1, label="TP2"), BW - 70, 14),
 ]
 SOICS = [("U1", U1S, 110, 62), ("U2", U2S, 110, 150)]
-POTS = [("VR1", "VR1A", "VR1B", 105, 240), ("VR2", "VR2A", "VR2B", 215, 240)]
+POTS = [("VR1", "VR1A", "VR1B", BW / 2 - 65, BH - 40),
+        ("VR2", "VR2A", "VR2B", BW / 2 + 45, BH - 40)]
 
 # candidate slots for the movable chip parts, 18 x 18 grid over the interior
-SLOT_XS = [x for x in range(34, 330, 18)]
-SLOT_YS = [y for y in range(36, 205, 18)]
+SLOT_XS = list(range(34, int(BW) - 10, SLOT_PITCH))
+SLOT_YS = list(range(36, int(BH) - 75, SLOT_PITCH))
 
 
 def place_fixed():
