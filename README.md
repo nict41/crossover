@@ -41,10 +41,12 @@ limitations" below.
 ```
 schematic/   EasyEDA schematics (.json + .legacy.json), one pair per variant,
              each with a matching .svg / .png preview
-docs/        circuit-notes.md — how the circuit works, design equations
-             netlist.txt      — netlist extracted back out of the drawing
+docs/        circuit-notes.md      — how the circuit works, design equations
+             crossover-ranges.svg  — tuning-range diagram (+ .png)
+             netlist.txt           — netlist extracted back out of the drawing
 bom/         bom.csv, bom-retuned.csv
-tools/       gen_schematic.py — generates everything above
+tools/       gen_schematic.py     — generates the schematics
+             gen_range_diagram.py — generates the range diagram
 ```
 
 ## Regenerating
@@ -53,8 +55,12 @@ The schematic is generated, not hand-edited, so that the drawing and the netlist
 can't drift apart:
 
 ```sh
-python3 tools/gen_schematic.py     # optional: pip install cairosvg for the PNG
+python3 tools/gen_schematic.py      # schematics, previews, netlists, BOMs
+python3 tools/gen_range_diagram.py  # docs/crossover-ranges.svg + .png
 ```
+
+Both need `cairosvg` for PNG output (`pip install cairosvg`); the SVGs are
+written regardless.
 
 The script places every component and wire on a 10 px grid, derives junction
 dots from wire degree, then **re-extracts the netlist from the finished
@@ -86,6 +92,21 @@ U3A, the input amplifier of the second filter, is already inverting.
 TP1 and TP2 sum each filter's high-pass and low-pass outputs through 10 k
 resistors; the signal nulls at the crossover frequency, so you can measure it
 exactly with an oscillator. They're optional — the ESP PCB omits them.
+
+### Tuning ranges
+
+![Crossover tuning ranges](docs/crossover-ranges.png)
+
+Because the two filters are tuned independently, the retuned ranges overlap
+(195–257 Hz) and the mid/low point can be set above the high/mid point. The
+outputs never swap — filter 1 is unaware of filter 2, so HIGH is unaffected.
+What collapses is MID, whose passband *is* the gap between the two corners:
+squeeze that gap and it thins out (−14.6 dB at worst), and the summed response
+develops a broad suck-out (−5.2 dB at worst). The degradation is gradual and
+already measurable at 1.6 : 1 separation, so the useful rule is **keep the two
+points at least 3 : 1 apart** (~1.5 octaves) for under 1 dB, not "keep them in
+order". Nothing is damaged or unstable — turn VR2 back down and it recovers.
+Full table in [`docs/circuit-notes.md`](docs/circuit-notes.md#setting-the-two-points-too-close-together).
 
 ### Frequency range
 
