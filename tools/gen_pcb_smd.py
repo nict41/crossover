@@ -259,7 +259,7 @@ VALUE = {r: netdoc["parts"][r]["value"] for r in netdoc["parts"]}
 # board - the rest is routing headroom, and on two layers with this router it
 # is what sets the floor, not the parts.
 BW = float(os.environ.get("BOARD_W", 300.0))
-BH = float(os.environ.get("BOARD_H", 240.0))
+BH = float(os.environ.get("BOARD_H", 175.0))
 SLOT_PITCH = int(os.environ.get("SLOT_PITCH", 18))
 MOUNT_HOLES = [(9, 9), (BW - 9, 9), (9, BH - 9), (BW - 9, BH - 9)]
 MOUNT_R = 12.6 / 2
@@ -304,7 +304,10 @@ POTS = [("VR1", "VR1A", "VR1B", BW / 2 - 65, BH - 40),
 
 # candidate slots for the movable chip parts, 18 x 18 grid over the interior
 SLOT_XS = list(range(34, int(BW) - 10, SLOT_PITCH))
-SLOT_YS = list(range(36, int(BH) - 75, SLOT_PITCH))
+# Down to the bottom edge: the strips either side of the pots and the gap
+# between them are usable board.  The pot courtyards are already in
+# fixed_boxes, so slots that would collide with a pot are dropped anyway.
+SLOT_YS = list(range(36, int(BH) - 12, SLOT_PITCH))
 
 
 def place_fixed():
@@ -342,6 +345,9 @@ def auto_place():
     take the nearest free slot; afterwards improve by pairwise swaps."""
     place_fixed()
     fixed_boxes = list(placed)
+    for _hx, _hy in MOUNT_HOLES:      # two of these sit in the pot band
+        r = MOUNT_R + CLEAR + 2
+        fixed_boxes.append((_hx - r, _hy - r, _hx + r, _hy + r))
     # SOIC pads can only break out sideways, so reserve elbow room beside each
     for _pkg, _sec, _sx, _sy in SOICS:
         fixed_boxes.append((_sx - 8, _sy - 24, _sx + 38, _sy + 24) if IC_ROT
@@ -365,7 +371,7 @@ def auto_place():
     free = [s for s in slots
             if not any(boxes_overlap(slot_box(s[0], s[1], "1210"), b)
                        for b in fixed_boxes)
-            and 20 < s[0] < BW - 14 and 20 < s[1] < BH - 20]
+            and 18 < s[0] < BW - 12 and 24 < s[1] < BH - 14]
 
     assign, taken = {}, set()
     for ref in sorted(CHIPS, key=lambda r: anchors[r][0]):

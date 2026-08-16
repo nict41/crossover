@@ -179,14 +179,14 @@ the netlist is complete:
 
 ### SMD board, routed, for JLCPCB fab + assembly
 
-`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **76.2 × 61.0 mm**,
+`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **76.2 × 44.4 mm**,
 two layers, **fully routed**, frequency pots mounted on the board, every SMD
 part a real LCSC line item.
 
 ![SMD board](pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.png)
 
 ```
-44 footprints | 121 pads | 108 tracks | 43 vias
+44 footprints | 121 pads | 113 tracks | 46 vias
 verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
           pads match the schematic exactly
 ```
