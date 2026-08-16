@@ -268,9 +268,21 @@ standard 14-pin quad pinout:
 | non-inverting in | 3 | 5 | 10 | 12 |
 
 with V+ on pin 4 and V− on pin 11. This packaging is drawn in the
-`retuned-quad` variant, where filter 1 fills U1 (buffer, summing amp,
-integrator 1, integrator 2) and filter 2 fills U2 (summing amp, integrator 1,
-integrator 2, output inverter).
+`retuned-quad` variant. Everything else in these notes uses the dual-package
+designators; the sections map across like this:
+
+| Stage | Dual variants | Quad variant |
+|---|---|---|
+| Input buffer | U1A | U1A |
+| Filter 1 summing amp (HIGH) | U1B | U1B |
+| Filter 1 integrator 1 | U2A | U1C |
+| Filter 1 integrator 2 (LP1) | U2B | U1D |
+| Filter 2 summing amp (MID) | U3A | U2A |
+| Filter 2 integrator 1 | U3B | U2B |
+| Filter 2 integrator 2 (LP2) | U4A | U2C |
+| Output inverter (LOW) | U4B | U2D |
+
+Supply pins are drawn on the A section of each package, as is conventional.
 
 The generator checks that the quad and dual variants have identical *signal*
 connectivity — comparing op-amp pins by their role rather than their number,
