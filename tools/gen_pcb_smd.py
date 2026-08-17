@@ -357,29 +357,38 @@ def fp_pot(pkg_ref, gang_a, gang_b, x, y, net_of):
 
 
 def fp_pot_single(ref, x, y, net_of, label):
-    """Single-gang volume pot (Alps RK097 / LCSC C470577, 10k audio taper, or
-    equivalent). Three terminals on 0.2 in (5.08 mm) centres - the same row
-    pattern as one gang of fp_pot's dual-gang footprint, since a single-gang
-    part is mechanically half of it. No locating-boss holes: unlike the
-    dual-gang pattern, Alps' own RK097 page doesn't show anti-rotation pegs
-    for this size/torque class. VERIFY against your pot's datasheet.
+    """Single-gang volume pot: Alps RK097111080R, LCSC C470577 - the real
+    part chosen for this board (see docs/pcb-notes-smd.md), not a generic
+    stand-in. Pad geometry pulled from LCSC/EasyEDA's own footprint for
+    this exact part number (its `/api/products/C470577/svgs` PCB-layer
+    SVG): 3 terminals on a 2.5 mm pitch, ~1.9 mm pad, ~1.2 mm hole - drawn
+    here on 2.54 mm (0.1 in), the nearest 0.5-unit grid point, absorbing
+    the same sub-0.1 mm slop the dual-gang footprint already does between
+    its real 5.00 mm pitch and its drawn 5.08 mm.  The first version of
+    this footprint reused the dual-gang pattern's pitch verbatim (5.08 mm)
+    without checking it against this specific part - about 2x too wide;
+    this is the real number, not a guess. No locating-boss holes: Alps'
+    own product page doesn't show anti-rotation pegs for this size/torque
+    class. The ~9 mm body/knob-collar circle drawn here matches the
+    AliExpress listing's stated body diameter; VERIFY the rest against the
+    datasheet before ordering regardless.
     """
     _m = fp_begin()
-    for i, dx in enumerate((-20.0, 0.0, 20.0)):
-        pad_tht(ref, i + 1, x + dx, y, net_of(ref, i + 1), dia=7.0, hole=4.7)
-    silk_rect(x - 24, y - 22, x + 24, y + 16)
+    for i, dx in enumerate((-10.0, 0.0, 10.0)):
+        pad_tht(ref, i + 1, x + dx, y, net_of(ref, i + 1), dia=7.5, hole=4.7)
+    silk_rect(x - 18, y - 21, x + 18, y + 14)
     n = 20
     track([(x + 17 * math.cos(2 * math.pi * i / n),
             y - 4 + 17 * math.sin(2 * math.pi * i / n)) for i in range(n + 1)],
           TOPSILK, 0.5)
-    rlax, rlay = x - 24, y - 24.5
+    rlax, rlay = x - 18, y - 23.5
     silk_ref(rlax, rlay, ref)
-    flax, flay = x - 24, y - 17.5
+    flax, flay = x - 18, y - 16.5
     silk(flax, flay, label)
     fp_end(ref, _m, x, y)
     PARTS[ref] = dict(value="10k log", x=x, y=y, rot=0, assembled=False,
                       pkg="POT-9MM-SINGLE")
-    body = (x - 26, y - 22, x + 26, y + 18)
+    body = (x - 20, y - 21, x + 20, y + 16)
     rlbl, flbl = label_bbox(rlax, rlay, ref), label_bbox(flax, flay, label)
     x0 = min(body[0], rlbl[0], flbl[0])
     y0 = min(body[1], rlbl[1], flbl[1])
@@ -478,21 +487,22 @@ if os.environ.get("IC_LAYOUT", "side") == "side":
              else [("U1", U1S, 88, 60), ("U2", U2S, 198, 60)])
 else:
     SOICS = [("U1", U1S, 110, 62), ("U2", U2S, 110, 150)]
-# Five front-panel controls in a row, uniform 80-unit pitch: HIGH vol, VR1
-# (H/M freq), MID vol, VR2 (M/L freq), LOW vol.  Every pot - single or dual
-# gang - has the same 26-unit body half-width, so a shared pitch is what
-# actually matters; the first cut at this used VR1/VR2's OLD 110-unit
-# spacing (tuned for just the two of them) and tried to wedge a third pot
-# into the 56-unit gap between them, leaving ~1.4 units of clearance on
-# each side - not a courtyard violation, but tight enough to starve the
-# neighbouring pins' escape routes and leave 3-5 nets unroutable across
-# several board sizes before this was traced back to spacing, not area.
+# Five front-panel controls in a row, uniform 80-unit pitch, LOW on the left
+# and HIGH on the right: LOW vol, VR2 (M/L freq), MID vol, VR1 (H/M freq),
+# HIGH vol.  Every pot - single or dual gang - has the same 26-unit body
+# half-width, so a shared pitch is what actually matters; the first cut at
+# this used VR1/VR2's OLD 110-unit spacing (tuned for just the two of them)
+# and tried to wedge a third pot into the 56-unit gap between them, leaving
+# ~1.4 units of clearance on each side - not a courtyard violation, but
+# tight enough to starve the neighbouring pins' escape routes and leave 3-5
+# nets unroutable across several board sizes before this was traced back to
+# spacing, not area.
 PANEL_PITCH = 80
-POTS = [("VR1", "VR1A", "VR1B", BW / 2 - PANEL_PITCH, BH - 40),
-        ("VR2", "VR2A", "VR2B", BW / 2 + PANEL_PITCH, BH - 40)]
-POTS_SINGLE = [("VR3", BW / 2 - 2 * PANEL_PITCH, "HIGH VOL"),
+POTS = [("VR1", "VR1A", "VR1B", BW / 2 + PANEL_PITCH, BH - 40),
+        ("VR2", "VR2A", "VR2B", BW / 2 - PANEL_PITCH, BH - 40)]
+POTS_SINGLE = [("VR3", BW / 2 + 2 * PANEL_PITCH, "HIGH VOL"),
                ("VR4", BW / 2, "MID VOL"),
-               ("VR5", BW / 2 + 2 * PANEL_PITCH, "LOW VOL")]
+               ("VR5", BW / 2 - 2 * PANEL_PITCH, "LOW VOL")]
 
 # candidate slots for the movable chip parts, 18 x 18 grid over the interior
 SLOT_XS = list(range(34, int(BW) - 10, SLOT_PITCH))
@@ -1080,7 +1090,8 @@ def path_clearance_ok(net, via_pts, polys):
 
 
 def route_order(n):
-    """Supply rails first, then IC pins, then everything else by size.
+    """Supply rails and long-haul nets first, then IC pins, then everything
+    else by size.
 
     An SOIC pad can only break out sideways, so if the general nets take
     those channels first the op-amp pins are trapped - hence IC-touching
@@ -1096,9 +1107,20 @@ def route_order(n):
     to route early precisely because they were small (R4.1's net among
     them) - so only the genuinely wide-reaching supply nets jump the queue;
     everything else keeps the original smallest-first order, which is what
-    let small point-to-point nets thread through gaps before they closed."""
+    let small point-to-point nets thread through gaps before they closed.
+
+    The *_PRE nets (each filter output to its volume pot) are a second,
+    different case that member-count alone can't see: HIGH_PRE/MID_PRE/
+    LOW_PRE have only 2 members each - the smallest, lowest-priority nets
+    by the general rule - but each one has to cross nearly the full width
+    of the board, from the output stage to the front-panel pot row, same as
+    a big multi-pad net does for a different reason. Routed last (its
+    default position under "smallest first"), a *_PRE net can find every
+    cell along that long corridor already claimed by nets that route more
+    locally - the actual cause of MID_PRE (VR4.1 to R19.2) reproducibly
+    coming back split in two at 420 x 220."""
     members = netdoc["nets"][n]
-    if n in ("GND", "+15V", "-15V"):
+    if n in ("GND", "+15V", "-15V") or n.endswith("_PRE"):
         return (-1, 0)
     return (0 if any(m.startswith("U") for m in members) else 1, len(members))
 

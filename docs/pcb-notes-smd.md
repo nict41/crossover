@@ -17,8 +17,8 @@ The generator routes the board and then checks it with geometry that does not
 reuse the router's own bookkeeping. On the current output:
 
 ```
-board 106.7 x 55.9 mm | 49 footprints | 132 pads | 130 tracks | 69 vias
-board utilisation 60%; largest empty rectangle 24 x 30 mm at (83, 8)
+board 106.7 x 55.9 mm | 49 footprints | 132 pads | 137 tracks | 80 vias
+board utilisation 59%; largest empty rectangle 37 x 24 mm at (70, 11)
 verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
           pads match the schematic exactly, and no silkscreen sits over a
           trace or a via
@@ -284,11 +284,24 @@ footprint, this one has a verified EasyEDA pinout+footprint behind it.
 since neither the LCSC nor the JLCPCB parts API exposes it directly; it
 came from Alps' own product page for this exact part number.
 
-Panel layout, left to right: **HIGH VOL (VR3) - HIGH/MID (VR1) - MID VOL
-(VR4) - MID/LOW (VR2) - LOW VOL (VR5)** - five controls on a uniform 80-unit
-(20.3 mm) pitch, each volume trim flanking the frequency pot for the band
-it's nearest. Every pot footprint, single- or dual-gang, has the same
-26-unit body half-width, so a shared pitch is what actually determines
+**Pad geometry is pulled from that real footprint, not guessed**: 2.5 mm
+pin pitch (drawn on 2.54 mm, the nearest 0.5-unit grid point - absorbing
+the same kind of sub-0.1 mm slop the dual-gang footprint already does
+between its 5.00 mm real pitch and its 5.08 mm drawn one), ~1.9 mm pads,
+~1.2 mm holes, all read directly from LCSC/EasyEDA's own PCB-layer SVG for
+C470577 (`/api/products/C470577/svgs`). The first version of this
+footprint just reused the dual-gang pattern's 5.08 mm pitch without
+checking it against this specific part - about 2x too wide, and the reason
+a rendered preview of it looked barely different from VR1/VR2. The ~9 mm
+body/knob-collar circle is still a sketch from the AliExpress listing's
+stated dimensions, not the same verified source - reasonable for a
+courtyard, not a certified mechanical drawing.
+
+Panel layout, left to right: **LOW VOL (VR5) - MID/LOW (VR2) - MID VOL
+(VR4) - HIGH/MID (VR1) - HIGH VOL (VR3)** - five controls on a uniform
+80-unit (20.3 mm) pitch, each volume trim flanking the frequency pot for
+the band it's nearest. Every pot footprint, single- or dual-gang, has the
+same 26-unit body half-width, so a shared pitch is what actually determines
 spacing - see "Routing five more controls" below for what happened when the
 first attempt reused VR1/VR2's old, tighter spacing instead.
 
@@ -348,7 +361,7 @@ have not been re-swept against them.
 
 ### Routing five more controls
 
-Going from 2 front-panel pots to 5 was not just "make the board wider." Three
+Going from 2 front-panel pots to 5 was not just "make the board wider." Four
 real problems turned up, in order, each caught by the same independent
 verifier rather than assumed away:
 
@@ -409,6 +422,23 @@ verifier rather than assumed away:
    the geometry, check it for real, only then stamp it and add it to the
    board.
 
+4. **Member count isn't the same thing as distance.** Even after all of the
+   above, `MID_PRE` (the wire from the MID filter's output to VR4's
+   attenuator input) reproducibly came back split in two: `VR4.1` on one
+   side, `R19.2` on the other, unchanged across several different board
+   sizes and a deliberate attempt at moving VR4 off dead centre. `HIGH_PRE`
+   /`MID_PRE`/`LOW_PRE` are 2-pad nets - the smallest, lowest-priority
+   category under "smallest first" - but each one has to cross nearly the
+   full width of the board, from the output stage to the front-panel pot
+   row, the same problem GND had for the opposite reason (too many pads,
+   not too much distance). Routed dead last by member count, a `*_PRE` net
+   found every cell along that long corridor already claimed by nets that
+   only ever needed to route locally. Fixed the same way GND was: an
+   explicit early turn for anything ending in `_PRE`, ahead of the
+   IC-touching tier. This is what actually cleared the board, not the
+   board-size search or the off-centre nudge that preceded it - both are
+   worth knowing didn't work, so a future round doesn't retry them first.
+
 None of this changed what counts as a clean board - the same independent
 verifier, checking the same exact geometry, is still the thing that decides
 pass or fail. It only changed how hard the router tries, and how carefully
@@ -428,7 +458,7 @@ generated: parts are anchored at the centroid of the fixed pads they connect
 to, assigned to the nearest free slot that neither the fixed layout nor an
 already-placed part occupies, then improved by pairwise position swaps and
 per-part rotation flips, both scored on ratsnest length and both gated on
-physical validity so the search can never produce an overlap (1292 → 1189 mm
+physical validity so the search can never produce an overlap (1437 → 1312 mm
 on the current layout - longer in absolute terms than before the volume
 pots were added, simply because there is more copper to route across a
 bigger board, not because the search got worse at its job).
@@ -440,22 +470,18 @@ not the pour is rebuilt.
 
 ## Known limitations
 
-* **Board size is searched, not chosen - but not exhaustively.** `BOARD_W`,
-  `BOARD_H` and `SLOT_PITCH` are environment overrides, so the generator can
-  be swept for a size that routes *and* verifies. 420 × 220 units (106.7 ×
-  55.9 mm) with `SLOT_PITCH=20` is the smallest **found** for the current
-  five-control layout, not a proven floor the way 288 × 191 was for the
-  two-pot version: several smaller sizes route *almost* cleanly (one or two
-  nets short), so a tighter size likely exists, but chasing it further ran
-  into steeply diminishing returns for board area that was never a hard
-  requirement here (see "Routing five more controls" above for what the
-  search actually found along the way). Worth another pass if the extra
-  ~14 × 7 mm matters for your enclosure.
-* **Utilisation is 60 %, not 100 %, and some of that probably is
-  reclaimable.** The largest empty rectangle (24 × 30 mm) is bigger, both in
-  absolute terms and as a share of the board, than the two-pot version's -
-  consistent with the board being sized by "smallest found," not "smallest
-  possible," per the point above.
+* **420 × 220 units (106.7 × 55.9 mm) has not actually been shown to be a
+  floor for the five-control layout - it's just where the real bug got
+  found and fixed.** Most of the size search described in "Routing five
+  more controls" happened *before* the `*_PRE`-net route-order fix, chasing
+  a problem that turned out not to be about area at all; smaller sizes were
+  never re-tried once that fix was in. A tighter board plausibly still
+  exists here. `BOARD_W`, `BOARD_H` and `SLOT_PITCH` are environment
+  overrides if you want to look for it.
+* **Utilisation is 59 %, not 100 %,** for the same reason: the largest
+  empty rectangle (37 × 24 mm) is bigger, both in absolute terms and as a
+  share of the board, than the two-pot version's, and given the point
+  above there's no strong reason to believe this size is actually tight.
 * **On-board pots cost area.** Five 9 mm-class pots (two dual-gang, three
   single-gang) and their knob spacing take room wiring pads did not. Still
   inside JLCPCB's 100 × 100 mm price tier, so fabrication cost is unchanged.

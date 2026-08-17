@@ -188,14 +188,14 @@ SMD part a real LCSC line item.
 ![SMD board](pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.png)
 
 ```
-49 footprints | 132 pads | 130 tracks | 69 vias
+49 footprints | 132 pads | 137 tracks | 80 vias
 verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
           pads match the schematic exactly, and no silkscreen sits over a
           trace or a via
 ```
 
-Sockets on the rear edge; on the front edge, left to right: HIGH volume,
-HIGH/MID frequency, MID volume, MID/LOW frequency, LOW volume - the board
+Sockets on the rear edge; on the front edge, left to right: LOW volume,
+MID/LOW frequency, MID volume, HIGH/MID frequency, HIGH volume - the board
 mounts flat behind the front panel. The volume trims are single-gang 10 kΩ
 audio-taper pots (Alps RK097, LCSC C470577) wired as attenuators between
 each filter's output and its terminal block; the frequency pots are the
