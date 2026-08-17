@@ -29,7 +29,23 @@ import numpy as np
 MM = 1.0 / 0.254
 TOP, BOT, TOPSILK, OUTLINE, MULTI = 1, 2, 3, 10, 11
 
-TRACK_W, CLEAR = 0.8, 0.8            # 8 mil track, 8 mil clearance
+CLEAR = 0.8                           # 8 mil clearance
+
+# Trace width by purpose, not one width for everything.  Signal traces carry a
+# few mA at most; +15V/-15V/GND carry the combined supply current of both quad
+# op-amps and (for GND) the audio return path, so they get twice the copper -
+# lower resistance and inductance, and a trace that reads as a supply rail
+# rather than a signal line.
+SIG_W = 1.0                           # 10 mil - default signal trace
+PWR_W = 1.6                           # 16 mil - +15V, -15V, GND
+POWER_NETS = {"+15V", "-15V", "GND"}
+
+
+def net_width(name):
+    return PWR_W if name in POWER_NETS else SIG_W
+
+
+MAX_W = max(SIG_W, PWR_W)
 VIA_PAD, VIA_DRILL = 2.4, 1.2
 GRID = 0.25                           # routing grid, units
 
@@ -278,7 +294,7 @@ VALUE = {r: netdoc["parts"][r]["value"] for r in netdoc["parts"]}
 # board - the rest is routing headroom, and on two layers with this router it
 # is what sets the floor, not the parts.
 BW = float(os.environ.get("BOARD_W", 300.0))
-BH = float(os.environ.get("BOARD_H", 175.0))
+BH = float(os.environ.get("BOARD_H", 200.0))
 SLOT_PITCH = int(os.environ.get("SLOT_PITCH", 18))
 MOUNT_HOLES = [(9, 9), (BW - 9, 9), (9, BH - 9), (BW - 9, BH - 9)]
 MOUNT_R = 12.6 / 2
@@ -443,6 +459,8 @@ AFTER = rats(ASSIGN)
 for ref, (x, y) in sorted(ASSIGN.items()):
     placed.append(fp_chip(ref, x, y, N, VALUE[ref], CHIPS[ref]))
 
+silk(26, BH - 4.5, "ESP P148 3-WAY VARIABLE CROSSOVER  -  RETUNED QUAD SMD  -  195Hz-1.03kHz / 73-186Hz  -  ONE CHANNEL", 2.4)
+
 
 # ==========================================================================
 #  routing
@@ -463,12 +481,36 @@ VIAS = []            # (x, y, net)
 # No grid margin here: pad centres and the routing grid are both multiples of
 # 0.5, so a centreline between two SOIC pads lands exactly on the midpoint.
 # Keeping the margin would close every channel between adjacent SOIC pins.
-PAD_DIL = CLEAR + TRACK_W / 2
-TRK_DIL = TRACK_W / 2 + CLEAR + TRACK_W / 2 + GRID
-VIA_DIL = VIA_PAD / 2 + CLEAR + TRACK_W / 2 + GRID
+# A pad's keepout has to anticipate the WIDEST trace that might later route
+# past it - any pad could have a fat GND run go by - so it must be sized off
+# MAX_W, not off the pad's own net.  (An earlier version of this line sized it
+# off the pad's own net, which is backwards: the pad's own net tells you what
+# connects TO the pad, not what might pass NEAR it.  That under-reserved every
+# signal pad by exactly the signal/power half-width difference, and every
+# resulting clearance violation in testing was that gap almost to the mil.)
+#
+# The one deliberate exception is the SOIC-14 pins themselves: at their 50 mil
+# pitch, the gap between two adjacent pads is only wide enough for a signal
+# trace to thread the midpoint - a 20 mil power trace could never physically
+# fit there even ignoring clearance, so reserving MAX_W margin there would
+# only block the signal escape route this session already fixed once, for no
+# real safety benefit.  So IC pads keep the tight, own-width-based margin;
+# everything else (terminals, passives, the pot) gets the full margin.
+IC_REFS = set(U1S.values()) | set(U2S.values())
+
+
+def pad_dilation(ref, net):
+    if ref in IC_REFS:
+        return CLEAR + net_width(net) / 2
+    return CLEAR + MAX_W / 2
+
+
+VIA_DIL = VIA_PAD / 2 + CLEAR + MAX_W / 2 + GRID
 # a via is fatter than a track, so a cell that is safe for a track is not
-# necessarily safe for a via - this is the extra margin one needs
-VIA_EXTRA = VIA_PAD / 2 - TRACK_W / 2 + GRID
+# necessarily safe for a via - this is the extra margin one needs, sized off
+# the thinnest trace since that is the smallest margin any occupied cell is
+# guaranteed to already carry
+VIA_EXTRA = VIA_PAD / 2 - SIG_W / 2 + GRID
 
 
 def cells_in_rect(x0, y0, x1, y1):
@@ -497,15 +539,67 @@ def stamp_disc(layer, x, y, r, netid):
 
 HOLE_NET = 10 ** 6           # matches no net, so nothing can route through
 for _hx, _hy in MOUNT_HOLES:
-    stamp_disc(MULTI, _hx, _hy, MOUNT_R + CLEAR + TRACK_W / 2 + GRID, HOLE_NET)
+    stamp_disc(MULTI, _hx, _hy, MOUNT_R + CLEAR + MAX_W / 2 + GRID, HOLE_NET)
 for _hx, _hy in POT_BOSSES:
-    stamp_disc(MULTI, _hx, _hy, BOSS_R + CLEAR + TRACK_W / 2 + GRID, HOLE_NET)
+    stamp_disc(MULTI, _hx, _hy, BOSS_R + CLEAR + MAX_W / 2 + GRID, HOLE_NET)
 
 for p in pads:
     if p["net"]:
         stamp_rect(p["layer"], p["x"] - p["w"] / 2, p["y"] - p["h"] / 2,
                    p["x"] + p["w"] / 2, p["y"] + p["h"] / 2,
-                   NETID[p["net"]], PAD_DIL)
+                   NETID[p["net"]], pad_dilation(p["ref"], p["net"]))
+
+
+def text_bbox(sh):
+    """Bounding box of a top-silk TEXT shape, or None.  Shared by the
+    pre-routing keepout below and the post-hoc check in verify(), so the two
+    can't drift apart into disagreeing about what counts as an overlap."""
+    f = sh.split("~")
+    if f[0] != "TEXT" or f[7] != "3":
+        return None
+    w_ = 0.62 * float(f[9]) * len(f[10])
+    return (float(f[2]), float(f[3]) - float(f[9]),
+            float(f[2]) + w_, float(f[3]) + 0.25 * float(f[9]), f[10])
+
+
+# A pad's own literal footprint (shrunk slightly - the same shrink core_cells
+# uses below) must stay reachable no matter what: this is what the silk
+# keepout is never allowed to overwrite, only the keepout RING around a pad
+# is fair game.  Nothing has been routed yet at this point in the program -
+# only keepout reservations exist - so overwriting a ring is free of risk.
+CORE_PROTECT = [np.zeros((NY, NX), dtype=bool), np.zeros((NY, NX), dtype=bool)]
+for _p in pads:
+    _a, _b2, _c, _d = cells_in_rect(_p["x"] - _p["w"] / 2 + 0.4, _p["y"] - _p["h"] / 2 + 0.4,
+                                    _p["x"] + _p["w"] / 2 - 0.4, _p["y"] + _p["h"] / 2 - 0.4)
+    for _L in ([0, 1] if _p["layer"] == MULTI else [_p["layer"] - 1]):
+        CORE_PROTECT[_L][_b2:_d + 1, _a:_c + 1] = True
+
+
+def stamp_rect_for_silk(layer, x0, y0, x1, y1, netid):
+    """Claims every cell in the silk label's box except a pad's protected
+    core.  Unlike stamp_rect, this deliberately overwrites (rather than
+    contests) any pad keepout RING found there: a component's own future
+    trace has no more right to route under its own label than a foreign one
+    does, and forcing it out just makes it exit the pad in a slightly
+    different direction."""
+    a, b, c, d = cells_in_rect(x0, y0, x1, y1)
+    for L in ([0, 1] if layer == MULTI else [layer - 1]):
+        sub = occ[L][b:d + 1, a:c + 1]
+        protect = CORE_PROTECT[L][b:d + 1, a:c + 1]
+        sub[~protect] = netid
+
+
+# Keep top-layer copper out from under every silkscreen label, so "no silk
+# over a trace" holds by construction instead of being fixed up label by
+# label after the router disagrees with wherever the text landed.  Bottom
+# copper is untouched - it's on the other side of the board, so it can't
+# visually clash with top silk.
+SILK_NET = 2 * 10 ** 6
+for _sh in shapes:
+    _b = text_bbox(_sh)
+    if _b is not None:
+        stamp_rect_for_silk(TOP, _b[0] - CLEAR, _b[1] - CLEAR,
+                            _b[2] + CLEAR, _b[3] + CLEAR, SILK_NET)
 
 
 def core_cells(p):
@@ -516,9 +610,9 @@ def core_cells(p):
             for xx in range(a, c + 1)}
 
 
-def via_ok(x, y, nid):
+def via_ok(x, y, nid, extra=0.0):
     """A via needs more room than the track that leads to it."""
-    r = int(math.ceil(VIA_EXTRA / GRID))
+    r = int(math.ceil((VIA_EXTRA + extra) / GRID))
     for L in (0, 1):
         a, b = max(0, x - r), max(0, y - r)
         c, d = min(NX - 1, x + r), min(NY - 1, y + r)
@@ -529,20 +623,50 @@ def via_ok(x, y, nid):
     return True
 
 
-def passable(L, x, y, nid):
+def dilate(mask, r_cells):
+    """Box-dilate a boolean grid by r_cells in every direction.  A box is a
+    safe superset of the disk we actually want, so this stays conservative.
+    Shift-and-OR rather than a per-cell scan: O((2r+1)^2) vectorised passes
+    over the whole grid, done ONCE per net, instead of a window check redone
+    at every single cell A* visits - that per-cell version is what made the
+    first attempt at this take minutes instead of seconds."""
+    if r_cells <= 0:
+        return mask
+    out = mask.copy()
+    h, w = mask.shape
+    for dy in range(-r_cells, r_cells + 1):
+        for dx in range(-r_cells, r_cells + 1):
+            if dx == 0 and dy == 0:
+                continue
+            ys, ys_src = slice(max(0, dy), h + min(0, dy)), slice(max(0, -dy), h + min(0, -dy))
+            xs, xs_src = slice(max(0, dx), w + min(0, dx)), slice(max(0, -dx), w + min(0, -dx))
+            out[ys, xs] |= mask[ys_src, xs_src]
+    return out
+
+
+def passable(L, x, y, nid, blocked_extra=None):
+    """blocked_extra (per layer, precomputed once per net - see main loop)
+    widens the check beyond the literal cell.  Pad keepouts near the IC pins
+    are deliberately tight (see pad_dilation) so a signal trace can still
+    thread between two SOIC pins; a wide net routed nearby must check further
+    out itself, since that tight reservation was not sized for it."""
     if not (1 <= x < NX - 1 and 1 <= y < NY - 1):
         return False
     if contested[L][y, x]:
         return False
     v = occ[L][y, x]
-    return v == 0 or v == nid
+    if not (v == 0 or v == nid):
+        return False
+    if blocked_extra is not None and blocked_extra[L][y, x]:
+        return False
+    return True
 
 
-def astar(sources, targets, nid, tgt_xy):
+def astar(sources, targets, nid, tgt_xy, extra=0.0, blocked_extra=None):
     seen, prev = {}, {}
     h = []
     for s in sources:
-        if passable(s[0], s[1], s[2], nid):
+        if passable(s[0], s[1], s[2], nid, blocked_extra):
             key = s
             seen[key] = 0
             heappush(h, (0, key))
@@ -560,9 +684,9 @@ def astar(sources, targets, nid, tgt_xy):
         nbrs = [(L, x + 1, y, 1), (L, x - 1, y, 1), (L, x, y + 1, 1),
                 (L, x, y - 1, 1), (1 - L, x, y, 24)]
         for nl, nx_, ny_, c in nbrs:
-            if not passable(nl, nx_, ny_, nid):
+            if not passable(nl, nx_, ny_, nid, blocked_extra):
                 continue
-            if nl != L and not via_ok(x, y, nid):
+            if nl != L and not via_ok(x, y, nid, extra):
                 continue
             ng = g + c
             k = (nl, nx_, ny_)
@@ -576,6 +700,7 @@ def astar(sources, targets, nid, tgt_xy):
 
 def emit_path(path, net, nid):
     """Split a cell path into per-layer polylines, stamping as we go."""
+    own_dil = net_width(net) / 2 + CLEAR + MAX_W / 2 + GRID
     runs, cur = [], [path[0]]
     for a, b in zip(path, path[1:]):
         if a[0] != b[0]:
@@ -588,7 +713,7 @@ def emit_path(path, net, nid):
     runs.append(cur)
     for run in runs:
         for c in run:
-            stamp_disc(c[0] + 1, c[1] * GRID, c[2] * GRID, TRK_DIL, nid)
+            stamp_disc(c[0] + 1, c[1] * GRID, c[2] * GRID, own_dil, nid)
         if len(run) < 2:
             continue
         pts = [(run[0][1] * GRID, run[0][2] * GRID)]
@@ -611,6 +736,19 @@ def route_order(n):
 FAILED = []
 for name in sorted(netdoc["nets"], key=route_order):
     nid = NETID[name]
+    # a wide net can't rely on a foreign pad's keepout being sized for it -
+    # that keepout is deliberately tight at the IC pins - so it independently
+    # checks a wider neighbourhood while pathfinding.  0 for signal nets keeps
+    # them exactly as tight as before, preserving SOIC pin-escape routing.
+    # The check is a mask built once per net (cheap - only the 3 power nets
+    # need one at all), not recomputed at every cell A* visits.
+    route_extra = max(0.0, (net_width(name) - SIG_W) / 2)
+    if route_extra > 0:
+        r_cells = int(math.ceil(route_extra / GRID))
+        blocked_extra = [dilate((occ[L] != 0) & (occ[L] != nid), r_cells)
+                         for L in (0, 1)]
+    else:
+        blocked_extra = None
     mine = [p for p in pads if p["net"] == name]
     if len(mine) < 2:
         continue
@@ -623,7 +761,7 @@ for name in sorted(netdoc["nets"], key=route_order):
         tc = core_cells(tgt)
         tx = int(round(tgt["x"] / GRID))
         ty = int(round(tgt["y"] / GRID))
-        path = astar(connected, tc, nid, (tx, ty))
+        path = astar(connected, tc, nid, (tx, ty), route_extra, blocked_extra)
         if path is None:
             FAILED.append("%s: %s.%s unreachable" % (name, tgt["ref"], tgt["num"]))
             todo.remove(tgt)
@@ -709,7 +847,7 @@ for p in pads:
 PAD_FEATURES = list(FEATURES)
 for layer, pts, name in ROUTED:
     for a, b in zip(pts, pts[1:]):
-        FEATURES.append(dict(net=name, k="seg", hw=TRACK_W / 2, L={layer},
+        FEATURES.append(dict(net=name, k="seg", hw=net_width(name) / 2, L={layer},
                              g=(a, b), tag="track"))
 for x, y, name in VIAS:
     FEATURES.append(dict(net=name, k="pt", hw=VIA_PAD / 2, L={1, 2},
@@ -831,24 +969,43 @@ def verify():
                            (wx1 - wx0) * CELL * 0.254, (wy1 - wy0) * CELL * 0.254,
                            wx0 * CELL * 0.254, wy0 * CELL * 0.254))
 
-    # -- silkscreen: not over exposed pads, not off the board
-    silks = []
-    for sh in shapes:
-        f = sh.split("~")
-        if f[0] == "TEXT" and f[7] == "3":
-            w_ = 0.62 * float(f[9]) * len(f[10])
-            silks.append((float(f[2]), float(f[3]) - float(f[9]),
-                          float(f[2]) + w_, float(f[3]) + 0.25 * float(f[9]),
-                          f[10]))
+    # -- silkscreen: not over exposed pads, not over top-layer copper (traces
+    #    or vias - bottom copper is on the other side of the board, so it
+    #    can't visually clash with top silk), not off the board.  Covers
+    #    plain labels (TEXT~L) and designators (TEXT~P) alike.  This is now a
+    #    belt-and-braces check: top-layer copper is kept out from under silk
+    #    at routing time (see the SILK_NET keepout, above), so a hit here
+    #    means that keepout was bypassed somehow, not the first line of
+    #    defence against it.
+    silks = [b for b in (text_bbox(sh) for sh in shapes) if b is not None]
     for sx0, sy0, sx1, sy1, txt in silks:
         if sx0 < 1 or sy0 < 1 or sx1 > BW - 1 or sy1 > BH - 1:
             problems.append("silk '%s' runs off the board edge" % txt)
+        box = dict(k="rect", hw=0.0, g=(sx0, sy0, sx1, sy1))
         for pd in pads:
             if (sx0 < pd["x"] + pd["w"] / 2 and pd["x"] - pd["w"] / 2 < sx1 and
                     sy0 < pd["y"] + pd["h"] / 2 and pd["y"] - pd["h"] / 2 < sy1):
                 problems.append("silk '%s' sits over pad %s.%s"
                                 % (txt, pd["ref"], pd["num"]))
                 break
+        for layer, pts, name in ROUTED:
+            if layer != TOP:
+                continue
+            hit = False
+            for a, b in zip(pts, pts[1:]):
+                trk = dict(k="seg", hw=net_width(name) / 2, g=(a, b))
+                if gap(box, trk) < 0:
+                    problems.append("silk '%s' crosses a %s track" % (txt, name))
+                    hit = True
+                    break
+            if hit:
+                break
+        else:
+            for x, y, name in VIAS:
+                via = dict(k="pt", hw=VIA_PAD / 2, g=(x, y))
+                if gap(box, via) < 0:
+                    problems.append("silk '%s' sits over a via (%s)" % (txt, name))
+                    break
 
     # -- copper must not crowd the board edge
     for f in FEATURES:
@@ -880,7 +1037,7 @@ ISSUES = verify()
 #  emit copper, outline, pour; wrap footprints as EasyEDA components
 # ==========================================================================
 for layer, pts, name in ROUTED:
-    track(pts, layer, TRACK_W, name)
+    track(pts, layer, net_width(name), name)
 for x, y, name in VIAS:
     shapes.append("VIA~%g~%g~%g~%s~%g~%s" % (x, y, VIA_PAD, name, VIA_DRILL / 2, gid()))
 
@@ -889,11 +1046,10 @@ for hx, hy in MOUNT_HOLES:
 for hx, hy in POT_BOSSES:
     shapes.append("HOLE~%g~%g~9.0~%s" % (hx, hy, gid()))
 track([(0, 0), (BW, 0), (BW, BH), (0, BH), (0, 0)], OUTLINE, 0.6)
-silk(26, BH - 4.5, "ESP P148 3-WAY VARIABLE CROSSOVER  -  RETUNED QUAD SMD  -  195Hz-1.03kHz / 73-186Hz  -  ONE CHANNEL", 2.4)
 
 for L in (TOP, BOT):
     shapes.append("COPPERAREA~%g~%d~GND~%s~1~solid~%s~spoke~none~[]~0~2~1~none"
-                  % (TRACK_W, L,
+                  % (PWR_W, L,
                      " ".join("%g %g" % p for p in
                               [(2, 2), (BW - 2, 2), (BW - 2, BH - 2), (2, BH - 2)]),
                      gid()))
@@ -942,9 +1098,9 @@ doc = {
                 "Track", "Hole", "Copper", "Text", "Dimension", "Solid"],
     "BBox": {"x": 0, "y": 0, "width": BW, "height": BH},
     "preference": {"hideFootprints": "", "hideNets": ""},
-    "DRCRULE": {"trackWidth": TRACK_W, "track2Track": CLEAR, "pad2Pad": CLEAR,
+    "DRCRULE": {"trackWidth": SIG_W, "track2Track": CLEAR, "pad2Pad": CLEAR,
                 "track2Pad": CLEAR, "hole2Hole": 1.2, "holeSize": VIA_DRILL,
-                "Default": {"trackWidth": TRACK_W, "clearance": CLEAR,
+                "Default": {"trackWidth": SIG_W, "clearance": CLEAR,
                             "viaHoleDiameter": VIA_DRILL, "viaDiameter": VIA_PAD}},
     "netColors": {},
 }
@@ -1000,7 +1156,7 @@ def preview():
         o.append('<polyline points="%s" fill="none" stroke="%s" stroke-width="%g" '
                  'stroke-opacity="0.95" stroke-linecap="round" stroke-linejoin="round"/>'
                  % (" ".join("%g,%g" % p for p in pts),
-                    "#d94b3a" if layer == TOP else "#3a6fd9", TRACK_W))
+                    "#d94b3a" if layer == TOP else "#3a6fd9", net_width(name)))
     for p in pads:
         o.append('<rect x="%g" y="%g" width="%g" height="%g" fill="#e8c069" rx="0.3"/>'
                  % (p["x"] - p["w"] / 2, p["y"] - p["h"] / 2, p["w"], p["h"]))
