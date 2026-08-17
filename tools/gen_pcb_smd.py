@@ -26,6 +26,8 @@ from heapq import heappush, heappop
 
 import numpy as np
 
+import place
+
 MM = 1.0 / 0.254
 TOP, BOT, TOPSILK, OUTLINE, MULTI = 1, 2, 3, 10, 11
 
@@ -116,9 +118,63 @@ LCSC = {                              # verified live against the JLCPCB API
 
 
 # --------------------------------------------------------------------------
+# placement transform
+#
+# Every footprint below draws itself in its own local frame, at rot=0, around
+# the origin.  This stack is what puts it somewhere else on the board at some
+# other angle, so a footprint never has to know where it ends up.
+#
+# Before this existed, rotation was a per-footprint feature: fp_chip and
+# fp_soic14 each open-coded their own two orientations and nothing else could
+# rotate at all, which quietly made rotation un-searchable for two thirds of
+# the board.  The placement engine needs to be able to turn ANY part, so the
+# turning belongs here, once, rather than in each footprint N times.
+#
+# Text is the one thing that does not rotate: its ANCHOR moves with the part,
+# but the glyphs stay upright.  That is deliberate - silkscreen is read by a
+# human holding the board one way up, and sideways designators are a
+# legibility regression, which is the exact defect DESIG_SIZE/LABEL_SIZE
+# already exist to fix.  It also keeps label_bbox()'s width formula valid in
+# board coordinates, so the courtyard math stays correct for free.
+# --------------------------------------------------------------------------
+_XF = [(0.0, 0.0, 0)]                 # (origin x, origin y, quarter turns)
+
+
+def xf_push(ox, oy, rot):
+    _XF.append((ox, oy, int(round(rot / 90.0)) % 4))
+
+
+def xf_pop():
+    _XF.pop()
+
+
+def xf_rot():
+    return _XF[-1][2]
+
+
+def _xy(x, y):
+    """Local footprint coordinates -> board coordinates."""
+    ox, oy, q = _XF[-1]
+    if q == 1:
+        x, y = -y, x
+    elif q == 2:
+        x, y = -x, -y
+    elif q == 3:
+        x, y = y, -x
+    return x + ox, y + oy
+
+
+def _wh(w, h):
+    """A quarter turn swaps a rectangle's width and height."""
+    return (h, w) if _XF[-1][2] % 2 else (w, h)
+
+
+# --------------------------------------------------------------------------
 # primitives
 # --------------------------------------------------------------------------
 def pad_rect(ref, num, x, y, net, w, h, layer=TOP):
+    x, y = _xy(x, y)
+    w, h = _wh(w, h)
     pts = "%g %g %g %g %g %g %g %g" % (x - w / 2, y - h / 2, x + w / 2, y - h / 2,
                                        x + w / 2, y + h / 2, x - w / 2, y + h / 2)
     shapes.append("PAD~RECT~%g~%g~%g~%g~%d~%s~%s~0~%s~0~%s~~~Y"
@@ -127,6 +183,7 @@ def pad_rect(ref, num, x, y, net, w, h, layer=TOP):
 
 
 def pad_tht(ref, num, x, y, net, dia=7.0, hole=2.0):
+    x, y = _xy(x, y)
     shapes.append("PAD~ELLIPSE~%g~%g~%g~%g~%d~%s~%s~%g~~0~%s~~~Y"
                   % (x, y, dia, dia, MULTI, net, num, hole / 2, gid()))
     pads.append(dict(ref=ref, num=str(num), x=x, y=y, w=dia, h=dia,
@@ -134,6 +191,7 @@ def pad_tht(ref, num, x, y, net, dia=7.0, hole=2.0):
 
 
 def track(points, layer, width, net=""):
+    points = [_xy(*p) for p in points]
     shapes.append("TRACK~%g~%d~%s~%s~%s"
                   % (width, layer, net, " ".join("%g %g" % p for p in points), gid()))
 
@@ -143,14 +201,61 @@ def silk_rect(x0, y0, x1, y1, w=0.5):
 
 
 def silk(x, y, s, size=DESIG_SIZE):
+    x, y = _xy(x, y)
     shapes.append("TEXT~L~%g~%g~0.6~0~0~%d~~%g~%s~~~%s"
                   % (x, y, TOPSILK, size, s, gid()))
 
 
 def silk_ref(x, y, s, size=DESIG_SIZE):
     """Designator text - TEXT~P so EasyEDA treats it as the component name."""
+    x, y = _xy(x, y)
     shapes.append("TEXT~P~%g~%g~0.6~0~0~%d~~%g~%s~~~%s"
                   % (x, y, TOPSILK, size, s, gid()))
+
+
+def _dir(dx, dy):
+    """Rotate a direction by the current transform, without translating it."""
+    ox, oy = _xy(0, 0)
+    px, py = _xy(dx, dy)
+    return px - ox, py - oy
+
+
+def silk_ref_beside(box, s, size, local_dir):
+    """Put a designator outside `box` (a local-frame rectangle), on the
+    local side `local_dir` - but lay the text out in BOARD space.
+
+    Rotating a part rotates its label's anchor while the glyphs stay
+    upright, which means the text can end up extending back across the part
+    it names.  That is not cosmetic: silkscreen reserves copper here, so a
+    label lying over a pin is a pin that cannot escape.  It is exactly how
+    the SOIC designator once blocked pins 13/14 and made them unroutable at
+    every board size tried - and the rotation transform reintroduced it at
+    other angles until this existed (verify() caught 'silk U2 sits over pad
+    U2A.1').
+
+    The side is chosen in the LOCAL frame, so a caller can say "keep this
+    clear of the pin rows" once and have it stay true at every angle; where
+    that lands on the board, and which way the text then has to be aligned
+    to grow away from the part rather than over it, is worked out here."""
+    lx0, ly0, lx1, ly1 = box
+    pts = [_xy(lx0, ly0), _xy(lx1, ly0), _xy(lx1, ly1), _xy(lx0, ly1)]
+    bx0, bx1 = min(p[0] for p in pts), max(p[0] for p in pts)
+    by0, by1 = min(p[1] for p in pts), max(p[1] for p in pts)
+    ox, oy = _dir(*local_dir)
+    w, gap = 0.62 * size * len(s), 2.0
+    if ox > 0.5:
+        ax, ay = bx1 + gap, (by0 + by1) / 2 + 0.4 * size
+    elif ox < -0.5:
+        ax, ay = bx0 - gap - w, (by0 + by1) / 2 + 0.4 * size
+    elif oy < -0.5:
+        ax, ay = bx0, by0 - gap
+    else:
+        ax, ay = bx0, by1 + gap + size
+    xf_push(0.0, 0.0, 0)
+    try:
+        silk_ref(ax, ay, s, size)
+    finally:
+        xf_pop()
 
 
 def label_bbox(ax, ay, text, size=DESIG_SIZE):
@@ -161,23 +266,40 @@ def label_bbox(ax, ay, text, size=DESIG_SIZE):
     return (ax, ay - size, ax + w_, ay + 0.25 * size)
 
 
-def chip_courtyard(ref, x, y, kind, rot):
-    """The exact box fp_chip's pads + designator label occupy, with
-    clearance.  Shared with slot_box so a slot judged free here is
-    guaranteed free when the real footprint lands there."""
-    w, h, off = {"0805": (4.0, 5.6, 4.0), "1210": (5.0, 10.0, 6.0)}[kind]
-    pw, ph = (w, h) if rot == 0 else (h, w)
-    if rot == 0:
-        px0, px1 = x - (off + pw / 2), x + (off + pw / 2)
-        py0, py1 = y - ph / 2, y + ph / 2
-        lx0, ly0, lx1, ly1 = label_bbox(x - 4, y - ph / 2 - 1.5, ref)
-    else:
-        px0, px1 = x - pw / 2, x + pw / 2
-        py0, py1 = y - (off + ph / 2), y + (off + ph / 2)
-        lx0, ly0, lx1, ly1 = label_bbox(x + pw / 2 + off + 1.0, y - 0.8, ref)
-    x0, y0 = min(px0, lx0), min(py0, ly0)
-    x1, y1 = max(px1, lx1), max(py1, ly1)
-    return (x0 - CLEAR, y0 - CLEAR, x1 + CLEAR, y1 + CLEAR)
+def text_bbox(sh):
+    """Bounding box of a top-silk TEXT shape, or None.  Shared by the
+    courtyard probe, the pre-routing keepout and the post-hoc check in
+    verify(), so none of them can drift into disagreeing about what counts
+    as an overlap."""
+    f = sh.split("~")
+    if f[0] != "TEXT" or f[7] != "3":
+        return None
+    w_ = 0.62 * float(f[9]) * len(f[10])
+    return (float(f[2]), float(f[3]) - float(f[9]),
+            float(f[2]) + w_, float(f[3]) + 0.25 * float(f[9]), f[10])
+
+
+def shape_box(sh):
+    """(kind, x0, y0, x1, y1) for one emitted shape, or None if it has no
+    footprint on the board.  Reading the geometry back off the shapes a
+    footprint actually emitted - rather than re-deriving it from the same
+    constants a second time - is what stops the courtyard model and the
+    drawn part from ever disagreeing.  A hand-maintained second copy is
+    exactly how the dual-gang pot came to be drawn with its body hanging
+    off the board edge while every check thought it fit."""
+    f = sh.split("~")
+    if f[0] == "PAD":
+        x, y, w, h = (float(f[2]), float(f[3]), float(f[4]), float(f[5]))
+        return ("pad", x - w / 2, y - h / 2, x + w / 2, y + h / 2)
+    if f[0] == "TRACK":
+        if int(f[2]) != TOPSILK:
+            return None
+        hw = float(f[1]) / 2
+        cs = [float(v) for v in f[4].split()]
+        xs, ys = cs[0::2], cs[1::2]
+        return ("body", min(xs) - hw, min(ys) - hw, max(xs) + hw, max(ys) + hw)
+    b = text_bbox(sh)
+    return None if b is None else ("body", b[0], b[1], b[2], b[3])
 
 
 FP_SPANS = []          # (ref, first shape index, last+1, x, y)
@@ -188,88 +310,81 @@ def fp_begin():
 
 
 def fp_end(ref, mark, x, y):
-    FP_SPANS.append((ref, mark, len(shapes), x, y))
+    FP_SPANS.append((ref, mark, len(shapes)) + _xy(x, y))
+
+
+def part_record(ref, value, x, y, assembled, pkg):
+    """BOM/CPL entry for a footprint, in board coordinates.  The anchor and
+    the angle both come from the live placement transform rather than from
+    the footprint's own arguments, so a part cannot be drawn at one place
+    and reported at another."""
+    px, py = _xy(x, y)
+    PARTS[ref] = dict(value=value, x=px, y=py, rot=xf_rot() * 90,
+                      assembled=assembled, pkg=pkg)
 
 
 # --------------------------------------------------------------------------
 # footprints - all dimensions chosen so pad centres sit on the 0.5 grid
 # --------------------------------------------------------------------------
-def fp_chip(ref, x, y, net_of, value, kind="0805", rot=0):
-    """rot=0: pads left/right, offset along X.  rot=1: pads top/bottom,
-    offset along Y.  Courtyard (incl. the designator label) comes from
-    chip_courtyard() using these exact same label anchor points, so the
-    two can't drift apart."""
+CHIP_GEOM = {"0805": (4.0, 5.6, 4.0), "1210": (5.0, 10.0, 6.0)}
+
+
+def fp_chip(ref, x, y, net_of, value, kind="0805"):
+    """Two-terminal chip part, drawn once in its own frame: pads left and
+    right, designator underneath.  There is no `rot` argument any more -
+    the placement transform turns it, so the sideways case is the same
+    drawing seen from another angle rather than a second hand-written
+    layout that has to be kept in step with the first."""
     _m = fp_begin()
-    w, h, off = dict(**{"0805": (4.0, 5.6, 4.0), "1210": (5.0, 10.0, 6.0)})[kind]
-    d = [(-off, 0), (off, 0)] if rot == 0 else [(0, -off), (0, off)]
-    pw, ph = (w, h) if rot == 0 else (h, w)
-    for i, (dx, dy) in enumerate(d):
-        pad_rect(ref, i + 1, x + dx, y + dy, net_of(ref, i + 1), pw, ph)
-    if rot == 0:
-        silk_ref(x - 4, y - ph / 2 - 1.5, ref)
-    else:
-        # designator goes to the side, clear of the pads regardless of its
-        # own vertical position, since the pads don't extend past pw/2 in X
-        silk_ref(x + pw / 2 + off + 1.0, y - 0.8, ref)
-    box = chip_courtyard(ref, x, y, kind, rot)
+    w, h, off = CHIP_GEOM[kind]
+    for i, dx in enumerate((-off, off)):
+        pad_rect(ref, i + 1, x + dx, y, net_of(ref, i + 1), w, h)
+    # Below the body, not beside it: the pads escape along +/-X, so keeping
+    # the label out of those two corridors is what matters (same rule that
+    # fixed the SOIC label - see fp_soic14).
+    silk_ref(x - 4, y - h / 2 - 1.5, ref)
     fp_end(ref, _m, x, y)
-    PARTS[ref] = dict(value=value, x=x, y=y, rot=rot * 90, assembled=True,
-                      pkg=kind)
-    return box
+    part_record(ref, value, x, y, True, kind)
 
 
-def fp_soic14(pkg_ref, sections, x, y, net_of, rot=0):
-    """SOIC-14.  rot=0: pins down the sides, package tall, pins escape sideways.
-    rot=90: pins along top and bottom, package wide, pins escape vertically."""
+def fp_soic14(pkg_ref, sections, x, y, net_of):
+    """SOIC-14, pins down both sides, drawn ONCE and centred on its own
+    anchor.  Which way the pins escape is now the placement transform's
+    business, not this function's.
+
+    Two long-standing bugs died with the old two-branch version:
+
+    * The rot=90 branch laid its pads out from `x` rightward, so the
+      package centre landed at x+15 while the caller thought it was
+      passing a centre - every "centred" SOIC was silently 15 units off.
+      Here the pads straddle the anchor at every angle, by construction.
+    * The designator has to stay out of the pin-escape corridors, and the
+      old code had to re-derive where those were per branch (getting it
+      wrong once: the label sat directly over pins 13/14's only channel,
+      which made U1D.13 / U2D.13 / U2D.14 unroutable at *every* board size
+      tried, for what looked for a long time like a space problem).  In
+      the local frame the pins always escape along +/-X, so "above the
+      body" is always clear - and rotation carries that guarantee round
+      with the part.
+    """
     _m = fp_begin()
-    pitch, row = 5.0, 10.5
+    pitch, row, pw, ph = 5.0, 10.5, 6.0, 2.5
     ref = pkg_ref.split()[0]
-    if rot == 0:
-        pw, ph = 6.0, 2.5
-        for i in range(7):
-            pad_rect(sections[i + 1], i + 1, x - row, y + i * pitch,
-                     net_of(sections[i + 1], i + 1), pw, ph)
-            n = 8 + i
-            pad_rect(sections[n], n, x + row, y + (6 - i) * pitch,
-                     net_of(sections[n], n), pw, ph)
-        silk_rect(x - 7.5, y - 4, x + 7.5, y + 34)
-        track([(x - 7.5, y - 4), (x - 4, y - 4)], TOPSILK, 0.5)
-        lax, lay = x - 7.5, y - 6.5
-        silk_ref(lax, lay, ref, LABEL_SIZE)
-        cx, cy = x, y + 15
-        pad_box = (x - row - pw / 2, y - ph / 2, x + row + pw / 2, y + 30 + ph / 2)
-    else:
-        pw, ph = 2.5, 6.0
-        for i in range(7):
-            pad_rect(sections[i + 1], i + 1, x + i * pitch, y + row,
-                     net_of(sections[i + 1], i + 1), pw, ph)
-            n = 8 + i
-            pad_rect(sections[n], n, x + (6 - i) * pitch, y - row,
-                     net_of(sections[n], n), pw, ph)
-        silk_rect(x - 4, y - 7.5, x + 34, y + 7.5)
-        track([(x - 4, y + 7.5), (x - 4, y + 4)], TOPSILK, 0.5)
-        # Beside the package, not above it.  Above (the old x-4, y-16) put
-        # the label's silk keepout directly over the escape corridor for
-        # pins 13 and 14 - which at rot=90 are the top-LEFT pins, right
-        # where the label sat - and every top-row pin escapes vertically by
-        # definition of this rotation.  That is why U1D.13 / U2D.13 / U2D.14
-        # came back unroutable at *every* board size tried during the
-        # width-and-layout rework: not a space problem at all, a label
-        # parked in the one channel those pins can use.  Right-aligned to
-        # end 6 units left of the body, vertically centred on it, so it
-        # clears both pin rows entirely (pins span x+0..x+30; body silk
-        # starts at x-4).
-        lax = x - 6 - 0.62 * LABEL_SIZE * len(ref)
-        lay = y + 0.4 * LABEL_SIZE
-        silk_ref(lax, lay, ref, LABEL_SIZE)
-        cx, cy = x + 15, y
-        pad_box = (x - 4, y - row - ph / 2, x + 34, y + row + ph / 2)
-    fp_end(ref, _m, cx, cy)
-    PARTS[pkg_ref] = dict(value="MC33079", x=cx, y=cy, rot=rot,
-                          assembled=True, pkg="SOIC-14")
-    lbl = label_bbox(lax, lay, ref, LABEL_SIZE)
-    return (min(pad_box[0], lbl[0]) - CLEAR, min(pad_box[1], lbl[1]) - CLEAR,
-            max(pad_box[2], lbl[2]) + CLEAR, max(pad_box[3], lbl[3]) + CLEAR)
+    for i in range(7):
+        pad_rect(sections[i + 1], i + 1, x - row, y + (i - 3) * pitch,
+                 net_of(sections[i + 1], i + 1), pw, ph)
+        n = 8 + i
+        pad_rect(sections[n], n, x + row, y + (3 - i) * pitch,
+                 net_of(sections[n], n), pw, ph)
+    silk_rect(x - 7.5, y - 19, x + 7.5, y + 19)
+    track([(x - 7.5, y - 19), (x - 4, y - 19)], TOPSILK, 0.5)   # pin 1 corner
+    # Off the END of the package, never off its sides: the pins escape
+    # along local +/-X at every angle, so this is the one direction that is
+    # guaranteed not to be somebody's only way out.
+    silk_ref_beside((x - row - pw / 2, y - 19, x + row + pw / 2, y + 19),
+                    ref, LABEL_SIZE, (0, -1))
+    fp_end(ref, _m, x, y)
+    part_record(pkg_ref, "MC33079", x, y, True, "SOIC-14")
 
 
 def fp_elec(ref, x, y, net_of, value):
@@ -280,26 +395,14 @@ def fp_elec(ref, x, y, net_of, value):
     track([(x + r * math.cos(2 * math.pi * i / n),
             y + r * math.sin(2 * math.pi * i / n)) for i in range(n + 1)],
           TOPSILK, 0.5)
-    rlax, rlay = x - 10, y - 12
-    silk_ref(rlax, rlay, ref)
-    plax, play = x - 15.5, y + 1
-    silk(plax, play, "+")
+    silk_ref_beside((x - 12.5, y - r, x + 12.5, y + r), ref, DESIG_SIZE, (0, -1))
+    silk(x - 15.5, y + 1, "+")
     fp_end(ref, _m, x, y)
-    PARTS[ref] = dict(value=value, x=x, y=y, rot=0, assembled=True,
-                      pkg="CASE-D5xL5.4")
-    pad_box = (x - 8.5 - 4, y - 5, x + 8.5 + 4, y + 5)
-    circle_box = (x - r, y - r, x + r, y + r)
-    rlbl, plbl = label_bbox(rlax, rlay, ref), label_bbox(plax, play, "+")
-    x0 = min(pad_box[0], circle_box[0], rlbl[0], plbl[0])
-    y0 = min(pad_box[1], circle_box[1], rlbl[1], plbl[1])
-    x1 = max(pad_box[2], circle_box[2], rlbl[2], plbl[2])
-    y1 = max(pad_box[3], circle_box[3], rlbl[3], plbl[3])
-    return (x0 - CLEAR, y0 - CLEAR, x1 + CLEAR, y1 + CLEAR)
+    part_record(ref, value, x, y, True, "CASE-D5xL5.4")
 
 
 def fp_pads(ref, x, y, net_of, n=3, label="", horiz=False, names=None):
     _m = fp_begin()
-    label_boxes = []
     for i in range(n):
         px, py = (x + i * 10.0, y) if horiz else (x, y + i * 10.0)
         pad_tht(ref, i + 1, px, py, net_of(ref, i + 1))
@@ -307,54 +410,40 @@ def fp_pads(ref, x, y, net_of, n=3, label="", horiz=False, names=None):
             lax = px - 0.31 * LABEL_SIZE * len(names[i])   # centred, per text_bbox's own width formula
             lay = py + 9.5 if horiz else py + 1.6
             silk(lax, lay, names[i], LABEL_SIZE)
-            label_boxes.append(label_bbox(lax, lay, names[i], LABEL_SIZE))
     if horiz:
         silk_rect(x - 5, y - 5, x + (n - 1) * 10 + 5, y + 5)
         rlax, rlay = x - 5, y - 7.5
-        e = (x - 5, y - 5, x + (n - 1) * 10 + 5, y + 5)
     else:
         silk_rect(x - 5, y - 5, x + 5, y + (n - 1) * 10 + 5)
         rlax, rlay = x + 6.5, y - 2
-        e = (x - 5, y - 5, x + 5, y + (n - 1) * 10 + 5)
     silk_ref(rlax, rlay, ref, LABEL_SIZE)
-    label_boxes.append(label_bbox(rlax, rlay, ref, LABEL_SIZE))
     fp_end(ref, _m, x, y)
-    PARTS[ref] = dict(value=label or ref, x=x, y=y, rot=0, assembled=False,
-                      pkg="THT-PAD")
-    x0, y0, x1, y1 = e
-    for lb in label_boxes:
-        x0, y0 = min(x0, lb[0]), min(y0, lb[1])
-        x1, y1 = max(x1, lb[2]), max(y1, lb[3])
-    return (x0 - CLEAR, y0 - CLEAR, x1 + CLEAR, y1 + CLEAR)
+    part_record(ref, label or ref, x, y, False, "THT-PAD")
 
 
 def fp_term(ref, x, y, net_of, n=2, names=None):
     """Screw terminal block, 3.5 mm pitch (14 units = 3.556 mm; the 1.1 mm
     holes absorb the difference).  Wire entry faces the board edge."""
     _m = fp_begin()
-    label_boxes = []
+    # Centred on the anchor, so turning the block to face a different board
+    # edge pivots it about its own middle instead of swinging it away by
+    # its own length.
+    x0 = x - (n - 1) * 7.0
     for i in range(n):
-        pad_tht(ref, i + 1, x + i * 14.0, y, net_of(ref, i + 1), dia=8.0, hole=4.3)
+        px = x0 + i * 14.0
+        pad_tht(ref, i + 1, px, y, net_of(ref, i + 1), dia=8.0, hole=4.3)
         if names and i < len(names):
-            lax = x + i * 14.0 - 0.31 * LABEL_SIZE * len(names[i])
-            lay = y + 15
-            silk(lax, lay, names[i], LABEL_SIZE)
-            label_boxes.append(label_bbox(lax, lay, names[i], LABEL_SIZE))
-    x1 = x + (n - 1) * 14.0
-    silk_rect(x - 7, y - 16, x1 + 7, y + 10)
-    for i in range(n):
-        silk_rect(x + i * 14.0 - 4, y - 14, x + i * 14.0 + 4, y - 8, 0.4)
-    rlax, rlay = x - 7, y - 18.5
-    silk_ref(rlax, rlay, ref, LABEL_SIZE)
-    label_boxes.append(label_bbox(rlax, rlay, ref, LABEL_SIZE))
-    fp_end(ref, _m, (x + x1) / 2, y)
-    PARTS[ref] = dict(value="TB-%dP-3.5" % n, x=(x + x1) / 2, y=y, rot=0,
-                      assembled=False, pkg="TB-%dP-3.5" % n)
-    x0, y0, x1b, y1 = x - 9, y - 18, x1 + 9, y + 12
-    for lb in label_boxes:
-        x0, y0 = min(x0, lb[0]), min(y0, lb[1])
-        x1b, y1 = max(x1b, lb[2]), max(y1, lb[3])
-    return (x0 - CLEAR, y0 - CLEAR, x1b + CLEAR, y1 + CLEAR)
+            silk(px - 0.31 * LABEL_SIZE * len(names[i]), y + 15,
+                 names[i], LABEL_SIZE)
+    x1 = x0 + (n - 1) * 14.0
+    silk_rect(x0 - 7, y - 16, x1 + 7, y + 10)
+    for i in range(n):                        # wire-entry throats, facing -Y
+        silk_rect(x0 + i * 14.0 - 4, y - 14, x0 + i * 14.0 + 4, y - 8, 0.4)
+    # Behind the block, away from the wire entry, so the designator is
+    # still readable with wires landed in it.
+    silk_ref_beside((x0 - 7, y - 16, x1 + 7, y + 10), ref, LABEL_SIZE, (0, 1))
+    fp_end(ref, _m, x, y)
+    part_record(ref, "TB-%dP-3.5" % n, x, y, False, "TB-%dP-3.5" % n)
 
 
 def fp_pot(pkg_ref, gang_a, gang_b, x, y, net_of):
@@ -392,21 +481,12 @@ def fp_pot(pkg_ref, gang_a, gang_b, x, y, net_of):
     # and far better than moving the pots, which broke their pin escapes.
     bx0, by0, bx1, by1 = x - 26, y - 8, x + 26, y + 35
     silk_rect(bx0, by0, bx1, by1)
-    flax, flay = bx0, by0 - 3
+    flay = by0 - 3
     ftext = "HIGH/MID" if pkg_ref == "VR1" else "MID/LOW"
-    silk(flax, flay, ftext, LABEL_SIZE)
-    rlax, rlay = bx0, flay - 8
-    silk_ref(rlax, rlay, pkg_ref, LABEL_SIZE)
+    silk(bx0, flay, ftext, LABEL_SIZE)
+    silk_ref(bx0, flay - 8, pkg_ref, LABEL_SIZE)
     fp_end(pkg_ref, _m, x, y + 10)
-    PARTS[pkg_ref] = dict(value="20k dual", x=x, y=y + 10, rot=0,
-                          assembled=False, pkg="POT-9MM-DUAL")
-    rlbl = label_bbox(rlax, rlay, pkg_ref, LABEL_SIZE)
-    flbl = label_bbox(flax, flay, ftext, LABEL_SIZE)
-    x0 = min(bx0, rlbl[0], flbl[0])
-    y0 = min(by0, rlbl[1], flbl[1])
-    x1 = max(bx1, rlbl[2], flbl[2])
-    y1 = max(by1, rlbl[3], flbl[3])
-    return (x0 - CLEAR, y0 - CLEAR, x1 + CLEAR, y1 + CLEAR)
+    part_record(pkg_ref, "20k dual", x, y + 10, False, "POT-9MM-DUAL")
 
 
 def fp_pot_single(ref, x, y, net_of, label):
@@ -434,23 +514,53 @@ def fp_pot_single(ref, x, y, net_of, label):
         pad_tht(ref, i + 1, x + dx, y, net_of(ref, i + 1), dia=7.5, hole=4.7)
     bx0, by0, bx1, by1 = x - 18.5, y - 8, x + 18.5, y + 20
     silk_rect(bx0, by0, bx1, by1)
-    flax, flay = bx0, by0 - 3
-    silk(flax, flay, label, LABEL_SIZE)
-    rlax, rlay = bx0, flay - 8
-    silk_ref(rlax, rlay, ref, LABEL_SIZE)
+    flay = by0 - 3
+    silk(bx0, flay, label, LABEL_SIZE)
+    silk_ref(bx0, flay - 8, ref, LABEL_SIZE)
     fp_end(ref, _m, x, y)
-    PARTS[ref] = dict(value="10k log", x=x, y=y, rot=0, assembled=False,
-                      pkg="POT-9MM-SINGLE")
-    rlbl = label_bbox(rlax, rlay, ref, LABEL_SIZE)
-    flbl = label_bbox(flax, flay, label, LABEL_SIZE)
-    x0 = min(bx0, rlbl[0], flbl[0])
-    y0 = min(by0, rlbl[1], flbl[1])
-    x1 = max(bx1, rlbl[2], flbl[2])
-    y1 = max(by1, rlbl[3], flbl[3])
-    return (x0 - CLEAR, y0 - CLEAR, x1 + CLEAR, y1 + CLEAR)
+    part_record(ref, "10k log", x, y, False, "POT-9MM-SINGLE")
 
 
 POT_BOSSES = []          # non-plated locating holes, filled in at placement
+
+
+# --------------------------------------------------------------------------
+# footprint probing
+#
+# The placement search needs to know how big each part is and where its pads
+# sit, at every angle it might be turned to - before anything is committed to
+# the board.  Rather than write that down a second time (a second copy is how
+# the pot body ended up hanging over the board edge while every check thought
+# it fit), each footprint is DRAWN into the live buffers at the origin, the
+# geometry is read back off the shapes it actually emitted, and the buffers
+# are wound back.  The model is therefore the drawing, by construction.
+# --------------------------------------------------------------------------
+def probe(draw, rot):
+    """Run `draw` at the origin, rotated by `rot`, and return what it drew
+    without leaving any of it behind."""
+    m_sh, m_pd, m_sp = len(shapes), len(pads), len(FP_SPANS)
+    known = set(PARTS)
+    xf_push(0.0, 0.0, rot)
+    try:
+        draw()
+    finally:
+        xf_pop()
+    my_shapes, my_pads = shapes[m_sh:], [dict(p) for p in pads[m_pd:]]
+    boxes = [b for b in (shape_box(s) for s in my_shapes) if b]
+    del shapes[m_sh:]
+    del pads[m_pd:]
+    del FP_SPANS[m_sp:]
+    for k in set(PARTS) - known:
+        del PARTS[k]
+
+    body = [b[1:] for b in boxes if b[0] == "body"]
+    x0 = min(b[1] for b in boxes) - CLEAR
+    y0 = min(b[2] for b in boxes) - CLEAR
+    x1 = max(b[3] for b in boxes) + CLEAR
+    y1 = max(b[4] for b in boxes) + CLEAR
+    return dict(box=(x0, y0, x1, y1), body=body,
+                pads=[(p["ref"], p["num"], p["net"], p["x"], p["y"],
+                       p["w"], p["h"]) for p in my_pads])
 
 
 # ==========================================================================
@@ -472,385 +582,264 @@ def N(ref, num):
 
 
 VALUE = {r: netdoc["parts"][r]["value"] for r in netdoc["parts"]}
-# Board size and slot pitch are overridable, so the smallest size that still
-# routes and verifies can be searched for rather than guessed.  The defaults
-# are the smallest found by that search: sweeping down from 340x280, sizes at
-# and below 310x250 leave nets unroutable.  Component area is only ~13% of the
-# board - the rest is routing headroom, and on two layers with this router it
-# is what sets the floor, not the parts.
-# 288 x 191 (73.2 x 48.5 mm) was the router-imposed floor for the layout
-# without front-panel volume controls - found by a bounded sweep after the
-# placement, rotation, trace-width and label work above: 287 failed on a
-# footprint courtyard collision, 190 on an unroutable net.
-#
-# Adding VR3/VR4/VR5 (one output-volume pot each, see POTS_SINGLE below)
-# needed real width, not just a squeeze: five front-panel controls in a row
-# need real pitch between them, and the first attempt at that pitch reused
-# VR1/VR2's old 110-unit spacing, wedging the new pots into a 56-unit gap
-# with ~1.4 units of clearance on each side - not a courtyard violation, but
-# tight enough to starve neighbouring pins' escape routes.  420 x 220 (106.7
-# x 55.9 mm) is the smallest size found, after that fix, that both fits the
-# new 80-unit-pitch panel row and verifies fully clean; SLOT_PITCH=20 (up
-# from 18) was needed alongside it - 18 at this size left one net split in
-# two.  This is a real board-area cost for a real feature, not a regression
-# in the router or the search: see docs/pcb-notes-smd.md for what actually
-# ran into trouble along the way (and how) before landing here.
-#
-# BOARD WIDTH IS NOW DERIVED, NOT SEARCHED - the change above (420 units)
-# came from sweeping board sizes until the OLD layout's anchors (SOICs and
-# terminal blocks, both at absolute positions left over from a much
-# narrower board) happened to still route, which papered over the real
-# problem: those anchors never moved to use the width the pot row was
-# already forcing the board to have, so everything piled up on the left
-# and the right third of every board this size or larger sat empty - a
-# board-size sweep can't fix a layout problem, it can only find a size
-# large enough to hide it.  PANEL_PITCH (below) is what actually decides
-# how wide the board needs to be: five front-panel controls, uniform
-# pitch, so their own geometry sets the minimum, not trial and error.
-PANEL_PITCH = 80
-# The outermost two controls are single-gang pots (18.5-unit body
-# half-width from the board centreline out); pn each needs >=2 units clear
-# of the board edge beyond that.
-POT_ROW_HALF_W = 2 * PANEL_PITCH + 18.5 + 2
-# The pot row's own geometry sets the FLOOR (365 units); the router still
-# needs more than the floor to find a way through, so the default is the
-# smallest size actually confirmed clean at GRID=0.25 rather than the
-# geometric minimum.  Sizes between the two route *almost* cleanly - the
-# rearranged layout reached 400x185 (101.6 x 47.0 mm) with four IC-pin
-# escapes still failing - so there is very likely a smaller board here;
-# see CLAUDE.md before spending another sweep on it.
-POT_ROW_MIN_BW = round(2 * POT_ROW_HALF_W) + 4
-BW = float(os.environ.get("BOARD_W", max(POT_ROW_MIN_BW, 420)))
-# 225, not 220: POT_Y is BH-45 because the dual-gang body reaches 40 units
-# below its anchor and BH-40 drew its outline right on the board edge (a
-# gap in the checks - they catch TEXT silk leaving the board and copper
-# crowding it, but not a body outline drawn as a plain track).  Simply
-# moving the pots up 5 units instead left their pins unroutable, so the
-# board gets the 5 units back and the pot row stays exactly where it
-# verified clean - the board was always 5 units short of containing its
-# own pot footprints.
-BH = float(os.environ.get("BOARD_H", 220.0))
-SLOT_PITCH = int(os.environ.get("SLOT_PITCH", 20))
-MOUNT_HOLES = [(9, 9), (BW - 9, 9), (9, BH - 9), (BW - 9, BH - 9)]
-MOUNT_R = 12.6 / 2
-BOSS_R = 4.5
 
+# ==========================================================================
+#  layout
+#
+#  BOARD SIZE IS AN OUTPUT OF THIS SECTION, NOT AN INPUT TO IT.
+#
+#  For most of this project's history it was the other way round: BOARD_W and
+#  BOARD_H were constants, everything else was positioned inside them, and
+#  when a net would not route the board was made bigger until it did.  That
+#  procedure cannot fix a layout problem - it can only find a size large
+#  enough to hide one - and every time it was reached for here the real cause
+#  turned out to be structural: pot spacing, route order, a long-haul net, a
+#  silkscreen label parked in a pin-escape corridor.  See CLAUDE.md.
+#
+#  So: arrange the parts on open canvas, optimising for the things that
+#  actually decide whether a board routes, then draw the outline around the
+#  answer.  tools/place.py has the search; this section says what the parts
+#  are, which of them may turn, and which are pinned by something real.
+# ==========================================================================
 U1S = {1: "U1A", 2: "U1A", 3: "U1A", 4: "U1A", 5: "U1B", 6: "U1B", 7: "U1B",
        8: "U1C", 9: "U1C", 10: "U1C", 11: "U1A", 12: "U1D", 13: "U1D", 14: "U1D"}
 U2S = {1: "U2A", 2: "U2A", 3: "U2A", 4: "U2A", 5: "U2B", 6: "U2B", 7: "U2B",
        8: "U2C", 9: "U2C", 10: "U2C", 11: "U2A", 12: "U2D", 13: "U2D", 14: "U2D"}
+SOIC_SECTIONS = {"U1": U1S, "U2": U2S}
 
-# Rotating the quads so their pins escape vertically, into the open space
-# above and below rather than into the channel between the two packages, is
-# what makes the side-by-side arrangement compact; `IC_LAYOUT=stacked`
-# (one quad above the other) is the alternative, kept switchable for a
-# sweep, but side+rotated is what every current default assumes.
-IC_ROT = int(os.environ.get("IC_ROT", 90))
-# U1/U2 centred on the board, not left-anchored: they used to sit at fixed
-# x=56/186, tuned for a ~300-unit-wide board that predates the pot row -
-# on the current, wider, pot-row-driven board that left the entire right
-# third empty (nothing else was anchored there either) rather than using
-# the width the pot row already requires. Same 130-unit separation between
-# them either way - that number is what's actually tuned, for SOIC-to-SOIC
-# routing room, not their absolute position.
-if os.environ.get("IC_LAYOUT", "side") == "side":
-    # -15 on each: fp_soic14 at rot=90 lays its pads out from `x` rightward,
-    # so the package's own centre lands at x+15, not x.  Passing BW/2 +/- 65
-    # straight through therefore shifted BOTH packages 15 units right of
-    # where they were meant to sit - crowding the right edge and wasting the
-    # same 15 units on the left, which is exactly the "everything piles up
-    # off-centre" problem this rearrangement exists to remove.  Subtracting
-    # the offset makes the pair genuinely symmetric about the centreline.
-    # ATTEMPTED AND REVERTED: centring these on the board (BW/2 -/+ 65 - 15,
-    # the -15 correcting for fp_soic14's own x+15 centre offset at rot=90)
-    # packs the board visibly better - the largest empty rectangle drops
-    # from 37x28 mm to 17x27 mm - but costs routability at every size tried
-    # between 380 and 440 units, always as IC pin escapes (U1B.7, U2D.13)
-    # and pot pins (VR1A.1, VR1B.2/3) left unreachable.  These left-anchored
-    # positions are the ones that actually verify clean.  Worth revisiting
-    # with a router that can rip up and re-route; see CLAUDE.md.
-    U1_X, U2_X = 56, 186
-    SOICS = ([("U1", U1S, U1_X, 74), ("U2", U2S, U2_X, 74)] if IC_ROT
-             else [("U1", U1S, BW / 2 - 65, 60), ("U2", U2S, BW / 2 + 65, 60)])
-else:
-    U1_X = U2_X = BW / 2
-    SOICS = [("U1", U1S, U1_X, 62), ("U2", U2S, U2_X, 150)]
-
-# Terminal block row, left to right: input, power, then LOW/MID/HIGH -
-# mirroring the pot row's own left-to-right LOW...HIGH order below, so
-# each output's terminal block roughly lines up above its volume pot,
-# instead of the pre-volume-control order (which put HIGH first because
-# nothing else determined it). Spread evenly across the actual board
-# width - same reasoning as U1/U2 above: fixed absolute spacing tuned for
-# an old, narrower board left this row clustered on the left with a large
-# unused gap before TP1/TP2, rather than using the width the pot row
-# already sets.
-J_ROW = ["J2", "J1", "J5", "J4", "J3"]
-J_SPECS = {
+TERMS = {
     "J2": dict(n=2, names=["IN", "GND"]),
     "J1": dict(n=3, names=["+15", "GND", "-15"]),
     "J5": dict(n=2, names=["LOW", "GND"]),
     "J4": dict(n=2, names=["MID", "GND"]),
     "J3": dict(n=2, names=["HI", "GND"]),
 }
-# ATTEMPTED AND REVERTED alongside the U1/U2 centring above: spreading
-# this row evenly across the real board width (J_X0=26 to BW-100) used the
-# space far better but was part of the same rearrangement that would not
-# route.  Back to the tuned absolute positions that verify clean.  The
-# left-to-right ORDER change is kept - it costs nothing and puts each
-# output block above the volume pot it feeds.
-# Positions are the tuned, verified-clean ones.  Reordering which output
-# sits at which position (to mirror the pots' LOW..HIGH order) was tried
-# and reverted too: it reads better but perturbs routing, and the pot row
-# order - the part actually asked for - is independent of it.
-J_X = {"J2": 26, "J1": 68, "J3": 136, "J4": 176, "J5": 216}
-FIXED = [
-    # y=25.5, not 22: at DESIG_SIZE=4 the "J*" ref label (drawn above the
-    # block) needs ~3 extra units of headroom above the block to stay on
-    # the board - see fp_term's rlax/rlay.
-    (ref, dict(fn=fp_term, **J_SPECS[ref]), J_X[ref], 25.5)
-    for ref in J_ROW
-] + [
-    # 24, not the long-standing 36: moving U1/U2's designator beside the
-    # package (see fp_soic14) extends their courtyard ~8 units further
-    # left, which at 36 overlapped C0.  The label move is kept because it
-    # keeps silk out of the pin-escape corridor - a whole class of
-    # unroutable-pin bug - so C0 gives way instead.
-    ("C0", dict(fn=fp_elec), 24, 62),
-    # BW-relative, not absolute, so a board-width sweep doesn't spuriously
-    # run these off the right edge before it ever reaches a routing limit.
-    # 30-unit gap, not 22: at LABEL_SIZE the "TP1"/"TP2" ref labels are
-    # wide enough that the old 22-unit gap let their courtyards overlap.
-    ("TP1", dict(fn=fp_pads, n=1, label="TP1"), BW - 50, 22),
-    ("TP2", dict(fn=fp_pads, n=1, label="TP2"), BW - 20, 22),
-]
-# Five front-panel controls in a row, uniform PANEL_PITCH (defined above,
-# where it also sets BW itself), LOW on the left and HIGH on the right:
-# LOW vol, VR2 (M/L freq), MID vol, VR1 (H/M freq), HIGH vol.  Every pot -
-# single or dual gang - has the same 26-unit body half-width, so a shared
-# pitch is what actually matters; the first cut at this used VR1/VR2's OLD
-# 110-unit spacing (tuned for just the two of them) and tried to wedge a
-# third pot into the 56-unit gap between them, leaving ~1.4 units of
-# clearance on each side - not a courtyard violation, but tight enough to
-# starve the neighbouring pins' escape routes and leave 3-5 nets unroutable
-# across several board sizes before this was traced back to spacing, not
-# area.
-# The dual-gang body reaches 40 units below its anchor (see fp_pot), so
-# BH-40 put its silk outline exactly on the board edge - invisible to the
-# checks, which only catch TEXT silk running off the board and copper
-# crowding it, not a body outline drawn as a plain track.  BH-45 keeps the
-# whole outline on the board with a few units to spare.
-POT_Y = BH - 40
-POTS = [("VR1", "VR1A", "VR1B", BW / 2 + PANEL_PITCH, POT_Y),
-        ("VR2", "VR2A", "VR2B", BW / 2 - PANEL_PITCH, POT_Y)]
-POTS_SINGLE = [("VR3", BW / 2 + 2 * PANEL_PITCH, "HIGH VOL"),
-               ("VR4", BW / 2, "MID VOL"),
-               ("VR5", BW / 2 - 2 * PANEL_PITCH, "LOW VOL")]
 
-# candidate slots for the movable chip parts, 18 x 18 grid over the interior
-SLOT_XS = list(range(34, int(BW) - 10, SLOT_PITCH))
-# Down to the bottom edge: the strips either side of the pots and the gap
-# between them are usable board.  The pot courtyards are already in
-# fixed_boxes, so slots that would collide with a pot are dropped anyway.
-SLOT_YS = list(range(36, int(BH) - 12, SLOT_PITCH))
+# Front panel, left to right: LOW ... HIGH, each band's volume trim beside
+# the frequency pot it belongs to.  Order is a stated preference; the row
+# being one uniformly-pitched line along one edge is a mechanical
+# requirement (it is the panel), so these five are a rigid group as far as
+# the search is concerned and only move together.
+PANEL = ["VR5", "VR2", "VR4", "VR1", "VR3"]
+# The three output terminals are a row of their own, in the same LOW -> HIGH
+# order as the panel, so each output block sits above the volume pot that
+# feeds it.  Left free, they scattered to three different board edges -
+# which costs nothing the optimiser can measure and is horrible to wire.
+OUTPUTS = ["J5", "J4", "J3"]
+OUTPUT_PITCH = 56.0
+POT_GANGS = {"VR1": ("VR1A", "VR1B"), "VR2": ("VR2A", "VR2B")}
+POT_LABEL = {"VR3": "HIGH VOL", "VR4": "MID VOL", "VR5": "LOW VOL"}
+# 80 units = 20.3 mm between knob centres.  This is a human-factors number,
+# not a routing one: a knob for a 6 mm shaft is typically 15-20 mm across,
+# so anything much under 20 mm pitch has adjacent knobs touching and the
+# outer ones unusable.  The pot COURTYARDS would allow ~58 units (14.7 mm),
+# which is why this cannot be left to the optimiser to discover - it has no
+# model of the thing that actually sets the limit, which is fingers.
+PANEL_PITCH = float(os.environ.get("PANEL_PITCH", 80))
 
+# Three short lines, not two long ones.  The title is a real keepout (silk
+# reserves top copper), so a 130-unit-wide bar is a bar across whatever part
+# of the board it lands on - the placement search, having no wirelength
+# reason to put it anywhere in particular, parked the two-line version
+# straight across the middle.  Squarer text tucks into a corner instead.
+TITLE_LINES = ["ESP P148 3-WAY VARIABLE CROSSOVER",
+               "RETUNED QUAD SMD - ONE CHANNEL",
+               "195Hz-1.03kHz / 73-186Hz"]
 
-def place_fixed():
-    for ref, spec, x, y in FIXED:
-        fn = spec.pop("fn")
-        if fn is fp_elec:
-            placed.append(fn(ref, x, y, N, VALUE[ref]))
-        elif fn is fp_term:
-            placed.append(fn(ref, x, y, N, **spec))
-        else:
-            placed.append(fn(ref, x, y, N, **spec))
-        spec["fn"] = fn
-    for pkg, sec, x, y in SOICS:
-        placed.append(fp_soic14(pkg, sec, x, y, N, IC_ROT))
-    for pkg, ga, gb, x, y in POTS:
-        placed.append(fp_pot(pkg, ga, gb, x, y, N))
-        # y-22: verified clear of every pad by measurement (d_pt_rect in
-        # verify()), not tied to where the silk body outline happens to be
-        # drawn - a real boss-peg position isn't known either way (no
-        # verified dual-gang datasheet, same caveat as the body outline
-        # above), so correctness against the actual pads wins over the
-        # cosmetic goal of nesting the boss inside the drawn rectangle.
-        # A tighter -4 offset (matching the new, smaller body) put VR1A/
-        # VR2A pads only 25.5 mil from the hole against a required 53 mil -
-        # caught by verify(), not shipped.
-        POT_BOSSES.extend([(x - 14, y - 22), (x + 14, y - 22)])
-    for ref, x, label in POTS_SINGLE:
-        placed.append(fp_pot_single(ref, x, POT_Y, N, label))
+CHIPS = {r: ("1210" if VALUE[r] == "33nF" else "0805")
+         for r in VALUE if r.startswith("R") or
+         (r.startswith("C") and r not in ("C0",))}
+
+# Board-edge clearance for parts, and how far in from the corner each
+# mounting hole sits.
+EDGE = 5.0
+MOUNT_R = 12.6 / 2
+BOSS_R = 4.5
+MOUNT_INSET = 9.0
+MOUNT_KEEP = MOUNT_R + CLEAR + MAX_W / 2
 
 
 def boxes_overlap(a, b):
     return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
 
 
-CHIPS = {r: ("1210" if VALUE[r] == "33nF" else "0805")
-         for r in VALUE if r.startswith("R") or
-         (r.startswith("C") and r not in ("C0",))}
-
-# Rotation is only explored for 0805 parts.  An 1210, rotated, is 23.6 units
-# across (10 unit body + 6 unit lead offset either side + clearance) - wider
-# than the 18-unit slot pitch, so two rotated 1210s in adjacent slots would
-# overlap by construction, no matter what the local search decides.  A 0805
-# stays under the pitch in both orientations (13.6 x 12.0 max), so rotating
-# one can never collide with its own neighbouring slot.
-ROTATABLE = {r for r, k in CHIPS.items() if k == "0805"}
-ROT = {r: 0 for r in CHIPS}
+def draw_title():
+    for _k, _line in enumerate(TITLE_LINES):
+        silk(0, 5.5 * _k, _line)
 
 
-def slot_box(x, y, kind, rot=0, ref="XXX"):
-    """Just chip_courtyard() under a different name, kept for callers that
-    are asking "is this slot free" before they know which ref will land
-    there - ref defaults to a 3-char placeholder ("R17", "C3A", ... are the
-    longest real designators here), the worst case for label width, so an
-    unresolved query never underestimates the space a part will need."""
-    return chip_courtyard(ref, x, y, kind, rot)
+def drawer(ref):
+    """A zero-argument callable that draws `ref` at the local origin.  The
+    placement transform is what decides where 'the origin' actually is, so
+    nothing below needs to know its own position."""
+    if ref in SOIC_SECTIONS:
+        return lambda: fp_soic14(ref, SOIC_SECTIONS[ref], 0, 0, N)
+    if ref in TERMS:
+        return lambda: fp_term(ref, 0, 0, N, **TERMS[ref])
+    if ref == "C0":
+        return lambda: fp_elec(ref, 0, 0, N, VALUE[ref])
+    if ref in ("TP1", "TP2"):
+        return lambda: fp_pads(ref, 0, 0, N, n=1, label=ref)
+    if ref in POT_GANGS:
+        return lambda: fp_pot(ref, POT_GANGS[ref][0], POT_GANGS[ref][1], 0, 0, N)
+    if ref in POT_LABEL:
+        return lambda: fp_pot_single(ref, 0, 0, N, POT_LABEL[ref])
+    if ref == TITLE_REF:
+        return draw_title
+    return lambda: fp_chip(ref, 0, 0, N, VALUE[ref], CHIPS[ref])
 
 
-def real_box(ref, x, y, rot):
-    return slot_box(x, y, CHIPS[ref], rot, ref)
+# The title block is a part.  It occupies board area, it has to not sit on
+# top of anything, and - like every other piece of silkscreen here - a
+# trace cannot run under it (see the silk keepout in the routing section).
+# Treating it as furniture that gets dropped in afterwards is how it ended
+# up overlapping the pot outlines on the previous board.
+TITLE_REF = "#TITLE"
+
+ROTS = {}
+for _r in SOIC_SECTIONS:
+    ROTS[_r] = (0, 90, 180, 270)      # which way the 14 pins escape
+for _r in TERMS:
+    ROTS[_r] = (0, 90, 180, 270)      # which board edge the wires enter from
+ROTS["C0"] = (0, 90)
+ROTS["TP1"] = ROTS["TP2"] = (0,)      # single round pad - rotation is a no-op
+ROTS[TITLE_REF] = (0,)
+for _r in PANEL:
+    ROTS[_r] = (0,)                   # shafts must all face the same way
+for _r in CHIPS:
+    ROTS[_r] = (0, 90)
+
+GEOM = {ref: {rot: probe(drawer(ref), rot) for rot in rots}
+        for ref, rots in ROTS.items()}
+
+POT_W = max(GEOM[r][0]["box"][2] - GEOM[r][0]["box"][0] for r in PANEL)
+PANEL_SPAN = 4 * PANEL_PITCH + POT_W
+
+_parts = []
+for _ref, _rots in ROTS.items():
+    _parts.append(place.Part(
+        _ref, GEOM[_ref], _rots,
+        group=("panel" if _ref in PANEL else
+               "outputs" if _ref in OUTPUTS else None),
+        # Screw terminals take wire from off-board, so their entry side has
+        # to face out; the panel row has to be the panel.  Both are real
+        # mechanical constraints, and both are expressed the same way: name
+        # the local-frame direction that must stay clear all the way to the
+        # board edge, and let rotation carry it round with the part.
+        outward=(0, 1) if _ref in PANEL else ((0, -1) if _ref in TERMS else None)))
+
+PLACER = place.Placer(_parts, seed=int(os.environ.get("SEED", 7)),
+                      track_pitch=MAX_W + CLEAR)
+
+# The panel row: fixed pitch, fixed order, all on one line.
+for _k, _ref in enumerate(PANEL):
+    _i = PLACER.idx[_ref]
+    PLACER.set_pose(_i, _k * PANEL_PITCH, 0.0, 0)
+
+# Weights are in cost-units per unit of whatever they measure, so what
+# matters is their ratios.  Calibrated so that one fully starved pin-escape
+# side (a SOIC face with seven pins and nothing but a neighbour's courtyard
+# in front of them - worth ~92 before weighting) costs about as much as 60
+# units of extra board height.  That is the trade this project kept getting
+# wrong by hand in the other direction: it would take the shorter board and
+# then spend days discovering the nets no longer route.
+WEIGHTS = dict(
+    ov=60.0,         # ramped hard by the anneal - see place.anneal()
+    esc=40.0,        # pin-escape starvation: the failure this board keeps hitting
+    cong=5.0,        # RUDY overflow
+    hpwl=0.15,       # wirelength, as a proxy for everything not modelled
+    h=60.0,          # the actual objective, with width pinned by the panel
+    w=120.0,         # width past the panel floor is pure waste - push hard
+    wfloor=PANEL_SPAN,
+    edge=40.0,       # terminals/panel must have a clear path to their edge
+    t0=150.0, t1=0.5,
+)
+MOVES = int(os.environ.get("MOVES", 90000))
+
+PLACE_LOG = int(os.environ["PLACE_LOG"]) if "PLACE_LOG" in os.environ else None
+RESTARTS = int(os.environ.get("RESTARTS", 4))
 
 
-def auto_place():
-    """Anchor each part at the centroid of the fixed pads it touches, then
-    take the nearest free slot that neither the fixed layout NOR an
-    already-placed chip already occupies; afterwards improve by pairwise
-    swaps and single-part rotation flips."""
-    place_fixed()
-    fixed_boxes = list(placed)
-    for _hx, _hy in MOUNT_HOLES:      # two of these sit in the pot band
-        r = MOUNT_R + CLEAR + 2
-        fixed_boxes.append((_hx - r, _hy - r, _hx + r, _hy + r))
-    # SOIC pads can only break out sideways, so reserve elbow room beside each
-    for _pkg, _sec, _sx, _sy in SOICS:
-        fixed_boxes.append((_sx - 8, _sy - 24, _sx + 38, _sy + 24) if IC_ROT
-                           else (_sx - 24, _sy - 8, _sx + 24, _sy + 38))
-    anchors = {}
-    padpos = {(p["ref"], p["num"]): (p["x"], p["y"]) for p in pads}
-    for ref in CHIPS:
-        pts = []
-        for name, members in netdoc["nets"].items():
-            mine = [m for m in members if m.rpartition(".")[0] == ref]
-            if not mine:
-                continue
-            for m in members:
-                k = tuple(m.rpartition(".")[::2])
-                if k in padpos:
-                    pts.append(padpos[k])
-        anchors[ref] = (sum(p[0] for p in pts) / len(pts),
-                        sum(p[1] for p in pts) / len(pts)) if pts else (BW / 2, BH / 2)
+def run_placement(rng_seed):
+    """One full placement attempt.
 
-    slots = [(x, y) for y in SLOT_YS for x in SLOT_XS]
-    free = [s for s in slots
-            if not any(boxes_overlap(slot_box(s[0], s[1], "1210"), b)
-                       for b in fixed_boxes)
-            and 18 < s[0] < BW - 12 and 24 < s[1] < BH - 14]
-
-    assign, taken = {}, set()
-    placed_boxes = []          # real, rot=0, per-part boxes placed so far
-    for ref in sorted(CHIPS, key=lambda r: anchors[r][0]):
-        candidates = sorted((s for s in free if s not in taken),
-                            key=lambda s: (s[0] - anchors[ref][0]) ** 2 +
-                                          (s[1] - anchors[ref][1]) ** 2)
-        for s in candidates:
-            b = real_box(ref, s[0], s[1], 0)
-            if not any(boxes_overlap(b, ob) for ob in placed_boxes):
-                assign[ref] = s
-                taken.add(s)
-                placed_boxes.append(b)
-                break
-        else:
-            # every remaining free slot collides with an already-placed chip
-            # (shouldn't happen with the current part count/board size, but
-            # fail loudly rather than silently overlapping if it ever does)
-            assign[ref] = candidates[0]
-            taken.add(candidates[0])
-            placed_boxes.append(real_box(ref, candidates[0][0], candidates[0][1], 0))
-    return assign, free
+    Pass 1 sizes the board without knowing where the mounting holes will
+    be - they are at the corners of an outline that does not exist yet.
+    Pass 2 reserves those corners and re-runs from the pass-1 answer.  Two
+    cheap passes rather than one, because the alternative (a keepout
+    anchored to a board whose size is still moving) makes every incremental
+    cost in the search subtly wrong."""
+    PLACER.rng.seed(rng_seed)
+    PLACER.fixed_boxes = []
+    for _i, _ref in enumerate(PANEL):
+        PLACER.set_pose(PLACER.idx[_ref], _i * PANEL_PITCH, 0.0, 0)
+    for _i, _ref in enumerate(OUTPUTS):
+        PLACER.set_pose(PLACER.idx[_ref],
+                        PANEL_SPAN / 2 - OUTPUT_PITCH + _i * OUTPUT_PITCH, -170.0, 0)
+    PLACER.seed()
+    PLACER.anneal(moves=MOVES // 3, w=WEIGHTS, report=PLACE_LOG)
+    x0, y0, x1, y1 = PLACER.extent()
+    PLACER.fixed_boxes = [
+        (cx - MOUNT_KEEP, cy - MOUNT_KEEP, cx + MOUNT_KEEP, cy + MOUNT_KEEP)
+        for cx in (x0 - EDGE + MOUNT_INSET, x1 + EDGE - MOUNT_INSET)
+        for cy in (y0 - EDGE + MOUNT_INSET, y1 + EDGE - MOUNT_INSET)]
+    return PLACER.anneal(moves=MOVES, w=WEIGHTS, report=PLACE_LOG)
 
 
-def rats(assign, rot=None):
-    rot = rot or ROT
-    pos = {(p["ref"], p["num"]): (p["x"], p["y"]) for p in pads}
-    for ref, (x, y) in assign.items():
-        off = 6.0 if CHIPS[ref] == "1210" else 4.0
-        if rot.get(ref, 0) == 0:
-            pos[(ref, "1")], pos[(ref, "2")] = (x - off, y), (x + off, y)
-        else:
-            pos[(ref, "1")], pos[(ref, "2")] = (x, y - off), (x, y + off)
-    total = 0.0
-    for name, members in netdoc["nets"].items():
-        pts = [pos[tuple(m.rpartition(".")[::2])] for m in members
-               if tuple(m.rpartition(".")[::2]) in pos]
-        if len(pts) < 2:
-            continue
-        inside, rest = [pts[0]], pts[1:]
-        while rest:
-            d, j = min((math.dist(a, b), k) for k, b in enumerate(rest) for a in inside)
-            total += d
-            inside.append(rest.pop(j))
-    return total
+PLACER.seed()
+PLACER.full_cost(WEIGHTS)
+BEFORE = float(PLACER.net_hpwl.sum())
 
+# The anneal lands in a different local minimum from each start, and the
+# spread between them is worth more than the same time spent on a longer
+# single run.  Restarts are seconds; routing is minutes - so it is much
+# cheaper to search placement properly and route once than to route a
+# mediocre placement and go looking for a board size that rescues it.
+_best = (float("inf"), None, None)
+for _try in range(RESTARTS):
+    _cost = run_placement(int(os.environ.get("SEED", 7)) + 1000 * _try)
+    _x0, _y0, _x1, _y1 = PLACER.extent()
+    print("  placement %d/%d: cost %.0f, %.1f x %.1f mm"
+          % (_try + 1, RESTARTS, _cost, (_x1 - _x0 + 2 * EDGE) * 0.254,
+             (_y1 - _y0 + 2 * EDGE) * 0.254), flush=True)
+    if _cost < _best[0]:
+        _best = (_cost, PLACER.snapshot(), float(PLACER.net_hpwl.sum()))
+PLACER.restore(_best[1])
+PLACER.full_cost(WEIGHTS)
+AFTER = _best[2]
 
-def placement_valid(assign, rot, fixed_boxes):
-    boxes = [real_box(ref, x, y, rot.get(ref, 0)) for ref, (x, y) in assign.items()]
-    for b in boxes:
-        if any(boxes_overlap(b, fb) for fb in fixed_boxes):
-            return False
-    for i, a in enumerate(boxes):
-        for b in boxes[i + 1:]:
-            if boxes_overlap(a, b):
-                return False
-    return True
+POSE = PLACER.result()
+_bx1 = max(POSE[r][0] + GEOM[r][POSE[r][2]]["box"][2] for r in POSE)
+_by1 = max(POSE[r][1] + GEOM[r][POSE[r][2]]["box"][3] for r in POSE)
 
+# THE BOARD SIZE, at last: whatever the arrangement turned out to need, plus
+# an edge margin, rounded up to a whole unit so the outline lands on the
+# routing grid.
+BW = math.ceil(_bx1 + 2 * EDGE)
+BH = math.ceil(_by1 + 2 * EDGE)
+MOUNT_HOLES = [(MOUNT_INSET, MOUNT_INSET), (BW - MOUNT_INSET, MOUNT_INSET),
+               (MOUNT_INSET, BH - MOUNT_INSET), (BW - MOUNT_INSET, BH - MOUNT_INSET)]
 
-ASSIGN, FREE_SLOTS = auto_place()
-_fixed_boxes_for_search = list(placed)
-for _hx, _hy in MOUNT_HOLES:
-    _r = MOUNT_R + CLEAR + 2
-    _fixed_boxes_for_search.append((_hx - _r, _hy - _r, _hx + _r, _hy + _r))
-for _pkg, _sec, _sx, _sy in SOICS:
-    _fixed_boxes_for_search.append((_sx - 8, _sy - 24, _sx + 38, _sy + 24) if IC_ROT
-                                   else (_sx - 24, _sy - 8, _sx + 24, _sy + 38))
+# ---- commit the placement: draw every part where the search put it -------
+for _ref in sorted(POSE):
+    _x, _y, _rot = POSE[_ref]
+    xf_push(_x + EDGE, _y + EDGE, _rot)
+    try:
+        drawer(_ref)()
+    finally:
+        xf_pop()
+    _b = GEOM[_ref][_rot]["box"]
+    placed.append((_x + EDGE + _b[0], _y + EDGE + _b[1],
+                   _x + EDGE + _b[2], _y + EDGE + _b[3]))
 
-BEFORE = rats(ASSIGN)
-refs = list(ASSIGN)
-improved = True
-while improved:
-    improved = False
-    for i in range(len(refs)):
-        for j in range(i + 1, len(refs)):
-            a, b = refs[i], refs[j]
-            cur = rats(ASSIGN)
-            ASSIGN[a], ASSIGN[b] = ASSIGN[b], ASSIGN[a]
-            if (rats(ASSIGN) < cur - 1e-9 and
-                    placement_valid(ASSIGN, ROT, _fixed_boxes_for_search)):
-                improved = True
-            else:
-                ASSIGN[a], ASSIGN[b] = ASSIGN[b], ASSIGN[a]
-    for ref in ROTATABLE:
-        cur = rats(ASSIGN)
-        ROT[ref] = 1 - ROT[ref]
-        if (rats(ASSIGN) < cur - 1e-9 and
-                placement_valid(ASSIGN, ROT, _fixed_boxes_for_search)):
-            improved = True
-        else:
-            ROT[ref] = 1 - ROT[ref]
-AFTER = rats(ASSIGN)
-assert placement_valid(ASSIGN, ROT, _fixed_boxes_for_search), \
-    "placement search produced an overlapping layout - this should be unreachable"
-
-for ref, (x, y) in sorted(ASSIGN.items()):
-    placed.append(fp_chip(ref, x, y, N, VALUE[ref], CHIPS[ref], rot=ROT[ref]))
-
-# split across two lines - a single line at DESIG_SIZE would run past the
-# board edge (the old one-line/2.4pt version fit only because it was too
-# small to read, the exact defect DESIG_SIZE exists to fix)
-silk(26, BH - 10.0, "ESP P148 3-WAY VARIABLE CROSSOVER - RETUNED QUAD SMD")
-silk(26, BH - 4.5, "195Hz-1.03kHz / 73-186Hz - ONE CHANNEL")
+for _ref in POT_GANGS:
+    _x, _y, _rot = POSE[_ref]
+    # Locating-boss holes, measured clear of every pad by verify()'s own
+    # geometry rather than nested inside the drawn body outline - a real
+    # boss position for this part is not known (no verified dual-gang
+    # datasheet), so agreeing with the pads beats agreeing with a guess.
+    POT_BOSSES.extend([(_x + EDGE - 14, _y + EDGE - 22),
+                       (_x + EDGE + 14, _y + EDGE - 22)])
 
 
 # ==========================================================================
@@ -891,8 +880,26 @@ IC_REFS = set(U1S.values()) | set(U2S.values())
 
 
 def pad_dilation(ref, net):
-    if ref in IC_REFS:
-        return CLEAR + net_width(net) / 2
+    """Every pad reserves for the WIDEST trace that might pass it, plus a
+    grid margin.
+
+    IC pads used to be a deliberate exception, reserving only for their own
+    net's width and skipping the grid margin, to keep the channel between
+    adjacent SOIC pins open.  Two things were wrong with that.  The channel
+    is not actually open: SOIC pads are 2.5 units apart and a signal trace
+    needs 2.8, so nothing legal ever fit there and the exception bought
+    nothing.  And the exception applied to the pad's WHOLE perimeter, not
+    just the inter-pin gap, so a trace running past an IC pin sat exactly
+    on the clearance limit with nothing left for grid quantisation to eat -
+    which is why every layout the placement search produced came back with
+    the same 7.4-7.8 mil violations at U1A.1 and U2B.7 against an 8 mil
+    rule.  The hand-tuned board never tripped it only because no trace
+    happened to take that route.
+
+    What eats the margin is the 45 degree chamfering: it moves a finished
+    centreline off the grid nodes the router checked it on, and the
+    analysis showing a chamfer stays inside the reserved margin assumed the
+    FULL margin, which is the one thing IC pads did not have."""
     return CLEAR + MAX_W / 2
 
 
@@ -939,18 +946,6 @@ for p in pads:
         stamp_rect(p["layer"], p["x"] - p["w"] / 2, p["y"] - p["h"] / 2,
                    p["x"] + p["w"] / 2, p["y"] + p["h"] / 2,
                    NETID[p["net"]], pad_dilation(p["ref"], p["net"]))
-
-
-def text_bbox(sh):
-    """Bounding box of a top-silk TEXT shape, or None.  Shared by the
-    pre-routing keepout below and the post-hoc check in verify(), so the two
-    can't drift apart into disagreeing about what counts as an overlap."""
-    f = sh.split("~")
-    if f[0] != "TEXT" or f[7] != "3":
-        return None
-    w_ = 0.62 * float(f[9]) * len(f[10])
-    return (float(f[2]), float(f[3]) - float(f[9]),
-            float(f[2]) + w_, float(f[3]) + 0.25 * float(f[9]), f[10])
 
 
 # A pad's own literal footprint (shrunk slightly - the same shrink core_cells
@@ -1287,6 +1282,22 @@ def path_clearance_ok(net, via_pts, polys):
     return True
 
 
+def _pad_span(name):
+    pts = [(p["x"], p["y"]) for p in pads if p["net"] == name]
+    if len(pts) < 2:
+        return 0.0
+    return max(max(p[0] for p in pts) - min(p[0] for p in pts),
+               max(p[1] for p in pts) - min(p[1] for p in pts))
+
+
+# The four widest-reaching signal nets on THIS board, measured.  Four
+# because that is how many the old hardcoded list promoted (LP1 plus the
+# three *_PRE nets), and promoting more was tried and made things worse.
+LONG_HAUL = set(sorted(
+    (n for n in netdoc["nets"] if n not in POWER_NETS),
+    key=_pad_span, reverse=True)[:4])
+
+
 def route_order(n):
     """Supply rails and long-haul nets first, then IC pins, then everything
     else by size.
@@ -1318,16 +1329,19 @@ def route_order(n):
     locally - the actual cause of MID_PRE (VR4.1 to R19.2) reproducibly
     coming back split in two at 420 x 220.
 
-    ATTEMPTED AND REVERTED: generalising this to "any net whose pads span
-    more than half the board width", rather than naming LP1 explicitly, is
-    tidier and it does subsume the hardcoded case - but it promotes enough
-    additional nets to change the whole routing order, which produced MORE
-    unroutable nets, and each of those then burns a full grid-exhausting
-    relaxed retry, pushing run time past any usable timeout.  The named
-    list is uglier and it is what verifies clean.  Revisit only alongside
-    a router that can rip up and re-route."""
+    Which nets those are is now MEASURED from the placement rather than
+    listed by name.  It used to name LP1 explicitly, and an earlier attempt
+    to generalise it to "any net spanning more than half the board width"
+    was reverted for promoting so many nets that it reordered everything
+    and produced more failures, not fewer.  Both of those were artefacts of
+    a hand-tuned layout that no longer exists: with placement derived per
+    run, a hardcoded net name is just a guess about a board that has since
+    changed shape.  LONG_HAUL keeps the promotion to the same handful the
+    named list did - the widest-reaching nets, whichever they turn out to
+    be this time - so the ordering stays as conservative as the version
+    that verified clean, without pretending to know the answer in advance."""
     members = netdoc["nets"][n]
-    if n in ("GND", "+15V", "-15V", "LP1") or n.endswith("_PRE"):
+    if n in ("GND", "+15V", "-15V") or n in LONG_HAUL:
         return (-1, 0)
     return (0 if any(m.startswith("U") for m in members) else 1, len(members))
 
@@ -1902,7 +1916,8 @@ except Exception as exc:
 
 print("board %.1f x %.1f mm | %d footprints | %d pads | %d tracks | %d vias"
       % (BW * 0.254, BH * 0.254, len(FP_SPANS), len(pads), len(ROUTED), len(VIAS)))
-print("ratsnest %.0f -> %.0f mm (placement optimisation)" % (BEFORE / MM, AFTER / MM))
+print("placement: %d restarts, net half-perimeter %.0f -> %.0f mm"
+      % (RESTARTS, BEFORE / MM, AFTER / MM))
 for r in REPORT:
     print("  note:", r)
 if FAILED:

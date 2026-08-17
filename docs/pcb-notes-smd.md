@@ -11,6 +11,14 @@ throughout.
 
 One channel. Build two for stereo.
 
+> **Note:** the board committed here is the earlier *hand-placed* one, and
+> it verifies clean. `tools/gen_pcb_smd.py` has since been rebuilt around
+> the layout-first placement search described under "Layout" below, and
+> re-running it now produces a different (narrower) board that does not yet
+> route cleanly. The artifacts were left alone rather than replaced with a
+> board that fails its own DRC — see CLAUDE.md for exactly where the
+> remaining failures are.
+
 ## What is verified
 
 The generator routes the board and then checks it with geometry that does not
@@ -340,14 +348,99 @@ first attempt reused VR1/VR2's old, tighter spacing instead.
 
 ## Layout
 
-**The two quads sit side by side and rotated**, pins along their top and
-bottom edges rather than their sides. Each filter gets its own half of the board
-with its frequency pot directly below it.
+**Board size is derived from the placement, not chosen for it.**
+`tools/place.py` arranges the parts on an unbounded canvas and
+`gen_pcb_smd.py` draws the outline around the answer. There is no
+`BOARD_W`/`BOARD_H` to set.
 
-The rotation is what makes it small. With the packages side by side, pins that
-escape *sideways* both aim into the narrow channel between the two ICs; rotated,
-they escape vertically into the open space above and below. That difference is
-worth 17 % of the board:
+That is a reversal. For most of this board's history the flow was: pick a
+size, fit the layout into it, and grow it when a net would not route. It
+produced boards that verified, but it could never do better than that,
+because *a board-size search cannot fix a layout problem — it can only find
+a size large enough to hide one*. Every time it was reached for here, the
+real cause turned out to be structural, and is documented under "Routing
+five more controls" below: pot spacing, route order, a long-haul net, a
+silkscreen label sitting in a pin-escape corridor. None of those were
+area problems and none of them were fixed by area.
+
+### What the search optimises
+
+A simulated anneal over each part's **position and rotation**, costed on:
+
+| term | what it prices |
+|---|---|
+| overlap | courtyards may not intersect — ramped hard, and asserted afterwards |
+| **escape** | each side of a part needs clear depth in proportion to the pads breaking out through it |
+| congestion | RUDY wire demand against the tracks that physically fit per cell |
+| wirelength | half-perimeter per net |
+| size | height, plus any width past the panel row's floor |
+
+**The escape term is what makes rotation mean anything.** Turning a SOIC
+barely changes its area and hardly changes its wirelength; what it changes
+is which of its sides has seven pins queuing to get out. That is the thing
+that actually decided whether this board routed, every time — so it is
+priced directly rather than hoped for as a side effect of shorter wires.
+Its calibration was measured, not reasoned: pad count alone gives a one-pad
+test point almost no claim on space, and TP1/TP2 duly came back unreachable
+on a board where every IC pin routed, so every side carrying pads now has a
+floor under what it can demand as well as a cap over it.
+
+Placement takes seconds; routing takes minutes. That asymmetry is the whole
+argument for doing it this way round - the search runs several restarts and
+keeps the best, because it is far cheaper to search placement properly and
+route once than to route a mediocre placement and go looking for a board
+size that rescues it.
+
+### What is pinned, and why
+
+Three things are constraints rather than preferences, so the search is told
+about them instead of being left to rediscover them:
+
+* **The front-panel row** is a rigid group: five controls, one line, uniform
+  `PANEL_PITCH`, LOW → HIGH left to right. The pitch (80 units ≈ 20.3 mm) is
+  a *human-factors* number — a knob for a 6 mm shaft is typically 15–20 mm
+  across, so much tighter has adjacent knobs touching. The pot courtyards
+  alone would permit ~58 units, which is exactly why it cannot be left to
+  the optimiser: it has no model of fingers.
+* **The three output terminals** are a second rigid row, in the same
+  LOW → HIGH order, so each output block sits above the volume pot feeding
+  it. Left free, they scattered to three different board edges — which costs
+  nothing any of the cost terms can see, and is horrible to wire.
+* **Screw terminals must reach a board edge**, since wire arrives from
+  off-board. Expressed as "nothing may come between this part and the edge
+  it faces, within its own column" — not "this part must be the outermost
+  thing on the board", which sounds equivalent and is not: parts facing the
+  same edge at different depths can never all be flush, so that version
+  never reaches zero and the anneal stretches the board trying to pay it
+  off.
+
+### Rotation is searched for every part
+
+Footprints are drawn once, in their own local frame, and a transform stack
+turns them. Previously rotation was open-coded inside each footprint, which
+meant only chips and SOICs could rotate at all — two thirds of the board was
+un-turnable, and `fp_soic14` at 90° laid its pads from `x` rightward so the
+package centre silently landed 15 units off.
+
+The geometry the search reasons about is *probed*, never re-derived: each
+footprint is drawn into a scratch buffer at each angle it is allowed to
+take, and its courtyard and pad positions are read back off the shapes it
+actually emitted. A separately maintained copy of those dimensions is
+precisely how the dual-gang pot came to be drawn with its body hanging over
+the board edge while every check thought it fit.
+
+One consequence worth knowing about: silkscreen stays upright for
+legibility, so rotating a part moves its label's anchor while the text still
+runs left to right, which can fold a designator back across the part it
+names. That is not cosmetic — silk reserves top copper, so a label lying on
+a pin is a pin that cannot escape. `silk_ref_beside()` chooses the side in
+the part's local frame and lays the text out in board space.
+
+### The arrangement this produces
+
+The two quads sit rotated so their pins escape into open space rather than
+into the channel between them — the search finds this on its own now, but it
+was worth 17 % of the board when it was first found by hand:
 
 | Arrangement | Smallest that routes | Vias |
 |---|---|---|
@@ -356,29 +449,13 @@ worth 17 % of the board:
 | Side by side, rotated | 76.2 × 61.0 mm | 43 |
 | …plus the pot band used | 76.2 × 44.4 mm | 46 |
 | …plus width matched to purpose (first pass, 10/16 mil) | 76.2 × 50.8 mm | 46 |
-| …plus courtyard-aware collision-checked placement, per-part rotation search, 12/16 mil, chamfered corners | 73.2 × 48.5 mm | 61 |
-| **…plus a volume trim on every output (five front-panel controls, not two)** | **106.7 × 55.9 mm** | **69** |
+| …plus courtyard-aware placement, per-part rotation search, 12/16 mil, chamfered corners | 73.2 × 48.5 mm | 61 |
+| …plus a volume trim on every output (five front-panel controls, not two) | 106.7 × 55.9 mm | 69 |
 
-That last jump is placement doing more work than routing: parts now search
-their *own* rotation (0805s only - a rotated 1210 is wider than the 18-unit
-slot pitch and would guarantee a collision with its neighbour) as well as
-their position, scored the same way, and the initial assignment is
-collision-aware by construction instead of relying on a uniform slot pitch
-- both direct answers to "is there more free space beside the pots that a
-better placement could use." There was: 14 × 17 mm of it, sitting beside
-VR1 at the same height as its body, found by the wasted-area check and
-confirmed to be real (not routing headroom) by a bounded board-size sweep -
-288 × 191 units (73.2 × 48.5 mm) verifies clean; 287 wide or 190 tall, one
-unit either way, does not (a footprint-courtyard collision and an unroutable
-net respectively). More vias, because a smaller two-layer board forces more
-layer changes to route the same nets in less room - an expected trade, not a
-defect.
-
-Fewer vias as well as less area was true for the *rotation* row on its own —
-on a signal board that is worth having in its own right. `IC_ROT=0` and
-`IC_LAYOUT=stacked` select the earlier arrangements, though their exact
-sizes above predate this round of trace-width/rotation/courtyard changes and
-have not been re-swept against them.
+Those rows are all *hand-placed* boards found by size search, kept for the
+comparison they support. They are not directly comparable to what the
+placement search produces now, which is narrower and differently
+proportioned rather than uniformly smaller.
 
 ### Routing five more controls
 
@@ -491,18 +568,16 @@ not the pour is rebuilt.
 
 ## Known limitations
 
-* **420 × 220 units (106.7 × 55.9 mm) has not actually been shown to be a
-  floor for the five-control layout - it's just where the real bug got
-  found and fixed.** Most of the size search described in "Routing five
-  more controls" happened *before* the `*_PRE`-net route-order fix, chasing
-  a problem that turned out not to be about area at all; smaller sizes were
-  never re-tried once that fix was in. A tighter board plausibly still
-  exists here. `BOARD_W`, `BOARD_H` and `SLOT_PITCH` are environment
-  overrides if you want to look for it.
-* **Utilisation is 59 %, not 100 %,** for the same reason: the largest
-  empty rectangle (37 × 24 mm) is bigger, both in absolute terms and as a
-  share of the board, than the two-pot version's, and given the point
-  above there's no strong reason to believe this size is actually tight.
+* **The board size is found, not proven minimal.** It is whatever the
+  placement search converged to, and a different `SEED` gives a different
+  board. The search is stochastic and its spread between restarts is real -
+  treat the committed size as "best of the seeds tried", never as a floor.
+* **Utilisation is well under 100 %.** Some of that gap is genuine routing
+  headroom that a two-layer board needs, and some of it is the placement
+  search stopping at a local minimum. The wasted-area check reports the
+  largest empty rectangle on every run; a big one is a hint that another
+  seed or a longer `MOVES` budget may do better, not proof that the parts
+  could simply be pushed together.
 * **On-board pots cost area.** Five 9 mm-class pots (two dual-gang, three
   single-gang) and their knob spacing take room wiring pads did not. Still
   inside JLCPCB's 100 × 100 mm price tier, so fabrication cost is unchanged.
