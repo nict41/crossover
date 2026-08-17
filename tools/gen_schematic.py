@@ -106,7 +106,8 @@ VARIANTS = [
          ics=QUAD_ICS, model="MC33079", pkg="SOIC-14", pwr="pins 4 / 11",
          packages=["U1", "U2"],
          caps={"C1": ["C1"], "C2": ["C2"],
-               "C3": ["C3A", "C3B"], "C4": ["C4A", "C4B"]}),
+               "C3": ["C3A", "C3B"], "C4": ["C4A", "C4B"]},
+         volume_pots=True),
 ]
 
 W_CANVAS, H_CANVAS = 2200, 1600
@@ -364,6 +365,12 @@ def cap_bank(cfg, slot, x, y):
 def draw(cfg):
     """Place every component and wire for one variant of the crossover."""
     OY = 600        # vertical offset of the second (lower frequency) filter
+    # Variants with a volume_pots flag get a per-output attenuator between the
+    # filter and its terminal block, so the raw filter output needs a net name
+    # distinct from the one the terminal block (and everything downstream)
+    # still expects - the pot bridges the two, see the OUTPUT VOLUME CONTROLS
+    # section below.
+    vsuf = "_PRE" if cfg.get("volume_pots") else ""
 
     # ---------------- Filter 1: 680 Hz - 4.8 kHz (High / Mid crossover) -------
     netlabel("INPUT", 60, 280, anchor="end", dx=-4, dy=3)
@@ -451,7 +458,7 @@ def draw(cfg):
     w((1680, 140), (1720, 140))
     resistor("R9", "100R", 1750, 140)
     w((1780, 140), (1820, 140))
-    netlabel("HIGH", 1820, 140, anchor="start", dx=4, dy=3)
+    netlabel("HIGH" + vsuf, 1820, 140, anchor="start", dx=4, dy=3)
 
     note(1000, 85, "%s  (VR1 sets the High / Mid crossover point)" % cfg["range1"],
          anchor="middle")
@@ -526,7 +533,7 @@ def draw(cfg):
     w((1680, 140 + OY), (1720, 140 + OY))
     resistor("R19", "100R", 1750, 140 + OY)
     w((1780, 140 + OY), (1820, 140 + OY))
-    netlabel("MID", 1820, 140 + OY, anchor="start", dx=4, dy=3)
+    netlabel("MID" + vsuf, 1820, 140 + OY, anchor="start", dx=4, dy=3)
 
     # output inverter U4B (bass output; U3A already inverts the midrange)
     w((1580, 300 + OY), (1620, 300 + OY))
@@ -542,7 +549,7 @@ def draw(cfg):
     w((1880, 300 + OY), (1920, 300 + OY))
     resistor("R22", "100R", 1950, 300 + OY)
     w((1980, 300 + OY), (2020, 300 + OY))
-    netlabel("LOW", 2020, 300 + OY, anchor="start", dx=4, dy=3)
+    netlabel("LOW" + vsuf, 2020, 300 + OY, anchor="start", dx=4, dy=3)
 
     note(1000, 85 + OY, "%s  (VR2 sets the Mid / Low crossover point)" % cfg["range2"],
          anchor="middle")
@@ -596,6 +603,31 @@ def draw(cfg):
         netlabel(tp, 1590, 1260 + 80 * i, anchor="start", dx=4, dy=3)
     note(1050, 1215, "SIGNAL CONNECTORS AND TEST POINTS", weight="bold")
 
+    # ---------------- per-output volume control -------------------------
+    # Single-gang attenuator between each filter's output and its terminal
+    # block: signal in (left, *_PRE), wiper out (bottom, feeds the terminal
+    # block via the unchanged HIGH/MID/LOW net name), ground (right). Audio
+    # taper, not linear - this drives the amp directly and gets ridden by
+    # ear, not set once and forgotten like VR1/VR2's crossover point.
+    if cfg.get("volume_pots"):
+        vx = 1830
+        # 110px pitch, not 80 like the terminal blocks: each pot's own
+        # ref/value text (above) plus its wiper's net label (below) span
+        # about 90px, so 80 let the wiper label collide with the next
+        # pot's designator text - caught by looking at the render, not
+        # by anything that would have failed a DRC-style check.
+        for k, (ref, nm) in enumerate([("VR3", "HIGH"), ("VR4", "MID"), ("VR5", "LOW")]):
+            oy = 1250 + 110 * k
+            pot(ref, "10k log", vx, oy, package="RK097-AUDIO-10K")
+            w((vx - 30, oy), (vx - 60, oy))
+            netlabel(nm + "_PRE", vx - 60, oy, anchor="end", dx=-4, dy=3)
+            w((vx + 30, oy), (vx + 60, oy))
+            gnd(vx + 60, oy)
+            w((vx, oy + 30), (vx, oy + 50))
+            netlabel(nm, vx, oy + 50, anchor="middle", dy=16)
+        note(vx - 30, 1215, "OUTPUT VOLUME (audio taper, wired as attenuator)",
+             weight="bold")
+
     note(60, 1180, "SUPPLY BYPASSING - one 100nF ceramic per rail, at each IC",
          weight="bold")
 
@@ -611,7 +643,10 @@ def draw(cfg):
             "" if len(cfg["packages"]) == 1 else "s", cfg["rq"]),
          size="8pt", color="#404040")
     note(60, 1560, "VR1 and VR2 are dual-gang 20k linear pots wired as rheostats. "
-         "TP1 / TP2 null at the crossover frequency and may be omitted.",
+         "TP1 / TP2 null at the crossover frequency and may be omitted."
+         + (" VR3/VR4/VR5 are single-gang 10k audio-taper pots wired as "
+            "attenuators - per-output volume, not part of the filter."
+            if cfg.get("volume_pots") else ""),
          size="8pt", color="#404040")
 
 
@@ -844,6 +879,9 @@ def write_bom(filename="bom.csv"):
         "MID": "Output terminal block to the midrange amplifier",
         "LOW": "Output terminal block to the bass amplifier",
         "10k": "R10/R11/R23/R24 are the TP1/TP2 null network - optional",
+        "10k log": "3 x single-gang 10k audio/log-taper pots (VR3 HIGH, VR4 MID, "
+                   "VR5 LOW); wired as an attenuator between the filter output "
+                   "and its terminal block, not as a rheostat",
     }
     out = ["Qty,Value,Package,Designators,Notes"]
     for qty, val, pkg, refs in rows:
@@ -973,10 +1011,21 @@ def signal_map(nets, cfg):
     # parallel parts (the SMD build's 2 x 33nF) fold onto their slot name:
     # they span the same two nets, so folding keeps the comparison exact
     fold = {r: slot for slot, refs in cfg["caps"].items() for r in refs}
+    # The volume_pots variant tees each output through an attenuator that no
+    # other variant has: VR3/4/5 don't exist elsewhere (not a divergence to
+    # flag, just absent), and the filter side of the tee is named *_PRE
+    # rather than HIGH/MID/LOW so the pot has two distinct nets to sit
+    # between - normalise that back before comparing, since the filter
+    # itself still lands on the exact same net every other variant does.
+    volume_refs = {"VR3", "VR4", "VR5"} if cfg.get("volume_pots") else set()
     out = {}
     for name, members in nets.items():
+        if name.endswith("_PRE"):
+            name = name[:-len("_PRE")]
         for m in members:
             ref, _, num = m.rpartition(".")
+            if ref in volume_refs:
+                continue
             ref = fold.get(ref, ref)
             alias = PIN_ROLE.get((ref, num))
             if alias:

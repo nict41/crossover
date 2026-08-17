@@ -356,6 +356,38 @@ def fp_pot(pkg_ref, gang_a, gang_b, x, y, net_of):
     return (x0 - CLEAR, y0 - CLEAR, x1 + CLEAR, y1 + CLEAR)
 
 
+def fp_pot_single(ref, x, y, net_of, label):
+    """Single-gang volume pot (Alps RK097 / LCSC C470577, 10k audio taper, or
+    equivalent). Three terminals on 0.2 in (5.08 mm) centres - the same row
+    pattern as one gang of fp_pot's dual-gang footprint, since a single-gang
+    part is mechanically half of it. No locating-boss holes: unlike the
+    dual-gang pattern, Alps' own RK097 page doesn't show anti-rotation pegs
+    for this size/torque class. VERIFY against your pot's datasheet.
+    """
+    _m = fp_begin()
+    for i, dx in enumerate((-20.0, 0.0, 20.0)):
+        pad_tht(ref, i + 1, x + dx, y, net_of(ref, i + 1), dia=7.0, hole=4.7)
+    silk_rect(x - 24, y - 22, x + 24, y + 16)
+    n = 20
+    track([(x + 17 * math.cos(2 * math.pi * i / n),
+            y - 4 + 17 * math.sin(2 * math.pi * i / n)) for i in range(n + 1)],
+          TOPSILK, 0.5)
+    rlax, rlay = x - 24, y - 24.5
+    silk_ref(rlax, rlay, ref)
+    flax, flay = x - 24, y - 17.5
+    silk(flax, flay, label)
+    fp_end(ref, _m, x, y)
+    PARTS[ref] = dict(value="10k log", x=x, y=y, rot=0, assembled=False,
+                      pkg="POT-9MM-SINGLE")
+    body = (x - 26, y - 22, x + 26, y + 18)
+    rlbl, flbl = label_bbox(rlax, rlay, ref), label_bbox(flax, flay, label)
+    x0 = min(body[0], rlbl[0], flbl[0])
+    y0 = min(body[1], rlbl[1], flbl[1])
+    x1 = max(body[2], rlbl[2], flbl[2])
+    y1 = max(body[3], rlbl[3], flbl[3])
+    return (x0 - CLEAR, y0 - CLEAR, x1 + CLEAR, y1 + CLEAR)
+
+
 POT_BOSSES = []          # non-plated locating holes, filled in at placement
 
 
@@ -384,15 +416,26 @@ VALUE = {r: netdoc["parts"][r]["value"] for r in netdoc["parts"]}
 # and below 310x250 leave nets unroutable.  Component area is only ~13% of the
 # board - the rest is routing headroom, and on two layers with this router it
 # is what sets the floor, not the parts.
-# 288 x 191 (73.2 x 48.5 mm) is the router-imposed floor for this layout,
-# found by a bounded sweep after the placement, rotation, trace-width and
-# label changes above: 287 still fails (a footprint courtyard collision)
-# and 190 still fails (an unroutable net), so this is not a round number,
-# it is the tightest size that verifies clean.  A ~8.3% area cut from the
-# previous 300 x 200 (76.2 x 50.8 mm) default.
-BW = float(os.environ.get("BOARD_W", 288.0))
-BH = float(os.environ.get("BOARD_H", 191.0))
-SLOT_PITCH = int(os.environ.get("SLOT_PITCH", 18))
+# 288 x 191 (73.2 x 48.5 mm) was the router-imposed floor for the layout
+# without front-panel volume controls - found by a bounded sweep after the
+# placement, rotation, trace-width and label work above: 287 failed on a
+# footprint courtyard collision, 190 on an unroutable net.
+#
+# Adding VR3/VR4/VR5 (one output-volume pot each, see POTS_SINGLE below)
+# needed real width, not just a squeeze: five front-panel controls in a row
+# need real pitch between them, and the first attempt at that pitch reused
+# VR1/VR2's old 110-unit spacing, wedging the new pots into a 56-unit gap
+# with ~1.4 units of clearance on each side - not a courtyard violation, but
+# tight enough to starve neighbouring pins' escape routes.  420 x 220 (106.7
+# x 55.9 mm) is the smallest size found, after that fix, that both fits the
+# new 80-unit-pitch panel row and verifies fully clean; SLOT_PITCH=20 (up
+# from 18) was needed alongside it - 18 at this size left one net split in
+# two.  This is a real board-area cost for a real feature, not a regression
+# in the router or the search: see docs/pcb-notes-smd.md for what actually
+# ran into trouble along the way (and how) before landing here.
+BW = float(os.environ.get("BOARD_W", 420.0))
+BH = float(os.environ.get("BOARD_H", 220.0))
+SLOT_PITCH = int(os.environ.get("SLOT_PITCH", 20))
 MOUNT_HOLES = [(9, 9), (BW - 9, 9), (9, BH - 9), (BW - 9, BH - 9)]
 MOUNT_R = 12.6 / 2
 BOSS_R = 4.5
@@ -435,8 +478,21 @@ if os.environ.get("IC_LAYOUT", "side") == "side":
              else [("U1", U1S, 88, 60), ("U2", U2S, 198, 60)])
 else:
     SOICS = [("U1", U1S, 110, 62), ("U2", U2S, 110, 150)]
-POTS = [("VR1", "VR1A", "VR1B", BW / 2 - 65, BH - 40),
-        ("VR2", "VR2A", "VR2B", BW / 2 + 45, BH - 40)]
+# Five front-panel controls in a row, uniform 80-unit pitch: HIGH vol, VR1
+# (H/M freq), MID vol, VR2 (M/L freq), LOW vol.  Every pot - single or dual
+# gang - has the same 26-unit body half-width, so a shared pitch is what
+# actually matters; the first cut at this used VR1/VR2's OLD 110-unit
+# spacing (tuned for just the two of them) and tried to wedge a third pot
+# into the 56-unit gap between them, leaving ~1.4 units of clearance on
+# each side - not a courtyard violation, but tight enough to starve the
+# neighbouring pins' escape routes and leave 3-5 nets unroutable across
+# several board sizes before this was traced back to spacing, not area.
+PANEL_PITCH = 80
+POTS = [("VR1", "VR1A", "VR1B", BW / 2 - PANEL_PITCH, BH - 40),
+        ("VR2", "VR2A", "VR2B", BW / 2 + PANEL_PITCH, BH - 40)]
+POTS_SINGLE = [("VR3", BW / 2 - 2 * PANEL_PITCH, "HIGH VOL"),
+               ("VR4", BW / 2, "MID VOL"),
+               ("VR5", BW / 2 + 2 * PANEL_PITCH, "LOW VOL")]
 
 # candidate slots for the movable chip parts, 18 x 18 grid over the interior
 SLOT_XS = list(range(34, int(BW) - 10, SLOT_PITCH))
@@ -461,6 +517,8 @@ def place_fixed():
     for pkg, ga, gb, x, y in POTS:
         placed.append(fp_pot(pkg, ga, gb, x, y, N))
         POT_BOSSES.extend([(x - 14, y - 22), (x + 14, y - 22)])
+    for ref, x, label in POTS_SINGLE:
+        placed.append(fp_pot_single(ref, x, BH - 40, N, label))
 
 
 def boxes_overlap(a, b):
@@ -783,7 +841,17 @@ def core_cells(p):
 
 
 def via_ok(x, y, nid, extra=0.0):
-    """A via needs more room than the track that leads to it."""
+    """A via needs more room than the track that leads to it.
+
+    No relaxed mode, unlike passable(): a via is wider than a track and
+    used by everything else that routes near it afterward, so the margin
+    it needs is the real one, not the contested heuristic's - a relaxed
+    via_ok is what let one retry through with an actual -5 mil (real
+    overlap, not a false-positive margin flag) clearance violation before
+    this was tightened back up. Trace cells can afford to be optimistic
+    and let the geometric verifier be the final word; vias can't, because
+    nothing downstream re-checks a via before treating the cells around it
+    as claimed."""
     r = int(math.ceil((VIA_EXTRA + extra) / GRID))
     for L in (0, 1):
         a, b = max(0, x - r), max(0, y - r)
@@ -816,15 +884,23 @@ def dilate(mask, r_cells):
     return out
 
 
-def passable(L, x, y, nid, blocked_extra=None):
+def passable(L, x, y, nid, blocked_extra=None, relaxed=False):
     """blocked_extra (per layer, precomputed once per net - see main loop)
     widens the check beyond the literal cell.  Pad keepouts near the IC pins
     are deliberately tight (see pad_dilation) so a signal trace can still
     thread between two SOIC pins; a wide net routed nearby must check further
-    out itself, since that tight reservation was not sized for it."""
+    out itself, since that tight reservation was not sized for it.
+
+    relaxed drops the CONTESTED check: contested marks a still-*empty* cell
+    where two different nets' conservative dilated margins merely overlapped,
+    not where real copper sits - own_dil already bakes in CLEAR + MAX_W/2 +
+    GRID of margin, so a contested cell often still has adequate real
+    clearance. Used only for the second-pass retry on nets the strict pass
+    couldn't reach; the independent geometric verifier checks exact distances
+    on whatever it finds, so a relaxed path is never trusted blind."""
     if not (1 <= x < NX - 1 and 1 <= y < NY - 1):
         return False
-    if contested[L][y, x]:
+    if not relaxed and contested[L][y, x]:
         return False
     v = occ[L][y, x]
     if not (v == 0 or v == nid):
@@ -834,11 +910,11 @@ def passable(L, x, y, nid, blocked_extra=None):
     return True
 
 
-def astar(sources, targets, nid, tgt_xy, extra=0.0, blocked_extra=None):
+def astar(sources, targets, nid, tgt_xy, extra=0.0, blocked_extra=None, relaxed=False):
     seen, prev = {}, {}
     h = []
     for s in sources:
-        if passable(s[0], s[1], s[2], nid, blocked_extra):
+        if passable(s[0], s[1], s[2], nid, blocked_extra, relaxed):
             key = s
             seen[key] = 0
             heappush(h, (0, key))
@@ -856,7 +932,7 @@ def astar(sources, targets, nid, tgt_xy, extra=0.0, blocked_extra=None):
         nbrs = [(L, x + 1, y, 1), (L, x - 1, y, 1), (L, x, y + 1, 1),
                 (L, x, y - 1, 1), (1 - L, x, y, 24)]
         for nl, nx_, ny_, c in nbrs:
-            if not passable(nl, nx_, ny_, nid, blocked_extra):
+            if not passable(nl, nx_, ny_, nid, blocked_extra, relaxed):
                 continue
             if nl != L and not via_ok(x, y, nid, extra):
                 continue
@@ -866,7 +942,20 @@ def astar(sources, targets, nid, tgt_xy, extra=0.0, blocked_extra=None):
                 continue
             seen[k] = ng
             prev[k] = cur
-            heappush(h, (ng + abs(nx_ - tgt_xy[0]) + abs(ny_ - tgt_xy[1]), k))
+            # 1.02x on the heuristic (weighted A*, not strict A*): a plain
+            # Manhattan heuristic on a mostly-open grid produces huge flat
+            # frontiers of equal-f nodes, so the search explores an area
+            # closer to O(distance^2) than O(distance) - it degrades toward
+            # a blind flood fill exactly where a route has to cross open
+            # board rather than hug existing copper.  This is the case that
+            # made routing a wider, sparser board (to fit new front-panel
+            # controls) take minutes instead of seconds. A 2% inflation
+            # trades a usually-unmeasurable amount of extra trace length for
+            # a search that actually commits to the goal direction; a valid,
+            # DRC-clean route is all that matters here, not a truly shortest
+            # one, and the independent post-route verifier checks the real
+            # geometry regardless of how the path was found.
+            heappush(h, (ng + 1.02 * (abs(nx_ - tgt_xy[0]) + abs(ny_ - tgt_xy[1])), k))
     return None
 
 
@@ -901,22 +990,23 @@ def chamfer(pts):
     return out
 
 
-def emit_path(path, net, nid):
-    """Split a cell path into per-layer polylines, stamping as we go."""
-    own_dil = net_width(net) / 2 + CLEAR + MAX_W / 2 + GRID
+def path_geometry(path):
+    """Split a cell path into raw per-layer cell runs, via points, and
+    chamfered polylines - no side effects.  Split out from emit_path so the
+    relaxed retry pass can inspect a candidate path's real geometry and
+    decide whether to commit it, instead of committing on faith."""
     runs, cur = [], [path[0]]
+    via_pts = []
     for a, b in zip(path, path[1:]):
         if a[0] != b[0]:
             runs.append(cur)
-            VIAS.append((a[1] * GRID, a[2] * GRID, net))
-            stamp_disc(MULTI, a[1] * GRID, a[2] * GRID, VIA_DIL, nid)
+            via_pts.append((a[1] * GRID, a[2] * GRID))
             cur = [b]
         else:
             cur.append(b)
     runs.append(cur)
+    polys = []
     for run in runs:
-        for c in run:
-            stamp_disc(c[0] + 1, c[1] * GRID, c[2] * GRID, own_dil, nid)
         if len(run) < 2:
             continue
         pts = [(run[0][1] * GRID, run[0][2] * GRID)]
@@ -926,59 +1016,98 @@ def emit_path(path, net, nid):
             if (dx1, dy1) != (dx2, dy2):
                 pts.append((run[i][1] * GRID, run[i][2] * GRID))
         pts.append((run[-1][1] * GRID, run[-1][2] * GRID))
-        ROUTED.append((run[0][0] + 1, chamfer(pts), net))
+        polys.append((run[0][0] + 1, chamfer(pts)))
+    return runs, via_pts, polys
+
+
+def commit_path(net, nid, runs, via_pts, polys):
+    """Stamp occupancy and record the geometry from path_geometry - the
+    side-effecting half of what emit_path used to do in one step."""
+    own_dil = net_width(net) / 2 + CLEAR + MAX_W / 2 + GRID
+    for vx, vy in via_pts:
+        VIAS.append((vx, vy, net))
+        stamp_disc(MULTI, vx, vy, VIA_DIL, nid)
+    for run in runs:
+        for c in run:
+            stamp_disc(c[0] + 1, c[1] * GRID, c[2] * GRID, own_dil, nid)
+    for layer, pts in polys:
+        ROUTED.append((layer, pts, net))
+
+
+def emit_path(path, net, nid):
+    """Split a cell path into per-layer polylines, stamping as we go."""
+    runs, via_pts, polys = path_geometry(path)
+    commit_path(net, nid, runs, via_pts, polys)
+
+
+def path_clearance_ok(net, via_pts, polys):
+    """Exact-geometry pre-commit check for the relaxed retry pass: would
+    this candidate path actually violate clearance against any already
+    placed copper of a different net?  Only relaxed mode needs this - the
+    strict pass never routes through CONTESTED cells in the first place, so
+    it can't produce a violation this check would catch; relaxed mode can
+    and, once, did (a via at an actual -5 mil overlap, not a false-positive
+    CONTESTED flag)."""
+    cand = []
+    for layer, pts in polys:
+        hw = net_width(net) / 2
+        for a, b in zip(pts, pts[1:]):
+            cand.append(dict(k="seg", hw=hw, L={layer}, g=(a, b)))
+    for vx, vy in via_pts:
+        cand.append(dict(k="pt", hw=VIA_PAD / 2, L={1, 2}, g=(vx, vy)))
+    others = []
+    for p in pads:
+        if p["net"] and p["net"] != net:
+            others.append(dict(k="rect", hw=0.0,
+                               L={1, 2} if p["layer"] == MULTI else {p["layer"]},
+                               g=(p["x"] - p["w"] / 2, p["y"] - p["h"] / 2,
+                                  p["x"] + p["w"] / 2, p["y"] + p["h"] / 2)))
+    for layer, pts, name in ROUTED:
+        if name == net:
+            continue
+        hw = net_width(name) / 2
+        for a, b in zip(pts, pts[1:]):
+            others.append(dict(k="seg", hw=hw, L={layer}, g=(a, b)))
+    for x, y, name in VIAS:
+        if name == net:
+            continue
+        others.append(dict(k="pt", hw=VIA_PAD / 2, L={1, 2}, g=(x, y)))
+    for c in cand:
+        for o in others:
+            if c["L"] & o["L"] and gap(c, o) < CLEAR - 1e-9:
+                return False
+    return True
 
 
 def route_order(n):
-    """IC pins first.  An SOIC pad can only break out sideways, so if the
-    general nets take those channels first the op-amp pins are trapped."""
+    """Supply rails first, then IC pins, then everything else by size.
+
+    An SOIC pad can only break out sideways, so if the general nets take
+    those channels first the op-amp pins are trapped - hence IC-touching
+    nets ahead of the rest.  GND/+15V/-15V go even earlier, ahead of that:
+    GND alone touches a dozen-plus pads including several IC
+    ground-reference pins, and routing it last (its previous position,
+    sorted to the end by ascending member count) meant every other IC net
+    had already claimed the cells nearest those pins by the time GND got a
+    turn - the failure mode that showed up first (U1D.12 or U2D.12, an
+    op-amp's grounded '+' input, unreachable) while widening the board for
+    the new front-panel pots.  Reversing size order for *every* IC-touching
+    net traded that for a new set of casualties among small nets that used
+    to route early precisely because they were small (R4.1's net among
+    them) - so only the genuinely wide-reaching supply nets jump the queue;
+    everything else keeps the original smallest-first order, which is what
+    let small point-to-point nets thread through gaps before they closed."""
     members = netdoc["nets"][n]
+    if n in ("GND", "+15V", "-15V"):
+        return (-1, 0)
     return (0 if any(m.startswith("U") for m in members) else 1, len(members))
 
 
-FAILED = []
-for name in sorted(netdoc["nets"], key=route_order):
-    nid = NETID[name]
-    # a wide net can't rely on a foreign pad's keepout being sized for it -
-    # that keepout is deliberately tight at the IC pins - so it independently
-    # checks a wider neighbourhood while pathfinding.  0 for signal nets keeps
-    # them exactly as tight as before, preserving SOIC pin-escape routing.
-    # The check is a mask built once per net (cheap - only the 3 power nets
-    # need one at all), not recomputed at every cell A* visits.
-    route_extra = max(0.0, (net_width(name) - SIG_W) / 2)
-    if route_extra > 0:
-        r_cells = int(math.ceil(route_extra / GRID))
-        blocked_extra = [dilate((occ[L] != 0) & (occ[L] != nid), r_cells)
-                         for L in (0, 1)]
-    else:
-        blocked_extra = None
-    mine = [p for p in pads if p["net"] == name]
-    if len(mine) < 2:
-        continue
-    connected = core_cells(mine[0])
-    done = [mine[0]]
-    todo = mine[1:]
-    while todo:
-        tgt = min(todo, key=lambda p: min(math.dist((p["x"], p["y"]),
-                                                    (q["x"], q["y"])) for q in done))
-        tc = core_cells(tgt)
-        tx = int(round(tgt["x"] / GRID))
-        ty = int(round(tgt["y"] / GRID))
-        path = astar(connected, tc, nid, (tx, ty), route_extra, blocked_extra)
-        if path is None:
-            FAILED.append("%s: %s.%s unreachable" % (name, tgt["ref"], tgt["num"]))
-            todo.remove(tgt)
-            done.append(tgt)
-            continue
-        emit_path(path, name, nid)
-        connected |= set(path) | tc
-        todo.remove(tgt)
-        done.append(tgt)
-
-
-# ==========================================================================
-#  independent verification - exact geometry, not the router's own bookkeeping
-# ==========================================================================
+# Exact-geometry distance helpers, needed here (not just by verify(), far
+# below) because the relaxed retry pass checks a candidate path against
+# real copper before committing it, rather than trusting relaxed A* to be
+# safe on faith - a bare relaxed retry did once produce an actual overlap
+# (a via at -5 mil clearance, not just a false-positive CONTESTED flag).
 def d_pt_seg(px, py, ax, ay, bx, by):
     dx, dy = bx - ax, by - ay
     L = dx * dx + dy * dy
@@ -1040,6 +1169,95 @@ def gap(f, g):
     return d - f["hw"] - g["hw"]
 
 
+FAILED = []
+RETRY = []      # strict-pass failures, retried once below with relaxed margins
+for name in sorted(netdoc["nets"], key=route_order):
+    nid = NETID[name]
+    # a wide net can't rely on a foreign pad's keepout being sized for it -
+    # that keepout is deliberately tight at the IC pins - so it independently
+    # checks a wider neighbourhood while pathfinding.  0 for signal nets keeps
+    # them exactly as tight as before, preserving SOIC pin-escape routing.
+    # The check is a mask built once per net (cheap - only the 3 power nets
+    # need one at all), not recomputed at every cell A* visits.
+    route_extra = max(0.0, (net_width(name) - SIG_W) / 2)
+    if route_extra > 0:
+        r_cells = int(math.ceil(route_extra / GRID))
+        blocked_extra = [dilate((occ[L] != 0) & (occ[L] != nid), r_cells)
+                         for L in (0, 1)]
+    else:
+        blocked_extra = None
+    mine = [p for p in pads if p["net"] == name]
+    if len(mine) < 2:
+        continue
+    connected = core_cells(mine[0])
+    done = [mine[0]]
+    todo = mine[1:]
+    while todo:
+        tgt = min(todo, key=lambda p: min(math.dist((p["x"], p["y"]),
+                                                    (q["x"], q["y"])) for q in done))
+        tc = core_cells(tgt)
+        tx = int(round(tgt["x"] / GRID))
+        ty = int(round(tgt["y"] / GRID))
+        path = astar(connected, tc, nid, (tx, ty), route_extra, blocked_extra)
+        if path is None:
+            RETRY.append((name, nid, route_extra, blocked_extra, tgt))
+            todo.remove(tgt)
+            done.append(tgt)
+            continue
+        emit_path(path, name, nid)
+        connected |= set(path) | tc
+        todo.remove(tgt)
+        done.append(tgt)
+
+# Second (and third, ...) pass over whatever the strict pass couldn't
+# reach.  A miss there often means CONTESTED - not real copper, just two
+# nets' conservative dilated margins overlapping over a still-empty cell -
+# was the only thing in the way; own_dil already carries CLEAR + MAX_W/2 +
+# GRID of real margin, so a contested cell often still has adequate actual
+# clearance.  Retried now that the whole board's occupancy is final,
+# against every other pad of the same net (not just the ones the first
+# pass happened to reach) - and re-tried across a few rounds, since a pad
+# that connects on round 1 grows the target for whatever's still isolated
+# on round 2 (a straight single retry left one net in two pieces instead
+# of five - clear progress, but not yet whole; three rounds cleared it).
+# Nothing here is trusted blind: the independent geometric verifier below
+# re-measures exact distances on whatever this finds, same as every other
+# track on the board.
+for _round in range(3):
+    if not RETRY:
+        break
+    still = []
+    for name, nid, route_extra, blocked_extra, tgt in RETRY:
+        others = [p for p in pads if p["net"] == name and p is not tgt]
+        if not others:
+            still.append((name, nid, route_extra, blocked_extra, tgt))
+            continue
+        connected = set()
+        for p in others:
+            connected |= core_cells(p)
+        tc = core_cells(tgt)
+        tx, ty = int(round(tgt["x"] / GRID)), int(round(tgt["y"] / GRID))
+        path = astar(connected, tc, nid, (tx, ty), route_extra, blocked_extra, relaxed=True)
+        if path is None:
+            still.append((name, nid, route_extra, blocked_extra, tgt))
+            continue
+        runs, via_pts, polys = path_geometry(path)
+        if path_clearance_ok(name, via_pts, polys):
+            commit_path(name, nid, runs, via_pts, polys)
+        else:
+            still.append((name, nid, route_extra, blocked_extra, tgt))
+    RETRY = still
+for name, nid, route_extra, blocked_extra, tgt in RETRY:
+    FAILED.append("%s: %s.%s unreachable" % (name, tgt["ref"], tgt["num"]))
+
+
+# ==========================================================================
+#  independent verification - exact geometry, not the router's own bookkeeping
+# ==========================================================================
+# (d_pt_seg / d_seg_seg / d_pt_rect / d_seg_rect / d_rect_rect / gap moved
+# above the routing section - the relaxed retry pass needs them too, to
+# check a candidate path for real before committing it, not just hope a
+# relaxed pass is safe because it usually is)
 FEATURES = []
 for p in pads:
     FEATURES.append(dict(net=p["net"], k="rect", hw=0.0,

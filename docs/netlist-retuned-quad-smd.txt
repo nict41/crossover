@@ -6,12 +6,15 @@ variant: esp-p148-3way-crossover-retuned-quad-smd
 
 +15V       C5.1  C7.1  J1.1  U1A.4  U2A.4
 -15V       C6.2  C8.2  J1.3  U1A.11  U2A.11
-GND        C5.2  C6.1  C7.2  C8.1  J1.2  J2.2  J3.2  J4.2  J5.2  R1.2  R13.2  R3.2  U1C.10  U1D.12  U2B.5  U2C.10  U2D.12
-HIGH       J3.1  R9.2
+GND        C5.2  C6.1  C7.2  C8.1  J1.2  J2.2  J3.2  J4.2  J5.2  R1.2  R13.2  R3.2  U1C.10  U1D.12  U2B.5  U2C.10  U2D.12  VR3.3  VR4.3  VR5.3
+HIGH       J3.1  VR3.2
+HIGH_PRE   R9.2  VR3.1
 INPUT      C0.1  J2.1
-LOW        J5.1  R22.2
+LOW        J5.1  VR5.2
+LOW_PRE    R22.2  VR5.1
 LP1        C2.2  R11.1  R15.1  R6.2  U1D.14
-MID        J4.1  R19.2
+MID        J4.1  VR4.2
+MID_PRE    R19.2  VR4.1
 N1100_300  C1.2  R4.2  U1C.8  VR1B.1
 N1100_900  C3A.2  C3B.2  R14.2  U2B.7  VR2B.1
 N1280_300  R8.1  VR1B.2  VR1B.3
@@ -36,4 +39,4 @@ N950_900   C3A.1  C3B.1  R17.2  U2B.6
 TP1        R10.1  R11.2  TP1.1
 TP2        R23.1  R24.2  TP2.1
 
-31 nets, 54 parts, 123 component pins, 42 junctions
+34 nets, 57 parts, 132 component pins, 42 junctions

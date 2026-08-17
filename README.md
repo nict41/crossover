@@ -179,24 +179,28 @@ the netlist is complete:
 
 ### SMD board, routed, for JLCPCB fab + assembly
 
-`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **73.2 × 48.5 mm**,
-two layers, **fully routed**, frequency pots mounted on the board, trace width
-matched to purpose (12 mil signal, 16 mil power/ground), 45° chamfered
-corners, every SMD part a real LCSC line item.
+`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **106.7 × 55.9 mm**,
+two layers, **fully routed**, five front-panel controls on the board (a
+frequency pot and an output-volume trim per band), trace width matched to
+purpose (12 mil signal, 16 mil power/ground), 45° chamfered corners, every
+SMD part a real LCSC line item.
 
 ![SMD board](pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.png)
 
 ```
-46 footprints | 123 pads | 122 tracks | 61 vias
+49 footprints | 132 pads | 130 tracks | 69 vias
 verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
           pads match the schematic exactly, and no silkscreen sits over a
           trace or a via
 ```
 
-Sockets on the rear edge, the two frequency pots on the front edge 25 mm apart
-for knob clearance — the board mounts flat behind the front panel. The pot
-footprint is the standard 9 mm dual-gang pattern and **needs checking against
-your pot's datasheet**; see the notes.
+Sockets on the rear edge; on the front edge, left to right: HIGH volume,
+HIGH/MID frequency, MID volume, MID/LOW frequency, LOW volume - the board
+mounts flat behind the front panel. The volume trims are single-gang 10 kΩ
+audio-taper pots (Alps RK097, LCSC C470577) wired as attenuators between
+each filter's output and its terminal block; the frequency pots are the
+standard 9 mm dual-gang pattern. Both **need checking against your parts'
+datasheets**; see the notes.
 
 Routing is checked by geometry that doesn't reuse the router's own bookkeeping:
 exact pairwise clearance between every copper feature, union-find connectivity
