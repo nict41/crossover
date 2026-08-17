@@ -179,15 +179,15 @@ the netlist is complete:
 
 ### SMD board, routed, for JLCPCB fab + assembly
 
-`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **76.2 × 50.8 mm**,
+`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **73.2 × 48.5 mm**,
 two layers, **fully routed**, frequency pots mounted on the board, trace width
-matched to purpose (10 mil signal, 16 mil power/ground), every SMD part a real
-LCSC line item.
+matched to purpose (12 mil signal, 16 mil power/ground), 45° chamfered
+corners, every SMD part a real LCSC line item.
 
 ![SMD board](pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.png)
 
 ```
-46 footprints | 123 pads | 114 tracks | 46 vias
+46 footprints | 123 pads | 122 tracks | 61 vias
 verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
           pads match the schematic exactly, and no silkscreen sits over a
           trace or a via
@@ -200,9 +200,11 @@ your pot's datasheet**; see the notes.
 
 Routing is checked by geometry that doesn't reuse the router's own bookkeeping:
 exact pairwise clearance between every copper feature, union-find connectivity
-per net, mounting-hole keepout, and pad-set equality with the schematic. Those
-checks caught four defects that would otherwise have reached the fab — see
-[`docs/pcb-notes-smd.md`](docs/pcb-notes-smd.md).
+per net, mounting-hole keepout, footprint-courtyard overlap, and pad-set
+equality with the schematic. Those checks have caught real defects that would
+otherwise have reached the fab, including a pre-existing footprint overlap
+between two adjacent parts that nothing before the courtyard check could even
+detect — see [`docs/pcb-notes-smd.md`](docs/pcb-notes-smd.md).
 
 Part numbers were looked up live against the JLCPCB parts API; **re-check stock
 before ordering**. Export Gerbers, BOM *and* CPL from EasyEDA rather than using
