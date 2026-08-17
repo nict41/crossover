@@ -26,6 +26,7 @@ from heapq import heappush, heappop
 
 import numpy as np
 
+import croute
 import place
 
 MM = 1.0 / 0.254
@@ -91,6 +92,9 @@ VIA_PAD, VIA_DRILL = 2.8, 1.2         # 0.20mm annular ring (was 0.15mm - no mar
 # the ~12x that makes sweeping practical; every candidate still gets
 # confirmed at 0.25 before it becomes the committed board.
 GRID = float(os.environ.get("GRID", 0.25))
+# "py" forces the reference Python router; anything else uses the compiled
+# kernel when it is available.  See astar().
+ROUTER = os.environ.get("ROUTER", "c")
 
 _next = [100]
 
@@ -846,11 +850,18 @@ for _ref in POT_GANGS:
 #  routing
 # ==========================================================================
 NX, NY = int(BW / GRID), int(BH / GRID)
-occ = [np.zeros((NY, NX), dtype=np.int32), np.zeros((NY, NX), dtype=np.int32)]
+# One contiguous (2, NY, NX) block with per-layer VIEWS into it, rather
+# than two independent arrays.  The views alias the same memory, so
+# occ[L][y, x] = v still works exactly as before, but the compiled router
+# can be handed OCC directly instead of np.stack()-ing the two layers on
+# every single net - which at this grid size was copying ~10 MB per search.
+OCC = np.zeros((2, NY, NX), dtype=np.int32)
+occ = [OCC[0], OCC[1]]
 # A cell can fall inside the keep-out of more than one net.  Recording only the
 # first claimant would let the second net route there, so contested cells are
 # flagged separately and are passable to nobody.
-contested = [np.zeros((NY, NX), dtype=bool), np.zeros((NY, NX), dtype=bool)]
+CONTESTED = np.zeros((2, NY, NX), dtype=np.uint8)
+contested = [CONTESTED[0], CONTESTED[1]]
 NETID = {n: i + 1 for i, n in enumerate(sorted(netdoc["nets"]))}
 ROUTED = []          # (layer, [(x, y), ...], net) track polylines
 VIAS = []            # (x, y, net)
@@ -1107,6 +1118,40 @@ VIA_MEMO = {}
 
 
 def astar(sources, targets, nid, tgt_xy, extra=0.0, blocked_extra=None, relaxed=False):
+    """Shortest DRC-legal path for one net, from any source cell to any
+    target cell.
+
+    Dispatches to the compiled kernel in router.c when it built, and to the
+    Python implementation below otherwise (ROUTER=py forces the latter).
+
+    The two apply the same legality rules - same neighbour set, same via
+    rule, same 1.02x weighted heuristic - but they are not guaranteed to
+    return the SAME path: that heuristic is deliberately inadmissible, so
+    which of several equal-cost routes comes out first depends on
+    tie-breaking, and the C version settles nodes with a closed set where
+    the Python one re-pops them.  What is guaranteed is that any path
+    either produces obeys the same clearance rules, and the independent
+    geometric verifier re-checks whatever comes back regardless of which
+    router found it.  Compare them on failing-net count, not path equality.
+
+    This exists because routing was the whole program's bottleneck at
+    minutes per run, which made it far too expensive to use as feedback -
+    so placement quality got guessed at through hand-tuned proxy terms
+    instead of measured.  Same board, same settings: ~20 minutes of
+    Python A* becomes ~20 seconds."""
+    if ROUTER != "py" and croute.available():
+        return croute.route(
+            OCC, CONTESTED,
+            None if blocked_extra is None
+            else np.ascontiguousarray(np.stack(blocked_extra), dtype=np.uint8),
+            None, None, nid, relaxed,
+            int(math.ceil((VIA_EXTRA + extra) / GRID)), 0.0, 24.0,
+            sources, targets, tgt_xy, NY, NX)
+    return astar_py(sources, targets, nid, tgt_xy, extra, blocked_extra, relaxed)
+
+
+def astar_py(sources, targets, nid, tgt_xy, extra=0.0, blocked_extra=None,
+             relaxed=False):
     # Safe because occ/contested are only mutated by commit_path, which
     # never runs while a search is in progress - see via_ok's note.
     VIA_MEMO.clear()

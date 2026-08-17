@@ -67,11 +67,38 @@ class Part:
         return self.geom[rot]["pads"]
 
 
-def _side_counts(box, pads):
+SIDES = ((-1, 0), (1, 0), (0, -1), (0, 1))          # left, right, top, bottom
+
+
+def _rotate(v, q):
+    x, y = v
+    for _ in range(q % 4):
+        x, y = -y, x
+    return x, y
+
+
+def _side_counts(box, pads, outward=None):
     """How many pads break out through each side (left, right, top,
-    bottom), decided by which courtyard edge each pad is nearest.  Derived
-    from the geometry rather than declared per footprint, so it stays right
-    for a part this module has never been told anything about."""
+    bottom).
+
+    For a part pinned to a board edge - the panel row, a screw terminal -
+    there is no choice about it: everything it connects to is inboard, so
+    every pad escapes directly away from that edge, and it needs clear
+    depth there in proportion to ALL of its pads.
+
+    For everything else the side is taken from whichever courtyard edge
+    each pad is nearest, derived from geometry rather than declared per
+    footprint, so it stays right for a part this module has never been told
+    anything about.  That rule is wrong for the edge-mounted parts, which
+    is why they are special-cased: a pot's outer pins sit only ~7 units
+    from the left and right of its courtyard but ~25 from the top, so
+    nearest-edge called them sideways escapes - into the gap between two
+    pots, where there is plenty of room and nothing to connect to - and the
+    upward corridor they actually need went unpriced entirely.  Connections
+    to the pot row were the single biggest group of routing failures."""
+    if outward is not None:
+        return [len(pads) if s == tuple(-v for v in outward) else 0
+                for s in SIDES]
     x0, y0, x1, y1 = box
     n = [0, 0, 0, 0]
     for _r, _n, _net, px, py, _w, _h in pads:
@@ -119,7 +146,9 @@ class Placer:
         for p in parts:
             per = {}
             for r in p.rots:
-                cnt = _side_counts(p.box(r), p.pads(r))
+                out = (_rotate(p.outward, r // 90)
+                       if p.outward is not None else None)
+                cnt = _side_counts(p.box(r), p.pads(r), out)
                 per[r] = [0.0 if c == 0 else max(floor, min(c, cap)) * track_pitch
                           for c in cnt]
             self.need.append(per)

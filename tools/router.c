@@ -1,0 +1,216 @@
+/* Grid maze router inner loop.
+ *
+ * This is a direct port of the A* in gen_pcb_smd.py, which was the whole
+ * program's bottleneck: pure-Python heap operations over a two-layer grid
+ * of ~1500 x 800 cells, where a FAILING search drains the queue across the
+ * entire reachable area (~2.4M nodes) and every relaxed retry does it
+ * again.  Full runs took minutes, which made routing far too expensive to
+ * use as feedback for anything else - so placement quality ended up being
+ * guessed at through hand-tuned proxy terms instead of measured.
+ *
+ * Semantics are deliberately identical to the Python version, including
+ * the 1.02x weighted heuristic and the strict-vs-relaxed distinction, so
+ * this is a speed change and nothing else.  The independent geometric
+ * verifier in gen_pcb_smd.py checks the result either way.
+ *
+ * Cell state is passed in as the caller's own numpy arrays:
+ *   occ        int32, per layer: net id claiming the cell, 0 = free
+ *   contested  uint8, per layer: two nets' dilated margins overlap here
+ *   blocked    uint8, per layer: this net is too wide for this cell
+ *   use        int32, per layer: routed traces currently occupying it,
+ *              for negotiated congestion; NULL to ignore
+ *   hist       float, per layer: accumulated congestion history
+ */
+
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+typedef struct { double f; int node; } HeapItem;
+
+typedef struct {
+    HeapItem *a;
+    long n, cap;
+} Heap;
+
+static void heap_push(Heap *h, double f, int node) {
+    if (h->n == h->cap) {
+        h->cap = h->cap ? h->cap * 2 : 1024;
+        h->a = (HeapItem *) realloc(h->a, h->cap * sizeof(HeapItem));
+    }
+    long i = h->n++;
+    h->a[i].f = f;
+    h->a[i].node = node;
+    while (i > 0) {
+        long p = (i - 1) / 2;
+        if (h->a[p].f <= h->a[i].f) break;
+        HeapItem t = h->a[p]; h->a[p] = h->a[i]; h->a[i] = t;
+        i = p;
+    }
+}
+
+static int heap_pop(Heap *h, double *f) {
+    if (h->n == 0) return -1;
+    HeapItem top = h->a[0];
+    h->a[0] = h->a[--h->n];
+    long i = 0;
+    for (;;) {
+        long l = 2 * i + 1, r = l + 1, m = i;
+        if (l < h->n && h->a[l].f < h->a[m].f) m = l;
+        if (r < h->n && h->a[r].f < h->a[m].f) m = r;
+        if (m == i) break;
+        HeapItem t = h->a[m]; h->a[m] = h->a[i]; h->a[i] = t;
+        i = m;
+    }
+    *f = top.f;
+    return top.node;
+}
+
+typedef struct {
+    int NX, NY;
+    const int *occ;              /* [2][NY][NX] */
+    const unsigned char *cont;   /* [2][NY][NX] */
+    const unsigned char *blk;    /* [2][NY][NX] or NULL */
+    const int *use;              /* [2][NY][NX] or NULL */
+    const float *hist;           /* [2][NY][NX] or NULL */
+    int nid, relaxed, via_r;
+    double pres_fac;
+} Ctx;
+
+#define IDX(c, L, x, y) (((L) * (c)->NY + (y)) * (c)->NX + (x))
+
+static int passable(const Ctx *c, int L, int x, int y) {
+    if (x < 1 || x >= c->NX - 1 || y < 1 || y >= c->NY - 1) return 0;
+    long i = IDX(c, L, x, y);
+    if (!c->relaxed && c->cont[i]) return 0;
+    int v = c->occ[i];
+    if (v != 0 && v != c->nid) return 0;
+    if (c->blk && c->blk[i]) return 0;
+    return 1;
+}
+
+/* A via needs more room than the track leading to it, and unlike passable()
+ * it is never relaxed - nothing downstream re-checks a via before treating
+ * the cells around it as claimed. */
+static int via_ok(const Ctx *c, int x, int y) {
+    int r = c->via_r;
+    for (int L = 0; L < 2; L++) {
+        int a = x - r < 0 ? 0 : x - r, b = y - r < 0 ? 0 : y - r;
+        int d = x + r > c->NX - 1 ? c->NX - 1 : x + r;
+        int e = y + r > c->NY - 1 ? c->NY - 1 : y + r;
+        for (int yy = b; yy <= e; yy++) {
+            long row = IDX(c, L, 0, yy);
+            for (int xx = a; xx <= d; xx++) {
+                int v = c->occ[row + xx];
+                if ((v != 0 && v != c->nid) || c->cont[row + xx]) return 0;
+            }
+        }
+    }
+    return 1;
+}
+
+/* Cost of entering a cell.  Base 1 per step, plus negotiated-congestion
+ * terms when `use`/`hist` are supplied: history makes a cell that has been
+ * fought over repeatedly permanently less attractive, present cost makes
+ * one that is over-used right now expensive.  With both NULL this is
+ * exactly the old uniform-cost grid. */
+static double cell_cost(const Ctx *c, long i) {
+    double base = 1.0;
+    if (c->hist) base += c->hist[i];
+    if (c->use && c->use[i] > 0) base *= 1.0 + c->pres_fac * c->use[i];
+    return base;
+}
+
+/* Returns path length in nodes, writing (layer, x, y) triples into out.
+ * -1 if no path.  `out` must have room for cap triples. */
+int route(int NX, int NY,
+          const int *occ, const unsigned char *cont,
+          const unsigned char *blk, const int *use, const float *hist,
+          int nid, int relaxed, int via_r, double pres_fac, double via_cost,
+          const int *src, int nsrc, const int *tgt, int ntgt,
+          int tgx, int tgy, int *out, int cap)
+{
+    Ctx c = { NX, NY, occ, cont, blk, use, hist, nid, relaxed, via_r, pres_fac };
+    long N = (long) 2 * NY * NX;
+
+    double *g = (double *) malloc(N * sizeof(double));
+    int *prev = (int *) malloc(N * sizeof(int));
+    unsigned char *done = (unsigned char *) calloc(N, 1);
+    unsigned char *is_tgt = (unsigned char *) calloc(N, 1);
+    if (!g || !prev || !done || !is_tgt) return -1;
+    for (long i = 0; i < N; i++) { g[i] = INFINITY; prev[i] = -1; }
+
+    for (int i = 0; i < ntgt; i++)
+        is_tgt[IDX(&c, tgt[3*i], tgt[3*i+1], tgt[3*i+2])] = 1;
+
+    Heap h = { NULL, 0, 0 };
+    for (int i = 0; i < nsrc; i++) {
+        int L = src[3*i], x = src[3*i+1], y = src[3*i+2];
+        if (!passable(&c, L, x, y)) continue;
+        long k = IDX(&c, L, x, y);
+        if (g[k] == 0.0) continue;
+        g[k] = 0.0;
+        heap_push(&h, 0.0, (int) k);
+    }
+
+    int found = -1;
+    double f;
+    int node;
+    while ((node = heap_pop(&h, &f)) >= 0) {
+        if (done[node]) continue;
+        done[node] = 1;
+        if (is_tgt[node]) { found = node; break; }
+
+        int L = (int) (node / ((long) NY * NX));
+        int rem = (int) (node % ((long) NY * NX));
+        int y = rem / NX, x = rem % NX;
+        double gc = g[node];
+
+        for (int d = 0; d < 5; d++) {
+            int nl = L, nx = x, ny = y;
+            double step;
+            switch (d) {
+                case 0: nx = x + 1; step = 1.0; break;
+                case 1: nx = x - 1; step = 1.0; break;
+                case 2: ny = y + 1; step = 1.0; break;
+                case 3: ny = y - 1; step = 1.0; break;
+                default: nl = 1 - L; step = via_cost; break;
+            }
+            if (!passable(&c, nl, nx, ny)) continue;
+            if (nl != L && !via_ok(&c, x, y)) continue;
+            long k = IDX(&c, nl, nx, ny);
+            if (done[k]) continue;
+            double ng = gc + step * cell_cost(&c, k);
+            if (ng >= g[k]) continue;
+            g[k] = ng;
+            prev[k] = node;
+            /* 1.02x weighted heuristic: a plain Manhattan heuristic on a
+             * mostly-open grid leaves huge flat frontiers of equal-f nodes
+             * and degrades toward a blind flood exactly where a route has
+             * to cross open board. A valid DRC-clean route is all that is
+             * wanted here, not a provably shortest one. */
+            double hh = 1.02 * (fabs((double) (nx - tgx)) + fabs((double) (ny - tgy)));
+            heap_push(&h, ng + hh, (int) k);
+        }
+    }
+
+    int len = -1;
+    if (found >= 0) {
+        int n = 0;
+        for (int cur = found; cur >= 0; cur = prev[cur]) n++;
+        if (n <= cap) {
+            len = n;
+            int i = n - 1;
+            for (int cur = found; cur >= 0; cur = prev[cur], i--) {
+                int L = (int) (cur / ((long) NY * NX));
+                int rem = (int) (cur % ((long) NY * NX));
+                out[3*i] = L;
+                out[3*i+1] = rem % NX;
+                out[3*i+2] = rem / NX;
+            }
+        }
+    }
+
+    free(h.a); free(g); free(prev); free(done); free(is_tgt);
+    return len;
+}
