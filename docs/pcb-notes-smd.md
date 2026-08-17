@@ -17,8 +17,8 @@ The generator routes the board and then checks it with geometry that does not
 reuse the router's own bookkeeping. On the current output:
 
 ```
-board 106.7 x 55.9 mm | 49 footprints | 132 pads | 137 tracks | 80 vias
-board utilisation 59%; largest empty rectangle 37 x 24 mm at (70, 11)
+board 106.7 x 55.9 mm | 49 footprints | 132 pads | 139 tracks | 79 vias
+board utilisation 58%; largest empty rectangle 37 x 27 mm at (70, 11)
 verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
           pads match the schematic exactly, and no silkscreen sits over a
           trace or a via
@@ -167,6 +167,27 @@ chamfering every corner.
 0.15 mm, which an independent DFM review flagged as leaving essentially no
 margin against ordinary drill-to-pad registration tolerance at a
 fabricator. 0.20 mm is comfortably inside JLCPCB's process capability.
+
+### Ground stitching
+
+Ground is poured on both layers, and every through-hole part - the five
+pots and all five terminal blocks - ties those two pours together for free
+simply by being a plated hole. The SMD-only ground connections don't get
+that: `R1`, `R3` and `R13` (the input bias return and the two Q-setting
+resistors) reach the opposite pour only through whatever single via the
+router happened to place while treating GND as an ordinary net.
+
+Each of those now gets a **deliberate second via placed right beside it**,
+after all routing (including retries) is finished. It matters most at
+`R1`, the input stage's ground reference, where the signal is at its
+smallest and has no gain ahead of it to swamp any hum picked up across a
+higher-impedance ground path.
+
+Each candidate position is checked with the same strict `via_ok()` the
+router itself uses, and the first of four offsets that passes is taken, so
+a spot that would actually crowd existing copper is skipped rather than
+forced. Cheap insurance: 5 GND vias on the current board, no measurable
+cost in area or routing.
 
 ## Silkscreen over copper
 
