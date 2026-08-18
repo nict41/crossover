@@ -55,6 +55,7 @@ def _load():
             np.ctypeslib.ndpointer(np.int32, flags="C"), ctypes.c_int,   # tgt
             ctypes.c_int, ctypes.c_int,                         # target x, y
             np.ctypeslib.ndpointer(np.int32, flags="C"), ctypes.c_int,   # out
+            ctypes.c_long,                                      # max_expand
         ]
         _LIB = lib
     except Exception as e:                     # noqa: BLE001 - any failure falls back
@@ -66,6 +67,9 @@ def _load():
 def available():
     _load()
     return _LIB is not None
+
+
+MAX_EXPAND = int(os.environ.get("MAX_EXPAND", 0))     # 0 = uncapped
 
 
 def route(occ, contested, blocked, use, hist, nid, relaxed, via_r,
@@ -96,7 +100,7 @@ def route(occ, contested, blocked, use, hist, nid, relaxed, via_r,
                    nid, 1 if relaxed else 0, via_r, pres_fac, via_cost,
                    src, len(src) // 3, tgt, len(tgt) // 3,
                    int(tgt_xy[0]), int(tgt_xy[1]),
-                   out, 2 * ny * nx)
+                   out, 2 * ny * nx, MAX_EXPAND)
     if n < 0:
         return None
     return [tuple(int(v) for v in out[3 * i:3 * i + 3]) for i in range(n)]

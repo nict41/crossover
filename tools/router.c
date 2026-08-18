@@ -162,7 +162,7 @@ int route(int NX, int NY,
           const unsigned char *blk, const int *use, const float *hist,
           int nid, int relaxed, int via_r, double pres_fac, double via_cost,
           const int *src, int nsrc, const int *tgt, int ntgt,
-          int tgx, int tgy, int *out, int cap)
+          int tgx, int tgy, int *out, int cap, long max_expand)
 {
     Ctx c = { NX, NY, occ, cont, blk, use, hist, nid, relaxed, via_r, pres_fac };
     long N = (long) 2 * NY * NX;
@@ -195,8 +195,21 @@ int route(int NX, int NY,
     int found = -1;
     double f;
     int node;
+    long expanded = 0;
     while ((node = heap_pop(&h, &f)) >= 0) {
         if (done[node]) continue;
+        /* Expansion cap.  A FAILING search is far more expensive than a
+         * successful one - with no path to the target it drains the queue
+         * across the whole reachable grid, ~2.9M nodes here - and a board
+         * search spends most of its time on boards that fail.
+         *
+         * This is a SEARCH FILTER, not a production setting: capping makes
+         * the router pessimistic (it will give up on some routes it could
+         * have found), exactly like GRID=0.5, so a candidate that passes
+         * still has to be confirmed by an uncapped run.  Capping it in
+         * production was tried twice and reverted both times - it silently
+         * broke routable nets.  0 means no cap. */
+        if (max_expand > 0 && ++expanded > max_expand) { found = -1; break; }
         done[node] = 1;
         if (is_tgt[node]) { found = node; break; }
 

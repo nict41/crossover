@@ -51,10 +51,21 @@ def problem_count(out):
             + len(re.findall(r"^  UNROUTED", out, re.M)))
 
 
+# A failing board is far more expensive to route than a passing one - a
+# failed A* drains the queue across the whole reachable grid - and a search
+# spends most of its time on boards that fail.  Capping expansions makes
+# the router pessimistic, so this is a FILTER: whatever comes back clean
+# still has to be confirmed by an uncapped production run.  Same bargain as
+# GRID=0.5, and the same rule - never in production, where capping was
+# tried twice and silently broke routable nets.
+SEARCH_MAX_EXPAND = "400000"
+
+
 def trial(job, env_extra):
     seed, rseed = job
     env = dict(os.environ, SWEEP="1", SEED=str(seed),
                ROUTE_SEED=str(rseed), **env_extra)
+    env.setdefault("MAX_EXPAND", SEARCH_MAX_EXPAND)
     try:
         out = subprocess.run([sys.executable, GEN], env=env, timeout=1800,
                              capture_output=True, text=True).stdout
@@ -114,7 +125,10 @@ def main():
     for r in broke:
         print("  --                            SEED=%d ROUTE_SEED=%d  (%s)"
               % (r["seed"], r["rseed"], r["note"]))
-    print("\n%d/%d verified clean" % (len(clean), len(results)))
+    print("\n%d/%d passed the filter (MAX_EXPAND=%s - confirm the winner "
+          "with an uncapped run)" % (len(clean), len(results),
+                                     os.environ.get("MAX_EXPAND",
+                                                    SEARCH_MAX_EXPAND)))
     if clean:
         print("smallest clean: SEED=%d ROUTE_SEED=%d at %.1f x %.1f mm"
               % (clean[0]["seed"], clean[0]["rseed"], clean[0]["w"], clean[0]["h"]))

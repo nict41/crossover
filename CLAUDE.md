@@ -231,11 +231,32 @@ structure, JLCPCB fab limits, BOM/CPL, LCSC stock). It is ~5% larger in
 area than the hand-placed board it replaced, mostly because silkscreen had
 to thicken to be printable; the gain is in method, not size.
 
+**The placement anneal is compiled too** (`anneal.c`, loaded by
+`canneal.py`; `PLACER=py` forces the Python one). After the router moved to
+C, placement was 85% of a cold run - 26.6 s of 31.2 s - and a board search
+is hundreds of placements, so it dominated the whole workflow. It is now
+**1.1 s**. `place.py` remains the readable reference: the cost model is
+written and explained there, and the C version applies the same terms with
+the same weights. The RNGs differ, so a given `SEED` does *not* give the
+same layout in both - measured head to head on three seeds, the C one gave
+5/14/13 DRC problems where Python gave 19/25/15, so it is not a quality
+regression.
+
+**Search uses a capped router** (`MAX_EXPAND`, set by `find_board.py`, never
+in production). A *failing* A* is far more expensive than a passing one -
+it drains the queue over the whole reachable grid - and a search spends
+most of its time on boards that fail. 400k expansions is ~2x faster for
+almost the same verdict. Like `GRID=0.5` it is a pessimistic filter, so
+confirm any winner with an uncapped run. Capping in *production* was tried
+twice and reverted twice: it silently breaks routable nets.
+
 **Run times, after the optimisation work** — a full cold run is ~33 s
 (placement ~25 s, routing ~5 s, verify ~3 s); a re-run reusing the cached
 placement is **~4.5 s**. Before: ~25 minutes. What did it:
 * `router.c` — the grid A* compiled and called via ctypes. Routing was
   ~20 min of every run.
+* `anneal.c` — the placement anneal, once routing stopped being the
+  bottleneck and placement became 85% of the run.
 * **Placement cache** (`.place-cache/`) — placement is deterministic in its
   inputs, and route-order search re-runs the same placement many times.
   Keyed on the probed footprint geometry and every placement weight, so

@@ -52,6 +52,11 @@ import random
 
 import numpy as np
 
+try:
+    import canneal
+except ImportError:                     # reference implementation still works
+    canneal = None
+
 INF = float("inf")
 
 
@@ -462,7 +467,24 @@ class Placer:
 
     # ------------------------------------------------------------------
     def anneal(self, moves=60000, w=None, report=None):
+        """Dispatches to the compiled annealer when it is available.
+
+        The Python implementation below is the reference: it is what the
+        cost model is written in and what the comments explain.  The C one
+        applies the same terms with the same weights, but its RNG differs,
+        so the two explore different trajectories and a given SEED does not
+        give the same board.  PLACER=py forces this one."""
         w = dict(w or {})
+        if canneal is not None and canneal.available():
+            ok = canneal.anneal(self, moves, w, self.rng.randrange(1 << 62))
+            if not ok:
+                self.legalise()
+            cost = self.full_cost(w)
+            assert self._legal(), "placement search returned an overlapping layout"
+            return cost
+        return self._anneal_py(moves, w, report)
+
+    def _anneal_py(self, moves, w, report=None):
         cost = self.full_cost(w)
         ov = self.total_overlap()
         best, best_state = (cost if self._legal() else INF), self.snapshot()

@@ -1647,6 +1647,9 @@ for name in sorted(netdoc["nets"], key=route_order):
 # Nothing here is trusted blind: the independent geometric verifier below
 # re-measures exact distances on whatever this finds, same as every other
 # track on the board.
+if os.environ.get("RETRY_LOG"):
+    print("  strict pass: %d net-targets needed a relaxed retry" % len(RETRY),
+          flush=True)
 for _round in range(3):
     if not RETRY:
         break
