@@ -665,9 +665,20 @@ TITLE_LINES = ["ESP P148 3-WAY VARIABLE CROSSOVER",
                "RETUNED QUAD SMD - ONE CHANNEL",
                "195Hz-1.03kHz / 73-186Hz"]
 
+# Electrolytics are identified by VALUE, not by designator.  C0 used to be
+# the only one and was named explicitly; the board now also has bulk supply
+# decoupling and per-output DC blocking, all the same 10 uF part, and a
+# hardcoded "C0" would have silently placed those as 0805 chip caps.
+# A LIST, sorted - not a set.  This is iterated below to assign rotations,
+# and a set of strings iterates in an order that changes with Python's
+# per-process hash seed.  That changed the order parts were added to ROTS,
+# which changed their indices, which changed the sequence of random moves
+# the annealer made: the same SEED gave a different board on about one run
+# in three.  A search is worthless if its results do not reproduce.
+ELECTRO = sorted(r for r in VALUE if VALUE[r] == "10uF")
 CHIPS = {r: ("1210" if VALUE[r] == "33nF" else "0805")
          for r in VALUE if r.startswith("R") or
-         (r.startswith("C") and r not in ("C0",))}
+         (r.startswith("C") and r not in ELECTRO)}
 
 # Board-edge clearance for parts, and how far in from the corner each
 # mounting hole sits.
@@ -695,7 +706,7 @@ def drawer(ref):
         return lambda: fp_soic14(ref, SOIC_SECTIONS[ref], 0, 0, N)
     if ref in TERMS:
         return lambda: fp_term(ref, 0, 0, N, **TERMS[ref])
-    if ref == "C0":
+    if ref in ELECTRO:
         return lambda: fp_elec(ref, 0, 0, N, VALUE[ref])
     if ref in ("TP1", "TP2"):
         return lambda: fp_pads(ref, 0, 0, N, n=1, label=ref)
@@ -720,7 +731,8 @@ for _r in SOIC_SECTIONS:
     ROTS[_r] = (0, 90, 180, 270)      # which way the 14 pins escape
 for _r in TERMS:
     ROTS[_r] = (0, 90, 180, 270)      # which board edge the wires enter from
-ROTS["C0"] = (0, 90)
+for _r in ELECTRO:
+    ROTS[_r] = (0, 90)
 ROTS["TP1"] = ROTS["TP2"] = (0,)      # single round pad - rotation is a no-op
 ROTS[TITLE_REF] = (0,)
 for _r in PANEL:

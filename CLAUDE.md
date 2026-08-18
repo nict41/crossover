@@ -294,6 +294,20 @@ numpy with plain Python in the placer (numpy is still ~3x faster at n=49).
   and present-cost must not be ramped so hard that history never gets a
   say. It is a coordination deadlock the per-net rip-up granularity does
   not escape; rip up *regions*, not single nets.
+* **Three correct circuit fixes are written and switched off, all blocked
+  by the same wall.** Output DC blocking (`OUTPUT_CAPS=1`) and bulk supply
+  decoupling (`BULK_CAPS=1`) are in gen_schematic.py. Measured with
+  determinism fixed: 49 footprints route clean ~1 try in 80; 52 is 0 in
+  320; 54 is 0 in 320. Shrinking the added parts to a third of their area
+  changed nothing (0 in 160), so it is the parts and nets themselves, not
+  their size. Do not delete them - they are right and the router is what
+  is behind.
+* **Determinism is not free and is worth checking.** A `set` of designators
+  was iterated to assign rotations; Python randomises set-of-string
+  iteration per process, so part indices moved, so the annealer's move
+  sequence moved, and the same SEED gave a different board about one run in
+  three - which silently invalidated a whole round of searches. If a search
+  result will not reproduce, suspect ordering before anything else.
 * **The next real lever is the router, not the placer.** It is still
   single-pass with no rip-up, which is why route *order* matters and why
   `route_order()` exists at all. Negotiated congestion routing (route

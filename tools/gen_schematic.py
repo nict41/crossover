@@ -107,7 +107,28 @@ VARIANTS = [
          packages=["U1", "U2"],
          caps={"C1": ["C1"], "C2": ["C2"],
                "C3": ["C3A", "C3B"], "C4": ["C4A", "C4B"]},
-         volume_pots=True),
+         volume_pots=True,
+         # SMD variant only.  The through-hole variants are reference
+         # builds with hand-placed boards; adding parts to them would
+         # disturb those layouts for no benefit to the board actually being
+         # manufactured.
+         # Bulk decoupling is OFF by default.  It is real but modest, and
+         # with both it and the output blocking caps fitted (54 footprints)
+         # nothing routed across 320 seed/route-order combinations.  The
+         # output caps protect your speakers from a failed op-amp; bulk
+         # decoupling shifts an umbilical resonance that mostly wants
+         # fixing at the supply end anyway - so when only one of them can
+         # fit, it is this one that gives way.  BULK_CAPS=1 turns it on.
+         # Both OFF by default, and both are correct circuit changes that
+         # the PCB cannot currently take.  Measured, with determinism fixed:
+         # 49 footprints route clean about 1 try in 80; add the three output
+         # blocking caps (52) and it is 0 in 320; add bulk as well (54) and
+         # it is 0 in 320 again.  Shrinking the output caps to a 1210
+         # ceramic footprint - a third of the area - did not help either
+         # (0 in 160), so it is the extra parts and nets themselves, not
+         # their size.  See docs/design-review.md.
+         bulk_caps=bool(os.environ.get("BULK_CAPS")),
+         output_caps=bool(os.environ.get("OUTPUT_CAPS"))),
 ]
 
 W_CANVAS, H_CANVAS = 2200, 1600
@@ -565,6 +586,30 @@ def draw(cfg):
     w((130, 1350), (180, 1350))
     netlabel("-15V", 180, 1350, anchor="start", dx=4, dy=3)
 
+    n_pkg = len(cfg["packages"])
+    if cfg.get("bulk_caps"):
+        # The board's only other supply decoupling is 100 nF per rail per
+        # IC, and the rails arrive over an umbilical from an off-board
+        # supply.  Wiring runs about 1 uH per metre, which resonates with
+        # ceramics alone somewhere in the low hundreds of kHz - exactly
+        # where an op-amp's supply rejection has fallen away.  A bulk
+        # electrolytic at the connector damps it.
+        bulk = ["C%d" % (5 + 2 * n_pkg), "C%d" % (6 + 2 * n_pkg)]
+        bkx = 250
+        netlabel("+15V", bkx, 1240, anchor="middle", dy=-14)
+        w((bkx, 1240), (bkx, 1260))
+        capacitor(bulk[0], "10uF", bkx, 1290, vertical=True, polar=True,
+                  label_side=-1, package="CASE-D5xL5.4")
+        w((bkx, 1320), (bkx, 1350))
+        w((bkx, 1350), (bkx + 40, 1350))
+        gnd(bkx + 40, 1350)
+        w((bkx, 1350), (bkx, 1380))
+        capacitor(bulk[1], "10uF", bkx, 1410, vertical=True, polar=True,
+                  label_side=-1, package="CASE-D5xL5.4")
+        w((bkx, 1440), (bkx, 1460))
+        netlabel("-15V", bkx, 1460, anchor="middle", dy=16)
+        note(bkx, 1208, "BULK", size="7pt", anchor="middle")
+
     for i, ic in enumerate(cfg["packages"]):
         bx = 350 + i * 170
         netlabel("+15V", bx, 1240, anchor="middle", dy=-14)
@@ -623,8 +668,32 @@ def draw(cfg):
             netlabel(nm + "_PRE", vx - 60, oy, anchor="end", dx=-4, dy=3)
             w((vx + 30, oy), (vx + 60, oy))
             gnd(vx + 60, oy)
-            w((vx, oy + 30), (vx, oy + 50))
-            netlabel(nm, vx, oy + 50, anchor="middle", dy=16)
+            if cfg.get("output_caps"):
+                # Series DC blocking, on the WIPER side of the attenuator.
+                # A failed op-amp stuck at a rail can no longer push DC into
+                # a DC-coupled power amplifier and from there into a
+                # speaker.  10 uF into a 10 k amplifier input puts the
+                # corner near 1.3 Hz, far below anything the LOW band
+                # carries.
+                #
+                # Between the filter and the pot would be the better place
+                # electrically - it would also keep DC off the pot track,
+                # which is what makes a volume control crackle as it wears -
+                # but that puts the cap in the middle of a *_PRE net, and
+                # those already cross most of the board.  Splitting them
+                # cost the board its routability outright: 0 clean boards
+                # out of 320 seed/route-order combinations, against 1 in 80
+                # without.  Here the cap is local to the pot and terminal it
+                # sits between.
+                cap = "C%d" % (7 + 2 * n_pkg + k)
+                w((vx, oy + 30), (vx, oy + 44))
+                capacitor(cap, "10uF", vx, oy + 74, vertical=True, polar=True,
+                          label_side=-1, package="CASE-D5xL5.4")
+                w((vx, oy + 104), (vx, oy + 118))
+                netlabel(nm, vx, oy + 118, anchor="middle", dy=16)
+            else:
+                w((vx, oy + 30), (vx, oy + 50))
+                netlabel(nm, vx, oy + 50, anchor="middle", dy=16)
         note(vx - 30, 1215, "OUTPUT VOLUME (audio taper, wired as attenuator)",
              weight="bold")
 
@@ -1018,13 +1087,29 @@ def signal_map(nets, cfg):
     # between - normalise that back before comparing, since the filter
     # itself still lands on the exact same net every other variant does.
     volume_refs = {"VR3", "VR4", "VR5"} if cfg.get("volume_pots") else set()
+    # Supply caps are excluded from the signal comparison; SIGNAL caps must
+    # not be.  These used to be told apart by a regex on the designator
+    # ("C5 and up"), which happened to work only because every cap above C4
+    # was a bypass - the moment output DC blocking caps were added they
+    # would have been silently excluded too, quietly weakening the one
+    # check that guarantees the variants agree.  Now it is stated.
+    n_pkg = len(cfg["packages"])
+    supply_refs = {"C%d" % r for r in range(5, 5 + 2 * n_pkg)}
+    if cfg.get("bulk_caps"):
+        supply_refs |= {"C%d" % (5 + 2 * n_pkg), "C%d" % (6 + 2 * n_pkg)}
+    # The output blocking caps sit in series in each output, so this
+    # variant has one more net per output than the others.  Same situation
+    # as the volume pots above: fold the cap out and treat both sides as
+    # the one signal, which is what it is.
+    outcap_refs = ({"C%d" % (7 + 2 * n_pkg + k) for k in range(3)}
+                   if cfg.get("output_caps") else set())
     out = {}
     for name, members in nets.items():
         if name.endswith("_PRE"):
             name = name[:-len("_PRE")]
         for m in members:
             ref, _, num = m.rpartition(".")
-            if ref in volume_refs:
+            if ref in volume_refs or ref in outcap_refs:
                 continue
             ref = fold.get(ref, ref)
             alias = PIN_ROLE.get((ref, num))
@@ -1033,22 +1118,25 @@ def signal_map(nets, cfg):
                     continue
                 out[alias] = name
             else:
-                if re.fullmatch(r"C([5-9]|[1-9]\d+)", ref):
-                    continue            # C5 and up are supply bypass
+                if ref in supply_refs:
+                    continue
                 out["%s.%s" % (ref, num)] = name
     return out
 
 
 def check_power(nets, cfg):
-    """Every package gets both rails and one bypass cap per rail."""
+    """Every package gets both rails and one bypass cap per rail, plus a
+    bulk cap per rail where the variant has them."""
     n = len(cfg["packages"])
-    for rail, want in (("+15V", n), ("-15V", n)):
+    want_caps = n + (1 if cfg.get("bulk_caps") else 0)
+    for rail in ("+15V", "-15V"):
         caps = [m for m in nets[rail] if m.startswith("C")]
         amps = [m for m in nets[rail] if m.startswith("U")]
-        if len(caps) != want or len(amps) != want:
-            raise SystemExit("%s: %s has %d bypass caps and %d supply pins, "
-                             "expected %d of each" % (cfg["slug"], rail,
-                                                      len(caps), len(amps), want))
+        if len(caps) != want_caps or len(amps) != n:
+            raise SystemExit("%s: %s has %d caps and %d supply pins, "
+                             "expected %d and %d" % (cfg["slug"], rail,
+                                                     len(caps), len(amps),
+                                                     want_caps, n))
 
 
 def main():

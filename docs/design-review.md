@@ -50,7 +50,8 @@ expensive to run far enough.
 
 ## 2. Turn-on and turn-off thumps go straight to your tweeters
 
-**Severity: high, for this specific application. Status: inherent, not fixed.**
+**Severity: high, for this specific application. Status: partly mitigated;
+the real fix is off-board and deliberately so.**
 
 Every output is DC-coupled — op-amp, 100 Ω series resistor, volume pot,
 terminal block — and there is no muting, no output relay and no power-up
@@ -67,30 +68,68 @@ It is also asymmetric in a way that catches people out: supply *collapse*
 at switch-off is usually messier than switch-on, because the two rails
 rarely decay together.
 
-**Mitigations, cheapest first.** Power the crossover up *before* the
-amplifiers and down *after* them — an outlet strip with a switched
-sequence, or just discipline. Better: a muting relay shorting each output
-to ground, released a couple of seconds after the rails are up. ESP
-publishes designs for exactly this.
+**What a blocking capacitor would and would not do.** The output DC
+blocking caps described under §3 do not stop a thump — the transient edge
+passes straight through them — they only stop the *sustained* offset that
+follows one. They are also not currently in the board. Muting is the fix
+for thumps; a capacitor is the fix for faults.
+
+**What it deliberately does not do.** A muting relay wants a relay, a
+timing circuit, a flyback diode and a transistor per channel, and it needs
+to hold the mute until the rails are *stable*, which means sensing them.
+That is a power-supply-side function, not a filter-side one, and putting it
+here would roughly double the part count of a board already at the limit of
+what its router can place. It belongs on the PSU board or as a dedicated
+module — ESP's P33 is exactly this, and any "speaker protection / soft
+start" module does the job.
+
+**If you build nothing extra:** power the crossover up *before* the
+amplifiers and down *after* them. A switched outlet strip enforces it; so
+does habit, until the one time it doesn't.
 
 ---
 
 ## 3. A single op-amp failure puts DC into your power amplifiers
 
-**Severity: high impact, low probability. Status: inherent, not fixed.**
+**Severity: high impact, low probability. Status: designed, NOT in the
+shipped board — the PCB cannot currently take it.**
 
-There is no DC blocking on the outputs. If an op-amp section fails with
-its output stuck at a rail, up to about 14 V DC reaches the volume pot,
-and the wiper delivers a fraction of that to the amplifier input. A
-DC-coupled power amplifier will faithfully amplify it, and the speaker
-will absorb the result until something gives.
+There was no DC blocking on the outputs. If an op-amp section failed with
+its output stuck at a rail, up to about 14 V DC reached the volume pot and
+the wiper delivered a fraction of that to the amplifier input — which a
+DC-coupled power amplifier would faithfully amplify until the speaker gave
+up.
 
-Many amplifiers are AC-coupled at the input or have DC protection, in
-which case this is a non-event. **Check yours before trusting it.** If
-they are DC-coupled and unprotected, add output coupling capacitors
-(around 4.7 µF film into a 10 kΩ-or-higher amplifier input keeps the
-low-frequency corner well below the LOW band) or rely on the amplifiers'
-own speaker protection.
+`C11`–`C13` are written into the schematic generator and are enabled with
+`OUTPUT_CAPS=1`: 10 µF in series with each output, on the wiper side of the
+attenuator. Into a 10 kΩ amplifier input that puts the corner near 1.3 Hz,
+far below anything the LOW band carries.
+
+**They are off by default because the board will not route with them.**
+Measured, with the placement search made deterministic first:
+
+| footprints | what | clean boards |
+|---|---|---|
+| 49 | as shipped | 1 in 80 |
+| 52 | + output blocking caps | **0 in 320** |
+| 54 | + bulk decoupling as well | **0 in 320** |
+| 52 | output caps shrunk to 1210 ceramic (⅓ the area) | **0 in 160** |
+
+The last row is the informative one: making the parts three times smaller
+changed nothing, so it is the extra parts and nets themselves that the
+single-pass router cannot absorb, not the area they occupy. Two other
+things were tried and are worth not repeating — putting the caps *between*
+the filter and the pot (electrically better, since it also keeps DC off the
+pot track) splits the `*_PRE` nets, which already cross most of the board,
+and made it strictly worse; and giving the board more room made it worse
+again, for the reason this repo keeps rediscovering.
+
+**So: check your amplifiers.** If they are AC-coupled at the input or have
+DC-offset protection, this is a non-event. If they are DC-coupled and
+unprotected, fit a 10 µF cap in each output lead at the amplifier end —
+outside this board, where there is room — or turn `OUTPUT_CAPS=1` on and
+accept that you will have to find a routable seed yourself, or improve the
+router first.
 
 ---
 
@@ -114,6 +153,13 @@ angle.
 and then left alone. That is one knob for listening level, correct stereo
 tracking, and the band trims doing the job they are actually good at.
 
+**This cannot be fixed on this board, and that is not a cop-out.** The
+board is one channel. A master volume for a stereo pair has to be one
+dual-gang pot feeding *both* boards, so it is inherently off-board — put it
+between your source and the two `J2` inputs. Anything fitted per-board
+would be one gang per channel and would not track, which is the problem
+you started with.
+
 Note the taper interacts with this: the fitted pots are **audio (log)**
 taper, which is right for a control you sweep to silence and wrong for a
 trim you nudge around 0 to −12 dB, where linear gives you far more useful
@@ -129,31 +175,47 @@ raise `R1`.
 
 ## 5. No bulk supply decoupling on the board
 
-**Severity: moderate. Status: not fixed.**
+**Severity: moderate. Status: designed, off by default (`BULK_CAPS=1`) —
+same routing wall as §3.**
 
-The board's entire supply decoupling is 4 × 100 nF. The ±15 V arrives
+The board's entire supply decoupling was 4 × 100 nF. The ±15 V arrives
 over an umbilical from an off-board supply, and wiring runs about 1 µH per
-metre. That inductance and the on-board ceramics form a high-Q resonance
-in the low hundreds of kHz, which the op-amps' supply rejection is poor at
-by that frequency.
+metre; that inductance and the ceramics alone form a high-Q resonance in
+the low hundreds of kHz, exactly where an op-amp's supply rejection has
+fallen away.
 
-A 47–100 µF electrolytic per rail next to `J1` damps it. This is standard
-practice and the board does not do it.
+`C9`/`C10` add 10 µF per rail at the connector. That is on the small
+side — 47–100 µF is the textbook figure — and the value was chosen to
+reuse the 10 µF part already on the board rather than add a BOM line and a
+second electrolytic footprint. It moves the resonance down by a factor of
+ten and damps it with the electrolytic's own ESR, which is most of the
+benefit.
+
+**Put the larger bulk capacitance at the supply end**, where it belongs
+and where there is room for it. Decoupling an umbilical wants capacitance
+at *both* ends; this board now holds up its end.
 
 ---
 
 ## 6. Reverse-polarity or mis-wired supply destroys both op-amps
 
-**Severity: moderate. Status: not fixed.**
+**Severity: moderate. Status: not fixed, deliberately.**
 
 `J1` is a 3-way screw terminal, `+15 / GND / −15`. Swap the outer two and
 both MC33079s are reverse-biased. There is no series protection diode, no
 fuse, and no keying beyond the silkscreen.
 
 `GND` in the middle is a good choice — the most likely single-wire error
-is harmless. Two-wire transposition is not. A pair of series diodes costs
-about 0.7 V of rail; a polarised connector costs nothing electrically and
-is the better answer if you are making the loom yourself.
+is harmless. Two-wire transposition is not.
+
+Series protection diodes were considered and left out. They would need a
+new footprint class and two more parts on a board whose router is already
+the binding constraint, they cost about 0.5 V of rail each (Schottky), and
+they protect against a mistake that a **polarised connector on the loom
+prevents outright, for nothing**. If you are making the umbilical yourself,
+key it. If you want the belt as well as the braces, `SS14` in SMA is the
+part (LCSC `C55127344`), one in each rail, cathode toward the board on
++15 V and anode toward the board on −15 V.
 
 ---
 
