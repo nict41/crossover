@@ -1,2 +1,4 @@
 *.pyc
+.place-cache/
 __pycache__/
+tools/_router.so

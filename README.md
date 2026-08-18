@@ -179,7 +179,7 @@ the netlist is complete:
 
 ### SMD board, routed, for JLCPCB fab + assembly
 
-`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **97.8 × 60.7 mm**,
+`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **94.2 × 66.3 mm**,
 two layers, **fully routed**, five front-panel controls on the board (a
 frequency pot and an output-volume trim per band), trace width matched to
 purpose (12 mil signal, 16 mil power/ground), 45° chamfered corners, every

@@ -21,13 +21,16 @@ SO = os.path.join(HERE, "_router.so")
 
 _LIB = None
 _ERR = None
+# Reused across calls.  A fresh one per net is ~35 MB at this grid size, and
+# a board routes ~60 nets plus retries.
+_OUT = None
 
 
 def _build():
     if (os.path.exists(SO) and
             os.path.getmtime(SO) >= os.path.getmtime(SRC)):
         return
-    subprocess.run(["gcc", "-O2", "-shared", "-fPIC", "-o", SO, SRC],
+    subprocess.run(["gcc", "-O3", "-shared", "-fPIC", "-o", SO, SRC],
                    check=True, capture_output=True)
 
 
@@ -77,7 +80,11 @@ def route(occ, contested, blocked, use, hist, nid, relaxed, via_r,
     # connectivity bookkeeping; sort them so a run is reproducible.
     src = np.array(sorted(sources), dtype=np.int32).reshape(-1)
     tgt = np.array(sorted(targets), dtype=np.int32).reshape(-1)
-    out = np.empty(3 * 2 * ny * nx, dtype=np.int32)
+    global _OUT
+    need = 3 * 2 * ny * nx
+    if _OUT is None or _OUT.size < need:
+        _OUT = np.empty(need, dtype=np.int32)
+    out = _OUT
 
     def ptr(a):
         return a.ctypes.data_as(ctypes.c_void_p) if a is not None else None

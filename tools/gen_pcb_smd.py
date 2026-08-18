@@ -51,6 +51,17 @@ LABEL_SIZE = 5.0
 
 CLEAR = 0.8                           # 8 mil clearance
 
+# Silkscreen line width.  0.8 units = 0.203 mm, against JLCPCB's 0.15 mm
+# minimum printable width - below that the fab may thin the line or drop it
+# entirely.  This was 0.5 units (0.127 mm) for body outlines and 0.4
+# (0.102 mm) for the terminal-block wire-entry marks, i.e. every silk line
+# on the board was under the minimum, which nothing in the DRC checks
+# because it is a fab limit rather than a geometry error.  EasyEDA's own
+# footprint for the RK097 pot (LCSC C470577) draws its outline at 1.0 unit;
+# 0.7 keeps real margin over the limit while costing less courtyard than
+# matching them exactly.
+SILK_W = 0.7
+
 # Trace width by purpose, not one width for everything.  Signal traces carry a
 # few mA at most; +15V/-15V/GND carry the combined supply current of both quad
 # op-amps and (for GND) the audio return path, so they get twice the copper -
@@ -76,6 +87,10 @@ def net_width(name):
 
 MAX_W = max(SIG_W, PWR_W)
 VIA_PAD, VIA_DRILL = 2.8, 1.2         # 0.20mm annular ring (was 0.15mm - no margin)
+# Hole edge to hole edge, as the fab's drill needs it - 0.5 mm, in units.
+# A drilling limit, not an electrical one, so it applies between two holes
+# on the SAME net just as much as between different ones.
+MIN_HOLE_GAP = 0.5 / 0.254
 # Routing grid.  Pad centres all land on 0.5 (see the module docstring), so
 # 0.5 is the coarsest grid that still puts every pad exactly on a routing
 # node - but it is NOT equivalent to 0.25, because the grid also sets how
@@ -200,7 +215,7 @@ def track(points, layer, width, net=""):
                   % (width, layer, net, " ".join("%g %g" % p for p in points), gid()))
 
 
-def silk_rect(x0, y0, x1, y1, w=0.5):
+def silk_rect(x0, y0, x1, y1, w=SILK_W):
     track([(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)], TOPSILK, w)
 
 
@@ -381,7 +396,7 @@ def fp_soic14(pkg_ref, sections, x, y, net_of):
         pad_rect(sections[n], n, x + row, y + (3 - i) * pitch,
                  net_of(sections[n], n), pw, ph)
     silk_rect(x - 7.5, y - 19, x + 7.5, y + 19)
-    track([(x - 7.5, y - 19), (x - 4, y - 19)], TOPSILK, 0.5)   # pin 1 corner
+    track([(x - 7.5, y - 19), (x - 4, y - 19)], TOPSILK, SILK_W)  # pin 1 corner
     # Off the END of the package, never off its sides: the pins escape
     # along local +/-X at every angle, so this is the one direction that is
     # guaranteed not to be somebody's only way out.
@@ -398,7 +413,7 @@ def fp_elec(ref, x, y, net_of, value):
     n, r = 20, 10.0
     track([(x + r * math.cos(2 * math.pi * i / n),
             y + r * math.sin(2 * math.pi * i / n)) for i in range(n + 1)],
-          TOPSILK, 0.5)
+          TOPSILK, SILK_W)
     silk_ref_beside((x - 12.5, y - r, x + 12.5, y + r), ref, DESIG_SIZE, (0, -1))
     silk(x - 15.5, y + 1, "+")
     fp_end(ref, _m, x, y)
@@ -442,7 +457,7 @@ def fp_term(ref, x, y, net_of, n=2, names=None):
     x1 = x0 + (n - 1) * 14.0
     silk_rect(x0 - 7, y - 16, x1 + 7, y + 10)
     for i in range(n):                        # wire-entry throats, facing -Y
-        silk_rect(x0 + i * 14.0 - 4, y - 14, x0 + i * 14.0 + 4, y - 8, 0.4)
+        silk_rect(x0 + i * 14.0 - 4, y - 14, x0 + i * 14.0 + 4, y - 8)
     # Behind the block, away from the wire entry, so the designator is
     # still readable with wires landed in it.
     silk_ref_beside((x0 - 7, y - 16, x1 + 7, y + 10), ref, LABEL_SIZE, (0, 1))
@@ -732,7 +747,7 @@ for _ref, _rots in ROTS.items():
         # board edge, and let rotation carry it round with the part.
         outward=(0, 1) if _ref in PANEL else ((0, -1) if _ref in TERMS else None)))
 
-PLACER = place.Placer(_parts, seed=int(os.environ.get("SEED", 5)),
+PLACER = place.Placer(_parts, seed=int(os.environ.get("SEED", 8)),
                       track_pitch=MAX_W + CLEAR)
 
 # The panel row: fixed pitch, fixed order, all on one line.
@@ -772,6 +787,55 @@ WEIGHTS = dict(
 MOVES = int(os.environ.get("MOVES", 25000))
 
 PLACE_LOG = int(os.environ["PLACE_LOG"]) if "PLACE_LOG" in os.environ else None
+
+# Placement is deterministic in its inputs, and route-order search re-runs
+# the generator many times over the SAME placement with a different
+# ROUTE_SEED - so without this, a sweep of 8 net orders paid for 8
+# identical anneals (~25 s each) to route 8 times (~8 s each).  The cache
+# key covers everything the placement depends on, including the probed
+# footprint geometry, so editing a footprint or a weight invalidates it
+# rather than silently reusing a stale layout.
+PLACE_CACHE = os.path.join(ROOT, ".place-cache")
+
+
+def _place_key():
+    import hashlib
+    h = hashlib.sha256()
+    h.update(repr(sorted((r, sorted(g.items())) for r, g in
+                         ((r, {k: v["box"] for k, v in gg.items()})
+                          for r, gg in sorted(GEOM.items())))).encode())
+    h.update(repr(sorted(netdoc["nets"].items())).encode())
+    h.update(repr(sorted((k, v) for k, v in WEIGHTS.items())).encode())
+    h.update(repr((MOVES, RESTARTS, PANEL_PITCH, OUTPUT_PITCH, EDGE,
+                   MOUNT_INSET, MOUNT_KEEP, os.environ.get("SEED", "8"),
+                   os.environ.get("ESC_CAP"), os.environ.get("ESC_FLOOR"),
+                   os.environ.get("SUPPLY"))).encode())
+    return h.hexdigest()[:32]
+
+
+def _cached_pose():
+    if os.environ.get("NO_PLACE_CACHE"):
+        return None
+    f = os.path.join(PLACE_CACHE, _place_key() + ".json")
+    if not os.path.exists(f):
+        return None
+    try:
+        d = json.load(open(f))
+    except ValueError:
+        return None
+    return ({k: tuple(v) for k, v in d["pose"].items()}, d["before"], d["after"])
+
+
+def _save_pose(pose, before, after):
+    if os.environ.get("NO_PLACE_CACHE"):
+        return
+    try:
+        os.makedirs(PLACE_CACHE, exist_ok=True)
+        json.dump(dict(pose={k: list(v) for k, v in pose.items()},
+                       before=before, after=after),
+                  open(os.path.join(PLACE_CACHE, _place_key() + ".json"), "w"))
+    except OSError:
+        pass
 # 2, and this is NOT a "more is better" knob.  The restart loop keeps the
 # lowest-COST placement, and cost is a surrogate for routability, not a
 # measurement of it: raising this to 4 found a placement the surrogate
@@ -810,6 +874,7 @@ def run_placement(rng_seed):
 PLACER.seed()
 PLACER.full_cost(WEIGHTS)
 BEFORE = float(PLACER.net_hpwl.sum())
+_HIT = _cached_pose()
 
 # The anneal lands in a different local minimum from each start, and the
 # spread between them is worth more than the same time spent on a longer
@@ -817,19 +882,23 @@ BEFORE = float(PLACER.net_hpwl.sum())
 # cheaper to search placement properly and route once than to route a
 # mediocre placement and go looking for a board size that rescues it.
 _best = (float("inf"), None, None)
-for _try in range(RESTARTS):
-    _cost = run_placement(int(os.environ.get("SEED", 5)) + 1000 * _try)
+for _try in range(0 if _HIT else RESTARTS):
+    _cost = run_placement(int(os.environ.get("SEED", 8)) + 1000 * _try)
     _x0, _y0, _x1, _y1 = PLACER.extent()
     print("  placement %d/%d: cost %.0f, %.1f x %.1f mm"
           % (_try + 1, RESTARTS, _cost, (_x1 - _x0 + 2 * EDGE) * 0.254,
              (_y1 - _y0 + 2 * EDGE) * 0.254), flush=True)
     if _cost < _best[0]:
         _best = (_cost, PLACER.snapshot(), float(PLACER.net_hpwl.sum()))
-PLACER.restore(_best[1])
-PLACER.full_cost(WEIGHTS)
-AFTER = _best[2]
-
-POSE = PLACER.result()
+if _HIT:
+    POSE, BEFORE, AFTER = _HIT
+    print("  placement: reusing the cached layout for these inputs")
+else:
+    PLACER.restore(_best[1])
+    PLACER.full_cost(WEIGHTS)
+    AFTER = _best[2]
+    POSE = PLACER.result()
+    _save_pose(POSE, BEFORE, AFTER)
 _bx1 = max(POSE[r][0] + GEOM[r][POSE[r][2]]["box"][2] for r in POSE)
 _by1 = max(POSE[r][1] + GEOM[r][POSE[r][2]]["box"][3] for r in POSE)
 
@@ -1344,6 +1413,26 @@ def path_clearance_ok(net, via_pts, polys):
     return True
 
 
+# Route order is the single most influential thing about this router, because
+# it is single-pass with no rip-up: whichever net claims a corridor first
+# keeps it.  The tiers below are the part that is reasoned about; WITHIN a
+# tier the order was previously just whatever sorted() did, which is an
+# arbitrary choice presented as if it were a decision.
+#
+# ROUTE_SEED makes that arbitrary part searchable instead.  It only permutes
+# nets that the tiers rank equally, so it cannot undo the ordering that is
+# actually justified, and ROUTE_SEED=0 reproduces the old behaviour exactly.
+# Worth having because the measured clean rate over placements alone is only
+# a couple of percent - the same layout often routes cleanly under one order
+# and not another, and searching that is far cheaper than searching seeds.
+_ROUTE_SEED = int(os.environ.get("ROUTE_SEED", 0))
+_ORDER_JITTER = {}
+if _ROUTE_SEED:
+    import random as _r
+    _rng = _r.Random(_ROUTE_SEED)
+    _ORDER_JITTER = {n: _rng.random() for n in netdoc["nets"]}
+
+
 def _pad_span(name):
     pts = [(p["x"], p["y"]) for p in pads if p["net"] == name]
     if len(pts) < 2:
@@ -1403,9 +1492,9 @@ def route_order(n):
     be this time - so the ordering stays as conservative as the version
     that verified clean, without pretending to know the answer in advance."""
     members = netdoc["nets"][n]
-    if n in ("GND", "+15V", "-15V") or n in LONG_HAUL:
-        return (-1, 0)
-    return (0 if any(m.startswith("U") for m in members) else 1, len(members))
+    tier = (-1 if (n in ("GND", "+15V", "-15V") or n in LONG_HAUL)
+            else 0 if any(m.startswith("U") for m in members) else 1)
+    return (tier, len(members), _ORDER_JITTER.get(n, 0))
 
 
 # Exact-geometry distance helpers, needed here (not just by verify(), far
@@ -1582,6 +1671,15 @@ for _ref in GND_STITCH_REFS:
     for _dx, _dy in ((3.0, 0), (-3.0, 0), (0, 3.0), (0, -3.0)):
         _vx, _vy = _p["x"] + _dx, _p["y"] + _dy
         _cx, _cy = int(round(_vx / GRID)), int(round(_vy / GRID))
+        # via_ok() is net-aware and so will happily put a GND stitching via
+        # right up against a GND via the router already placed - fine for
+        # copper, but the FAB still has to drill both, and hole-to-hole
+        # spacing is a property of the drill, not of the net.  JLCPCB wants
+        # 0.5 mm edge to edge; without this a stitching via landed 0.43 mm
+        # from a routed one, which no electrical check would ever object to.
+        if any(math.dist((_vx, _vy), (_ox, _oy)) < VIA_DRILL + MIN_HOLE_GAP
+               for _ox, _oy, _ in VIAS):
+            continue
         if via_ok(_cx, _cy, GND_NID):
             VIAS.append((_vx, _vy, "GND"))
             stamp_disc(MULTI, _vx, _vy, VIA_DIL, GND_NID)
@@ -1615,16 +1713,68 @@ for x, y, name in VIAS:
 REPORT = []
 
 
+def _feature_bbox(f):
+    """Axis-aligned bounds of a feature's geometry, before its half-width."""
+    if f["k"] == "rect":
+        return f["g"]
+    if f["k"] == "seg":
+        (ax, ay), (bx, by) = f["g"]
+        return (min(ax, bx), min(ay, by), max(ax, bx), max(ay, by))
+    return (f["g"][0], f["g"][1], f["g"][0], f["g"][1])
+
+
+def _feature_arrays():
+    """Every feature's expanded bounding box, net and layer mask, as arrays.
+
+    This is what makes the pairwise checks below affordable.  They are
+    genuinely O(n^2) in the pairs they must CONSIDER - roughly 2.9 million
+    of them here - but only a handful of those pairs are anywhere near each
+    other, and exact segment-to-segment distance is far too expensive to
+    spend on the rest (it was 28 of the 38 seconds a full run took).
+
+    Distance between expanded bounding boxes is a lower bound on the real
+    gap, so a pair whose boxes are already further apart than the clearance
+    rule cannot possibly violate it.  Skipping those is exact, not an
+    approximation - the surviving pairs still get the same exact-geometry
+    test they always did."""
+    n = len(FEATURES)
+    x0 = np.empty(n); y0 = np.empty(n); x1 = np.empty(n); y1 = np.empty(n)
+    netid = np.empty(n, dtype=np.int64)
+    layer = np.empty(n, dtype=np.int64)
+    seen = {}
+    for i, f in enumerate(FEATURES):
+        bx0, by0, bx1, by1 = _feature_bbox(f)
+        hw = f["hw"]
+        x0[i], y0[i], x1[i], y1[i] = bx0 - hw, by0 - hw, bx1 + hw, by1 + hw
+        netid[i] = seen.setdefault(f["net"], len(seen))
+        layer[i] = sum(1 << L for L in f["L"])
+    return x0, y0, x1, y1, netid, layer
+
+
+def _near_pairs(i, arr, limit):
+    """Indices j > i whose expanded box is within `limit` of feature i."""
+    x0, y0, x1, y1, netid, layer = arr
+    j = slice(i + 1, None)
+    dx = np.maximum(np.maximum(x0[j] - x1[i], x0[i] - x1[j]), 0.0)
+    dy = np.maximum(np.maximum(y0[j] - y1[i], y0[i] - y1[j]), 0.0)
+    return np.nonzero((dx * dx + dy * dy <= limit * limit)
+                      & (layer[j] & layer[i] != 0))[0] + i + 1
+
+
 def verify():
     problems = []
+    arr = _feature_arrays()
+    netid = arr[4]
     # -- clearance: every pair of features on a shared layer, different nets
     for i, f in enumerate(FEATURES):
-        for g in FEATURES[i + 1:]:
-            if f["net"] == g["net"] or not (f["L"] & g["L"]):
+        for j in _near_pairs(i, arr, CLEAR):
+            if netid[j] == netid[i]:
                 continue
-            if gap(f, g) < CLEAR - 1e-9:
+            g = FEATURES[j]
+            d = gap(f, g)
+            if d < CLEAR - 1e-9:
                 problems.append("clearance %.2f mil between %s (%s) and %s (%s)"
-                                % (gap(f, g) * 10, f["tag"], f["net"],
+                                % (d * 10, f["tag"], f["net"],
                                    g["tag"], g["net"]))
     # -- connectivity: union-find over touching same-net features
     parent = list(range(len(FEATURES)))
@@ -1636,11 +1786,10 @@ def verify():
         return a
 
     for i, f in enumerate(FEATURES):
-        for j in range(i + 1, len(FEATURES)):
-            g = FEATURES[j]
-            if f["net"] != g["net"] or not (f["L"] & g["L"]):
+        for j in _near_pairs(i, arr, 1e-6):
+            if netid[j] != netid[i]:
                 continue
-            if gap(f, g) <= 1e-9:
+            if gap(f, FEATURES[j]) <= 1e-9:
                 parent[find(i)] = find(j)
     bypad = {}
     for i, f in enumerate(FEATURES):

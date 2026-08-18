@@ -121,6 +121,40 @@ static double cell_cost(const Ctx *c, long i) {
     return base;
 }
 
+/* Search state, kept across calls.
+ *
+ * A route on this board visits a grid of ~2.9M nodes per layer pair, so a
+ * fresh malloc + initialisation loop per net was costing ~41 MB of
+ * allocation and ~2.9M writes BEFORE the search did anything - about 60
+ * times per board, plus retries.  The buffers are therefore allocated once
+ * and reused, and `g` is never cleared: a per-call epoch counter marks
+ * which entries belong to the current search, so a stale value from a
+ * previous net reads as unvisited rather than having to be overwritten.
+ *
+ * Not thread-safe, deliberately: one board is routed by one thread, and
+ * parallel searches are run as separate processes (tools/find_board.py). */
+static double *g_cost = NULL;
+static int *g_prev = NULL;
+static int *g_stamp = NULL;
+static unsigned char *g_done = NULL;
+static unsigned char *g_tgt = NULL;
+static long g_N = 0;
+static int g_epoch = 0;
+
+static int ensure_buffers(long N) {
+    if (N == g_N) return 1;
+    free(g_cost); free(g_prev); free(g_stamp); free(g_done); free(g_tgt);
+    g_cost  = (double *) malloc(N * sizeof(double));
+    g_prev  = (int *) malloc(N * sizeof(int));
+    g_stamp = (int *) calloc(N, sizeof(int));
+    g_done  = (unsigned char *) calloc(N, 1);
+    g_tgt   = (unsigned char *) calloc(N, 1);
+    if (!g_cost || !g_prev || !g_stamp || !g_done || !g_tgt) { g_N = 0; return 0; }
+    g_N = N;
+    g_epoch = 0;
+    return 1;
+}
+
 /* Returns path length in nodes, writing (layer, x, y) triples into out.
  * -1 if no path.  `out` must have room for cap triples. */
 int route(int NX, int NY,
@@ -132,13 +166,18 @@ int route(int NX, int NY,
 {
     Ctx c = { NX, NY, occ, cont, blk, use, hist, nid, relaxed, via_r, pres_fac };
     long N = (long) 2 * NY * NX;
+    if (!ensure_buffers(N)) return -1;
 
-    double *g = (double *) malloc(N * sizeof(double));
-    int *prev = (int *) malloc(N * sizeof(int));
-    unsigned char *done = (unsigned char *) calloc(N, 1);
-    unsigned char *is_tgt = (unsigned char *) calloc(N, 1);
-    if (!g || !prev || !done || !is_tgt) return -1;
-    for (long i = 0; i < N; i++) { g[i] = INFINITY; prev[i] = -1; }
+    g_epoch++;
+    if (g_epoch <= 0) {                 /* wrapped - retire every old stamp */
+        memset(g_stamp, 0, N * sizeof(int));
+        g_epoch = 1;
+    }
+    double *g = g_cost;
+    int *prev = g_prev;
+    int *stamp = g_stamp;
+    unsigned char *done = g_done, *is_tgt = g_tgt;
+    memset(done, 0, N);
 
     for (int i = 0; i < ntgt; i++)
         is_tgt[IDX(&c, tgt[3*i], tgt[3*i+1], tgt[3*i+2])] = 1;
@@ -148,8 +187,8 @@ int route(int NX, int NY,
         int L = src[3*i], x = src[3*i+1], y = src[3*i+2];
         if (!passable(&c, L, x, y)) continue;
         long k = IDX(&c, L, x, y);
-        if (g[k] == 0.0) continue;
-        g[k] = 0.0;
+        if (stamp[k] == g_epoch && g[k] == 0.0) continue;
+        g[k] = 0.0; stamp[k] = g_epoch; prev[k] = -1;
         heap_push(&h, 0.0, (int) k);
     }
 
@@ -181,8 +220,8 @@ int route(int NX, int NY,
             long k = IDX(&c, nl, nx, ny);
             if (done[k]) continue;
             double ng = gc + step * cell_cost(&c, k);
-            if (ng >= g[k]) continue;
-            g[k] = ng;
+            if (stamp[k] == g_epoch && ng >= g[k]) continue;
+            g[k] = ng; stamp[k] = g_epoch;
             prev[k] = node;
             /* 1.02x weighted heuristic: a plain Manhattan heuristic on a
              * mostly-open grid leaves huge flat frontiers of equal-f nodes
@@ -211,6 +250,8 @@ int route(int NX, int NY,
         }
     }
 
-    free(h.a); free(g); free(prev); free(done); free(is_tgt);
+    for (int i = 0; i < ntgt; i++)      /* leave g_tgt clear for the next call */
+        is_tgt[IDX(&c, tgt[3*i], tgt[3*i+1], tgt[3*i+2])] = 0;
+    free(h.a);
     return len;
 }

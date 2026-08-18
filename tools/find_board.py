@@ -51,22 +51,26 @@ def problem_count(out):
             + len(re.findall(r"^  UNROUTED", out, re.M)))
 
 
-def trial(seed, env_extra):
-    env = dict(os.environ, SWEEP="1", SEED=str(seed), **env_extra)
+def trial(job, env_extra):
+    seed, rseed = job
+    env = dict(os.environ, SWEEP="1", SEED=str(seed),
+               ROUTE_SEED=str(rseed), **env_extra)
     try:
         out = subprocess.run([sys.executable, GEN], env=env, timeout=1800,
                              capture_output=True, text=True).stdout
     except subprocess.TimeoutExpired:
-        return dict(seed=seed, ok=False, note="timeout")
+        return dict(seed=seed, rseed=rseed, ok=False, note="timeout")
     m = BOARD.search(out)
     if not m:
-        return dict(seed=seed, ok=False, note="crashed or produced no board")
+        return dict(seed=seed, rseed=rseed, ok=False,
+                    note="crashed or produced no board")
     w, h = float(m.group(1)), float(m.group(2))
     n = problem_count(out)
     if n is None:
-        return dict(seed=seed, ok=False, note="could not read a DRC verdict")
-    return dict(seed=seed, ok=(n == 0), problems=n, w=w, h=h, area=w * h,
-                note="")
+        return dict(seed=seed, rseed=rseed, ok=False,
+                    note="could not read a DRC verdict")
+    return dict(seed=seed, rseed=rseed, ok=(n == 0), problems=n, w=w, h=h,
+                area=w * h, note="")
 
 
 def parse_seeds(spec):
@@ -83,15 +87,18 @@ def parse_seeds(spec):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", default="1-16")
+    ap.add_argument("--route-seeds", default="0",
+                    help="net-order permutations to try per placement")
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--env", action="append", default=[],
                     help="extra VAR=VALUE passed to every trial")
     a = ap.parse_args()
     extra = dict(kv.split("=", 1) for kv in a.env)
-    seeds = parse_seeds(a.seeds)
+    jobs = [(s, r) for s in parse_seeds(a.seeds)
+            for r in parse_seeds(a.route_seeds)]
 
     with ThreadPoolExecutor(max_workers=a.jobs) as pool:
-        results = list(pool.map(lambda s: trial(s, extra), seeds))
+        results = list(pool.map(lambda j: trial(j, extra), jobs))
 
     clean = sorted((r for r in results if r["ok"]), key=lambda r: r["area"])
     dirty = sorted((r for r in results if not r["ok"] and not r["note"]),
@@ -99,18 +106,18 @@ def main():
     broke = [r for r in results if r["note"]]
 
     for r in clean:
-        print("CLEAN  %6.0f mm2  %.1f x %.1f  SEED=%d"
-              % (r["area"], r["w"], r["h"], r["seed"]))
+        print("CLEAN  %6.0f mm2  %.1f x %.1f  SEED=%d ROUTE_SEED=%d"
+              % (r["area"], r["w"], r["h"], r["seed"], r["rseed"]))
     for r in dirty:
-        print("  %2d    %6.0f mm2  %.1f x %.1f  SEED=%d"
-              % (r["problems"], r["area"], r["w"], r["h"], r["seed"]))
+        print("  %2d    %6.0f mm2  %.1f x %.1f  SEED=%d ROUTE_SEED=%d"
+              % (r["problems"], r["area"], r["w"], r["h"], r["seed"], r["rseed"]))
     for r in broke:
-        print("  --                            SEED=%d  (%s)"
-              % (r["seed"], r["note"]))
+        print("  --                            SEED=%d ROUTE_SEED=%d  (%s)"
+              % (r["seed"], r["rseed"], r["note"]))
     print("\n%d/%d verified clean" % (len(clean), len(results)))
     if clean:
-        print("smallest clean: SEED=%d at %.1f x %.1f mm"
-              % (clean[0]["seed"], clean[0]["w"], clean[0]["h"]))
+        print("smallest clean: SEED=%d ROUTE_SEED=%d at %.1f x %.1f mm"
+              % (clean[0]["seed"], clean[0]["rseed"], clean[0]["w"], clean[0]["h"]))
     return 0 if clean else 1
 
 
