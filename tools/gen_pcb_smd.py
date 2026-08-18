@@ -747,8 +747,35 @@ for _ref, _rots in ROTS.items():
         # board edge, and let rotation carry it round with the part.
         outward=(0, 1) if _ref in PANEL else ((0, -1) if _ref in TERMS else None)))
 
+# Each supply-bypass capacitor belongs to ONE op-amp's supply pin and has to
+# sit next to it: the whole job of a 100 nF bypass is to supply transient
+# current through as little loop inductance as possible, and a centimetre of
+# trace is already ~10 nH.  Nothing else in the cost function can see this -
+# a bypass cap's two nets (+15V/-15V and GND) span the board anyway, so its
+# wirelength barely changes wherever it goes - and the search duly scattered
+# all four of them 37-63 mm from the pins they are supposed to be
+# decoupling, which is no decoupling at all.  The hand-placed through-hole
+# board gets them to 11 mm by eye; 40 units is 10.2 mm, pin to pin.
+# OFF BY DEFAULT, and that is a known defect rather than a decision.  With
+# the constraint on, the placement is correct - 6.5 to 9.2 mm, against the
+# hand-placed through-hole board's 11 mm - and NOTHING ROUTES: 0 clean
+# boards out of 208 seed/route-order combinations, and 0 out of 40 more
+# after slackening the size pressure to give the router extra room (which
+# made it worse, not better - more area means longer nets, the same lesson
+# this repo keeps relearning).  The single-pass router simply cannot absorb
+# another constraint on top of printable silkscreen.
+#
+# So the board ships with the bypass caps in the wrong place, the defect is
+# documented in docs/pcb-notes-smd.md, and the fix is kept here ready to
+# switch on: BYPASS_NEAR=1 enables it.  What it needs is a router that can
+# rip up and reroute - see CLAUDE.md.  Do not "fix" this by deleting the
+# constraint; it is right and the router is what is behind.
+BYPASS_NEAR = ([("C5", "U1", "+15V", 40.0), ("C6", "U1", "-15V", 40.0),
+                ("C7", "U2", "+15V", 40.0), ("C8", "U2", "-15V", 40.0)]
+               if os.environ.get("BYPASS_NEAR") else [])
+
 PLACER = place.Placer(_parts, seed=int(os.environ.get("SEED", 8)),
-                      track_pitch=MAX_W + CLEAR)
+                      track_pitch=MAX_W + CLEAR, near=BYPASS_NEAR)
 
 # The panel row: fixed pitch, fixed order, all on one line.
 for _k, _ref in enumerate(PANEL):
@@ -775,6 +802,7 @@ WEIGHTS = dict(
     w=120.0,         # width past the panel floor is pure waste - push hard
     wfloor=PANEL_SPAN,
     edge=40.0,       # terminals/panel must have a clear path to their edge
+    near=25.0,       # bypass caps must reach their own op-amp's supply pin
     t0=150.0, t1=0.5,
 )
 # 25000, and like RESTARTS this is not a "more is better" knob.  The

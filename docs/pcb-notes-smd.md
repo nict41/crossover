@@ -622,6 +622,21 @@ rely on the editor re-rendering from the text string and size. That is
 normal for generated files and is expected to work, but it is the one item
 here that can only be confirmed by actually importing.
 
+## Design review
+
+`docs/design-review.md` works through what can go wrong in the fab and in
+use - the failure modes that pass every automated check. The headline is
+that **the supply bypass capacitors are 37-63 mm from the op-amp pins they
+decouple**, which is a real defect in the shipped board: the placement
+search cannot see decoupling (a bypass cap sits on two board-spanning
+nets, so its wirelength barely changes wherever it goes), and the fix is
+written but cannot be enabled until the router improves.
+
+Also covered there, and worth reading before wiring this to amplifiers:
+turn-on thumps reaching your tweeters, what a single op-amp failure puts
+into a DC-coupled power amp, and why three per-band volume knobs and no
+master is the wrong control architecture for preamp duty.
+
 ## Known limitations
 
 * **The board size is found, not proven minimal,** and the search is far

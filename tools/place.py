@@ -30,6 +30,12 @@ What the search optimises, in the order the weights actually favour:
               nets want the same channel.
   wirelength  half-perimeter per net.  Cheap, and a decent proxy for
               everything not modelled.
+  proximity   named pairs that must end up physically next to each other,
+              measured pin to pin.  Wirelength does NOT capture this: a
+              decoupling capacitor sits on +15V and GND, both of which
+              already span the whole board, so moving it makes almost no
+              difference to any half-perimeter and the search will happily
+              leave it 60 mm from the pin it is supposed to be decoupling.
   size        the actual objective: with the panel row fixing the width, a
               board is better when it is shorter.
 
@@ -109,7 +115,7 @@ def _side_counts(box, pads, outward=None):
 
 class Placer:
     def __init__(self, parts, fixed_boxes=(), seed=12345, track_pitch=2.4,
-                 cell=10.0, canvas=900.0):
+                 cell=10.0, canvas=900.0, near=()):
         self.parts = parts
         self.n = len(parts)
         self.idx = {p.ref: i for i, p in enumerate(parts)}
@@ -186,6 +192,10 @@ class Placer:
         # runs out of room in the abstract.  One layer's worth is the
         # honest figure for how much of it a router can actually have.
         self.supply = float(os.environ.get("SUPPLY", 3.0)) * cell / track_pitch
+
+        # (part a, part b, net, target distance) - see near_penalty().
+        self.near = [(self.idx[a], self.idx[b], net, tgt)
+                     for a, b, net, tgt in near]
 
         self.X = np.zeros(self.n)
         self.Y = np.zeros(self.n)
@@ -290,6 +300,33 @@ class Placer:
                     gaps[3] = min(gaps[3], fy0 - y1)
         return sum(max(0.0, nd - g) ** 2 for nd, g in zip(need, gaps))
 
+    def _pin_on(self, i, net):
+        """Position of part i's pad on `net`, or its anchor if it has none."""
+        for pnet, dx, dy in self.padoff[i][self.R[i]]:
+            if pnet == net:
+                return self.X[i] + dx, self.Y[i] + dy
+        return self.X[i], self.Y[i]
+
+    def near_penalty(self):
+        """How far named pairs are from where they have to be, pin to pin.
+
+        This exists because a decoupling capacitor is invisible to every
+        other term: it is two pads on two board-spanning nets, so it costs
+        nothing in wirelength wherever it goes, and it is small enough that
+        area and congestion barely notice it.  The automated placement duly
+        put all four of them 37-63 mm from the op-amp pins they decouple,
+        where the trace inductance defeats the capacitor entirely - a
+        regression against the hand-placed through-hole board, which has
+        them at 11 mm.  Nothing was wrong with the search; it was optimising
+        what it had been told to optimise."""
+        pen = 0.0
+        for i, j, net, tgt in self.near:
+            (ax, ay), (bx, by) = self._pin_on(i, net), self._pin_on(j, net)
+            d = math.hypot(ax - bx, ay - by)
+            if d > tgt:
+                pen += (d - tgt) ** 2
+        return pen
+
     def _net_rect(self, ni):
         xs, ys = [], []
         for i, k in self.nets[ni]:
@@ -380,7 +417,8 @@ class Placer:
                     hpwl=w["hpwl"] * float(self.net_hpwl.sum()),
                     h=w["h"] * (y1 - y0),
                     w=w["w"] * max(0.0, (x1 - x0) - w["wfloor"]),
-                    edge=w["edge"] * self.edge_violation())
+                    edge=w["edge"] * self.edge_violation(),
+                    near=w["near"] * self.near_penalty())
 
     def score(self, w, ov):
         return sum(self.terms(w, ov).values())

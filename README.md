@@ -76,6 +76,15 @@ only be confirmed by a real import:
    "Ordering" in `docs/pcb-notes-smd.md` for why the CPL here is reference
    only.
 
+## Before you build this
+
+Read [`docs/design-review.md`](docs/design-review.md). It lists the
+failure modes that pass every automated check — including one real defect
+in the shipped board (supply bypass capacitors too far from the op-amps),
+why turn-on transients from an active crossover are a tweeter problem
+specifically, and why three per-band volume knobs with no master is the
+wrong control architecture if you intend to use this as a preamp.
+
 ## Repository layout
 
 ```

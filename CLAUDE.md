@@ -256,6 +256,23 @@ numpy with plain Python in the placer (numpy is still ~3x faster at n=49).
 * **Do not turn up `MOVES` or `RESTARTS`.** Both are measured, and both get
   *worse* above their committed values (see docs/pcb-notes-smd.md). The
   anneal optimises a surrogate; fitting it harder fits the router less.
+* **A known, shipped defect: the bypass caps are 37-63 mm from their
+  op-amp supply pins.** The fix is written and switched off (`BYPASS_NEAR=1`)
+  because with it on NOTHING routes - 0 clean boards out of 208
+  seed/route-order combinations, and 0 of 40 more with the size pressure
+  slackened to give the router room (bigger board, longer nets, worse).
+  See docs/design-review.md. Do not delete the constraint; it is correct
+  and the router is what is behind it.
+* **Negotiated congestion routing was attempted and reverted.** Every net
+  routed (0 unreached, which the single-pass router never manages) but it
+  would not converge: ~500-1000 cells stayed contested at any pressure, on
+  a placement the single-pass router routes with zero violations. Two
+  things learned, both worth keeping if it is retried: the conflict test
+  is a net's CENTRELINE inside another net's KEEPOUT (intersecting two
+  keepouts double-counts the gap and plateaus at ~11000 contested cells),
+  and present-cost must not be ramped so hard that history never gets a
+  say. It is a coordination deadlock the per-net rip-up granularity does
+  not escape; rip up *regions*, not single nets.
 * **The next real lever is the router, not the placer.** It is still
   single-pass with no rip-up, which is why route *order* matters and why
   `route_order()` exists at all. Negotiated congestion routing (route
