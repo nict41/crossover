@@ -28,20 +28,53 @@ package are the ones already coupled by design.
 
 ## Importing into EasyEDA
 
-EasyEDA Std (<https://easyeda.com/editor>):
+Everything here targets **EasyEDA Standard** (<https://easyeda.com/editor>) —
+the generated JSON is Std's `docType: 3` PCB / `docType: 1` schematic format.
+EasyEDA Pro can read it via **File → Import → EasyEDA Std**.
 
-1. **File → Open → EasyEDA…**, or **File → Import → EasyEDA**.
-2. Choose the `.json` for the variant you want, from `schematic/`.
+### The PCB (the finished, routed board)
 
-If that file is rejected by your editor version, try the matching
-`.legacy.json` — identical drawing, but with the older string-form document
-header that some builds prefer.
+1. Open <https://easyeda.com/editor> and go to **File → Open → EasyEDA…**
+2. Choose `pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json`.
 
-For EasyEDA Pro: **File → Import → EasyEDA Std**, then pick the same `.json`.
+It opens as a complete two-layer board: routed, ground-poured, with real
+LCSC part numbers already attached to every assembled component. Nothing
+needs assigning before you can look at it or order it.
 
-Footprints are named generically (`R_AXIAL-0.4`, `DIP-8`, …) so they will need
-assigning from the EasyEDA/LCSC libraries before PCB layout. See "Known
-limitations" below.
+### The schematic
+
+Same menu, then a `.json` from `schematic/` — one per variant. If your
+editor build rejects it, try the matching `.legacy.json`: identical
+drawing, older string-form document header.
+
+Schematic symbols carry **generic** package names (`R_AXIAL-0.4`, `DIP-8`,
+…), so the schematic on its own is not ready for layout — but you do not
+need it to be, because the PCB above is already laid out. The two are
+separate documents rather than one linked project, so EasyEDA will not
+cross-check them; `gen_pcb_smd.py` does that instead, and asserts the
+board's pads match the schematic's pins exactly on every run.
+
+### What to check once it is open
+
+The generator verifies its own geometry and `tools/validate_fab.py` checks
+the file against EasyEDA's format and JLCPCB's limits, but a few things can
+only be confirmed by a real import:
+
+1. **Does the silkscreen appear?** This is the one known unknown. Our
+   `TEXT` shapes are written without the pre-rendered glyph path that
+   EasyEDA's own exports carry, relying on the editor to re-render from the
+   text and size. Normal for generated files, expected to work, unverified
+   here. If the designators and pin labels are missing, that is why.
+2. **Design → Design Rule Check**, with JLCPCB's rule set. It should be
+   clean; the repo's own checker already requires ≥ 8 mil clearance against
+   JLCPCB's 5 mil limit.
+3. **Look at the 3D view / photo view.** Part orientation is the usual
+   failure mode for a hand-drawn footprint, and the SOIC-14's pin-1
+   rotation against JLCPCB's convention is explicitly unconfirmed (see
+   "Known limitations").
+4. **Export Gerbers, BOM and CPL from EasyEDA**, not from this repo — see
+   "Ordering" in `docs/pcb-notes-smd.md` for why the CPL here is reference
+   only.
 
 ## Repository layout
 
