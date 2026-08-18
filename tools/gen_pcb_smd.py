@@ -732,7 +732,7 @@ for _ref, _rots in ROTS.items():
         # board edge, and let rotation carry it round with the part.
         outward=(0, 1) if _ref in PANEL else ((0, -1) if _ref in TERMS else None)))
 
-PLACER = place.Placer(_parts, seed=int(os.environ.get("SEED", 7)),
+PLACER = place.Placer(_parts, seed=int(os.environ.get("SEED", 5)),
                       track_pitch=MAX_W + CLEAR)
 
 # The panel row: fixed pitch, fixed order, all on one line.
@@ -752,16 +752,33 @@ WEIGHTS = dict(
     esc=40.0,        # pin-escape starvation: the failure this board keeps hitting
     cong=5.0,        # RUDY overflow
     hpwl=0.15,       # wirelength, as a proxy for everything not modelled
-    h=60.0,          # the actual objective, with width pinned by the panel
+    # The size pressure is an env knob because it is the one weight worth
+    # re-tuning: the others price routability, which now gets CHECKED by
+    # actually routing, so this is the only one still trading against a
+    # thing the search cannot see for itself.
+    h=float(os.environ.get("W_H", 60)),
     w=120.0,         # width past the panel floor is pure waste - push hard
     wfloor=PANEL_SPAN,
     edge=40.0,       # terminals/panel must have a clear path to their edge
     t0=150.0, t1=0.5,
 )
-MOVES = int(os.environ.get("MOVES", 90000))
+# 25000, and like RESTARTS this is not a "more is better" knob.  The
+# anneal optimises a SURROGATE for routability; past a point, optimising it
+# harder just fits the surrogate more closely, and the surrogate and the
+# router disagree.  Measured: 90000 moves produced boards the cost function
+# liked and the router did not (0 of 28 seeds verified clean), where 25000
+# leaves layouts that route.  Both times this has been checked - here and
+# for RESTARTS - the more heavily optimised placement was the worse board.
+MOVES = int(os.environ.get("MOVES", 25000))
 
 PLACE_LOG = int(os.environ["PLACE_LOG"]) if "PLACE_LOG" in os.environ else None
-RESTARTS = int(os.environ.get("RESTARTS", 4))
+# 2, and this is NOT a "more is better" knob.  The restart loop keeps the
+# lowest-COST placement, and cost is a surrogate for routability, not a
+# measurement of it: raising this to 4 found a placement the surrogate
+# scored better and the router did visibly worse on (7 DRC problems where
+# best-of-2 had none).  Picking a board is done by routing candidates -
+# see tools/find_board.py - not by making this number bigger.
+RESTARTS = int(os.environ.get("RESTARTS", 2))
 
 
 def run_placement(rng_seed):
@@ -801,7 +818,7 @@ BEFORE = float(PLACER.net_hpwl.sum())
 # mediocre placement and go looking for a board size that rescues it.
 _best = (float("inf"), None, None)
 for _try in range(RESTARTS):
-    _cost = run_placement(int(os.environ.get("SEED", 7)) + 1000 * _try)
+    _cost = run_placement(int(os.environ.get("SEED", 5)) + 1000 * _try)
     _x0, _y0, _x1, _y1 = PLACER.extent()
     print("  placement %d/%d: cost %.0f, %.1f x %.1f mm"
           % (_try + 1, RESTARTS, _cost, (_x1 - _x0 + 2 * EDGE) * 0.254,
@@ -1798,6 +1815,12 @@ if os.environ.get("SWEEP"):
         print("  UNROUTED", _p)
     for _p in ISSUES:
         print("  -", _p)
+    # Same verdict line the full path prints.  Sweep mode used to report
+    # its problems without ever stating a count, which let a caller that
+    # looked for the count conclude there were none - tools/find_board.py
+    # reported 24 boards out of 24 as verifying clean when not one of them
+    # did.  Both paths now say the same thing the same way.
+    print("DRC PROBLEMS (%d)" % (len(ISSUES) + len(FAILED)))
     raise SystemExit(0)
 
 

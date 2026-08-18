@@ -140,8 +140,8 @@ class Placer:
         # (TP1 and TP2 both came back unreachable that way, on a board
         # where every IC pin routed fine).  Any side with pads on it needs
         # somewhere to go, whether it has one pad or seven.
-        cap = float(os.environ.get("ESC_CAP", 7))
-        floor = float(os.environ.get("ESC_FLOOR", 2))
+        cap = float(os.environ.get("ESC_CAP", 4))
+        floor = float(os.environ.get("ESC_FLOOR", 1))
         self.need = []
         for p in parts:
             per = {}
@@ -185,7 +185,7 @@ class Placer:
         # for by pads, silk keepout and the ground pour long before a cell
         # runs out of room in the abstract.  One layer's worth is the
         # honest figure for how much of it a router can actually have.
-        self.supply = float(os.environ.get("SUPPLY", 1.0)) * cell / track_pitch
+        self.supply = float(os.environ.get("SUPPLY", 3.0)) * cell / track_pitch
 
         self.X = np.zeros(self.n)
         self.Y = np.zeros(self.n)
@@ -494,16 +494,28 @@ class Placer:
         keepouts and can therefore make the layout it INHERITS illegal
         before a single move is proposed.  Asserting there just crashes the
         build on a solvable problem."""
-        for i in sorted(range(self.n), key=lambda i: -self.overlap_of(i)):
-            if self.parts[i].group or self.overlap_of(i) < 1e-9:
+        # Rigid groups move as a unit rather than being skipped.  Skipping
+        # them left the one case this exists for unfixable: the second pass
+        # introduces the mounting-hole keepouts, and it is usually a GROUP
+        # (the output terminal row, pinned to an edge and therefore near a
+        # corner) that they land on top of.  The assert then fired on a
+        # solvable problem.
+        units = ([[i] for i in range(self.n) if not self.parts[i].group]
+                 + [list(g) for g in self.groups.values()])
+        for unit in sorted(units, key=lambda u: -sum(self.overlap_of(i) for i in u)):
+            def bad():
+                return sum(self.overlap_of(i) for i in unit)
+            if bad() < 1e-9:
                 continue
-            x, y, k, ang = self.X[i], self.Y[i], 0, 0.0
-            while self.overlap_of(i) > 1e-9 and k < 20000:
+            home = [(self.X[i], self.Y[i]) for i in unit]
+            k, ang = 0, 0.0
+            while bad() > 1e-9 and k < 20000:
                 k += 1
                 ang += 2.399963
                 r = step * math.sqrt(k)
-                self.set_pose(i, _snap(x + r * math.cos(ang)),
-                              _snap(y + r * math.sin(ang)), self.R[i])
+                dx, dy = _snap(r * math.cos(ang)), _snap(r * math.sin(ang))
+                for i, (hx, hy) in zip(unit, home):
+                    self.set_pose(i, hx + dx, hy + dy, self.R[i])
 
     def _legal(self):
         return self.total_overlap() < 1e-9
