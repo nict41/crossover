@@ -11,7 +11,10 @@ Ordered by **what it costs you if it happens**, not by how likely it is.
 
 ## 1. Bypass capacitors are 37–63 mm from the pins they decouple
 
-**Severity: high. Status: real defect, present in the shipped board.**
+**Severity: high. Status: FIXED.** Now 4.2–10.0 mm, against the
+hand-placed through-hole board's 11 mm. Kept here because the *reason* it
+happened is the durable lesson, and because it took a 24x speedup to make
+the fix affordable.
 
 `C5`–`C8` are the 100 nF supply bypasses, one per rail per op-amp. They
 are 37, 38, 40 and 63 mm from the supply pins they belong to. A bypass
@@ -29,23 +32,19 @@ area or congestion to notice. Nothing was broken — the optimiser did
 exactly what it was told, and nobody had told it about decoupling. The
 *hand-placed* through-hole board gets this right at 11 mm, by eye.
 
-**The fix exists and is switched off.** `BYPASS_NEAR=1` adds a pin-to-pin
-proximity term and produces 6.5–9.2 mm, better than the hand-placed board.
-With it on, **nothing routes**: 0 clean boards out of 208 seed and
-route-order combinations, plus 0 out of 40 more after slackening the size
-pressure to give the router extra room — which made things *worse*, since
-a bigger board means longer nets. The single-pass router cannot absorb
-another constraint on top of the printable-silkscreen fix.
+**How it was fixed, and why that took two attempts.** The placement search
+gains a pin-to-pin proximity term (`BYPASS_NEAR`). On the first attempt it
+produced a correct placement that **would not route** — 0 clean boards out
+of 208 seed and route-order combinations, and 0 of 40 more after
+slackening size pressure to give the router room, which made things
+*worse* because a bigger board means longer nets.
 
-**What to do about it.** Either accept it (the board will work; supply
-rejection at high frequency will simply be poorer than it should be, which
-for a line-level filter feeding power amps is a real but not fatal
-compromise), or fix the router. Negotiated congestion routing is the known
-answer and is the top item in CLAUDE.md.
-
-**If you are hand-modifying the board in EasyEDA before ordering, this is
-the one change worth making by hand:** drag `C5`–`C8` next to their
-op-amps' pins 4 and 11 and re-route those four short connections.
+That was a budget problem disguised as an engineering one. Each attempt
+cost ~30 s, almost all of it in the Python placement anneal, so 208
+attempts was as far as the budget stretched. Compiling the anneal took a
+trial to ~2.5 s; the next search found a clean board in 80 trials. The
+constraint had been right all along and the search had simply been too
+expensive to run far enough.
 
 ---
 

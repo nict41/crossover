@@ -756,25 +756,16 @@ for _ref, _rots in ROTS.items():
 # all four of them 37-63 mm from the pins they are supposed to be
 # decoupling, which is no decoupling at all.  The hand-placed through-hole
 # board gets them to 11 mm by eye; 40 units is 10.2 mm, pin to pin.
-# OFF BY DEFAULT, and that is a known defect rather than a decision.  With
-# the constraint on, the placement is correct - 6.5 to 9.2 mm, against the
-# hand-placed through-hole board's 11 mm - and NOTHING ROUTES: 0 clean
-# boards out of 208 seed/route-order combinations, and 0 out of 40 more
-# after slackening the size pressure to give the router extra room (which
-# made it worse, not better - more area means longer nets, the same lesson
-# this repo keeps relearning).  The single-pass router simply cannot absorb
-# another constraint on top of printable silkscreen.
-#
-# So the board ships with the bypass caps in the wrong place, the defect is
-# documented in docs/pcb-notes-smd.md, and the fix is kept here ready to
-# switch on: BYPASS_NEAR=1 enables it.  What it needs is a router that can
-# rip up and reroute - see CLAUDE.md.  Do not "fix" this by deleting the
-# constraint; it is right and the router is what is behind.
-BYPASS_NEAR = ([("C5", "U1", "+15V", 40.0), ("C6", "U1", "-15V", 40.0),
-                ("C7", "U2", "+15V", 40.0), ("C8", "U2", "-15V", 40.0)]
-               if os.environ.get("BYPASS_NEAR") else [])
+# ON.  This was off for one round, because with it on nothing routed across
+# 208 seed/route-order combinations - not because the constraint was wrong
+# but because each attempt cost ~30 s and 208 of them was as far as the
+# budget went.  Compiling the placement anneal took a trial to ~2.5 s, and
+# the very next search found a clean board in 80 trials (SEED=11), which is
+# a fair summary of what the performance work was actually for.
+BYPASS_NEAR = [("C5", "U1", "+15V", 40.0), ("C6", "U1", "-15V", 40.0),
+               ("C7", "U2", "+15V", 40.0), ("C8", "U2", "-15V", 40.0)]
 
-PLACER = place.Placer(_parts, seed=int(os.environ.get("SEED", 8)),
+PLACER = place.Placer(_parts, seed=int(os.environ.get("SEED", 11)),
                       track_pitch=MAX_W + CLEAR, near=BYPASS_NEAR)
 
 # The panel row: fixed pitch, fixed order, all on one line.
@@ -834,10 +825,14 @@ def _place_key():
                           for r, gg in sorted(GEOM.items())))).encode())
     h.update(repr(sorted(netdoc["nets"].items())).encode())
     h.update(repr(sorted((k, v) for k, v in WEIGHTS.items())).encode())
+    # BYPASS_NEAR belongs in the key: it changes the placement, so without
+    # it here, switching the constraint on silently reuses a layout
+    # computed without it.
     h.update(repr((MOVES, RESTARTS, PANEL_PITCH, OUTPUT_PITCH, EDGE,
                    MOUNT_INSET, MOUNT_KEEP, os.environ.get("SEED", "8"),
                    os.environ.get("ESC_CAP"), os.environ.get("ESC_FLOOR"),
-                   os.environ.get("SUPPLY"))).encode())
+                   os.environ.get("SUPPLY"), BYPASS_NEAR,
+                   os.environ.get("PLACER"))).encode())
     return h.hexdigest()[:32]
 
 
@@ -911,7 +906,7 @@ _HIT = _cached_pose()
 # mediocre placement and go looking for a board size that rescues it.
 _best = (float("inf"), None, None)
 for _try in range(0 if _HIT else RESTARTS):
-    _cost = run_placement(int(os.environ.get("SEED", 8)) + 1000 * _try)
+    _cost = run_placement(int(os.environ.get("SEED", 11)) + 1000 * _try)
     _x0, _y0, _x1, _y1 = PLACER.extent()
     print("  placement %d/%d: cost %.0f, %.1f x %.1f mm"
           % (_try + 1, RESTARTS, _cost, (_x1 - _x0 + 2 * EDGE) * 0.254,

@@ -79,9 +79,7 @@ only be confirmed by a real import:
 ## Before you build this
 
 Read [`docs/design-review.md`](docs/design-review.md). It lists the
-failure modes that pass every automated check — including one real defect
-in the shipped board (supply bypass capacitors too far from the op-amps),
-why turn-on transients from an active crossover are a tweeter problem
+failure modes that pass every automated check — including why turn-on transients from an active crossover are a tweeter problem
 specifically, and why three per-band volume knobs with no master is the
 wrong control architecture if you intend to use this as a preamp.
 
@@ -221,7 +219,7 @@ the netlist is complete:
 
 ### SMD board, routed, for JLCPCB fab + assembly
 
-`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **94.2 × 66.3 mm**,
+`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **97.0 × 64.8 mm**,
 two layers, **fully routed**, five front-panel controls on the board (a
 frequency pot and an output-volume trim per band), trace width matched to
 purpose (12 mil signal, 16 mil power/ground), 45° chamfered corners, every
