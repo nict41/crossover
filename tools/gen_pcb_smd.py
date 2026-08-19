@@ -87,6 +87,24 @@ def net_width(name):
 
 MAX_W = max(SIG_W, PWR_W)
 VIA_PAD, VIA_DRILL = 2.8, 1.2         # 0.20mm annular ring (was 0.15mm - no margin)
+# Narrowest strip of ground pour that counts as connected copper.  JLCPCB's
+# minimum copper width is 0.127 mm; 1 unit (0.254 mm) leaves real margin and
+# stops a hairline neck in the model standing in for a connection the fab
+# would never make.
+POUR_MIN_W = 1.0
+
+# The seed that produced the committed board.  One constant, read once:
+# the placement cache key used to read SEED with its own default ("8")
+# while the placer read another (11), which was self-consistent only by
+# luck - both defaults applied together or not at all.
+SEED = int(os.environ.get("SEED", 1))
+
+# Nets carried by the copper pour instead of by traces.  Ground is one:
+# the board already had a GND pour on both layers, and routing GND as a
+# net as well made it pay for ground twice - with the routed copy going
+# FIRST and taking the best channels.  See pour_connectivity(), which is
+# what makes relying on the plane safe.
+PLANE_NETS = {"GND"}
 # Hole edge to hole edge, as the fab's drill needs it - 0.5 mm, in units.
 # A drilling limit, not an electrical one, so it applies between two holes
 # on the SAME net just as much as between different ones.
@@ -777,8 +795,9 @@ for _ref, _rots in ROTS.items():
 BYPASS_NEAR = [("C5", "U1", "+15V", 40.0), ("C6", "U1", "-15V", 40.0),
                ("C7", "U2", "+15V", 40.0), ("C8", "U2", "-15V", 40.0)]
 
-PLACER = place.Placer(_parts, seed=int(os.environ.get("SEED", 11)),
-                      track_pitch=MAX_W + CLEAR, near=BYPASS_NEAR)
+PLACER = place.Placer(_parts, seed=SEED,
+                      track_pitch=MAX_W + CLEAR, near=BYPASS_NEAR,
+                      plane_nets=PLANE_NETS)
 
 # The panel row: fixed pitch, fixed order, all on one line.
 for _k, _ref in enumerate(PANEL):
@@ -841,9 +860,10 @@ def _place_key():
     # it here, switching the constraint on silently reuses a layout
     # computed without it.
     h.update(repr((MOVES, RESTARTS, PANEL_PITCH, OUTPUT_PITCH, EDGE,
-                   MOUNT_INSET, MOUNT_KEEP, os.environ.get("SEED", "8"),
+                   MOUNT_INSET, MOUNT_KEEP, SEED,
                    os.environ.get("ESC_CAP"), os.environ.get("ESC_FLOOR"),
                    os.environ.get("SUPPLY"), BYPASS_NEAR,
+                   sorted(PLANE_NETS),
                    os.environ.get("PLACER"))).encode())
     return h.hexdigest()[:32]
 
@@ -918,7 +938,7 @@ _HIT = _cached_pose()
 # mediocre placement and go looking for a board size that rescues it.
 _best = (float("inf"), None, None)
 for _try in range(0 if _HIT else RESTARTS):
-    _cost = run_placement(int(os.environ.get("SEED", 11)) + 1000 * _try)
+    _cost = run_placement(SEED + 1000 * _try)
     _x0, _y0, _x1, _y1 = PLACER.extent()
     print("  placement %d/%d: cost %.0f, %.1f x %.1f mm"
           % (_try + 1, RESTARTS, _cost, (_x1 - _x0 + 2 * EDGE) * 0.254,
@@ -1093,6 +1113,23 @@ for _p in pads:
         CORE_PROTECT[_L][_b2:_d + 1, _a:_c + 1] = True
 
 
+# Cells that silk claimed which were genuinely EMPTY beforehand.  A
+# silkscreen label is a reason to keep a TRACE out - "no silk over a trace"
+# holds by construction that way - but it is not a reason to keep the
+# ground POUR out: silkscreen printed over a ground plane is what every
+# board in the world does.  Treating the label boxes as solid for the pour
+# as well is what sealed the op-amp ground pins into pockets: U1C.10 and
+# U2B.5 had a reached plane cell 0.1 units away on the other layer and
+# still reported no path, because the only way out on their own layer ran
+# under a designator.
+#
+# Only cells that were EMPTY before the label claimed them count.  Silk
+# deliberately overwrites pad keepout RINGS, and letting the pour back into
+# one of those would put copper inside a foreign pad's clearance - the one
+# direction this model must never be optimistic in.
+SILK_FREE = np.zeros((2, NY, NX), dtype=bool)
+
+
 def stamp_rect_for_silk(layer, x0, y0, x1, y1, netid):
     """Claims every cell in the silk label's box except a pad's protected
     core.  Unlike stamp_rect, this deliberately overwrites (rather than
@@ -1104,6 +1141,7 @@ def stamp_rect_for_silk(layer, x0, y0, x1, y1, netid):
     for L in ([0, 1] if layer == MULTI else [layer - 1]):
         sub = occ[L][b:d + 1, a:c + 1]
         protect = CORE_PROTECT[L][b:d + 1, a:c + 1]
+        SILK_FREE[L][b:d + 1, a:c + 1] |= (sub == 0) & ~protect
         sub[~protect] = netid
 
 
@@ -1600,9 +1638,256 @@ def gap(f, g):
 
 PAD_POS = {"%s.%s" % (p["ref"], p["num"]): (p["x"], p["y"]) for p in pads}
 
+# GND is NOT routed.  The board carries a ground pour on both layers, every
+# SMD ground pad sits in the top pour, every through-hole ground pad ties
+# the two pours together by being a plated hole, and stitching vias join
+# them elsewhere - so ground is already connected before a single trace is
+# drawn.  Routing it as well made the board pay for ground twice, and
+# because route_order sends it FIRST it took the best channels on the way.
+#
+# This is only safe because pour_connectivity() now proves the plane
+# actually reaches every ground pad, which nothing checked before.  If that
+# check fails, the board is wrong - do not paper over it by routing GND
+# again.
+def pour_connectivity():
+    """Is the ground pour one piece of copper that reaches every GND pad?
+
+    The board has always emitted a GND pour on both layers and never
+    checked it - verify() models pads, tracks and vias only.  That gap is
+    why GND also had to be ROUTED as an ordinary net: the plane could not
+    be relied on, so ground was paid for twice, and the routed copy went
+    first and took the best channels.
+
+    The pour is modelled from the router's own occupancy: a cell can hold
+    pour copper where nothing else has claimed it, or where GND already
+    has.  That is CONSERVATIVE - occ reserves clearance plus the widest
+    trace's half-width, where the real pour only needs clearance - so a
+    pour that connects under this model certainly connects in the fab's.
+
+    Returns (reached-everything, unreached pads, the reached-cell mask).
+    Callers need that last one: to connect a pad the plane missed you have
+    to route to copper that is genuinely PART of the plane, not merely to
+    the nearest cell that happens to be ground - the pad's own keepout is
+    ground, and routing to it connects nothing."""
+    free = (OCC == 0) | (OCC == NETID["GND"]) | SILK_FREE
+    # A pour is only connected where it is WIDE enough to exist.  Without
+    # this, a one-cell neck - 0.06 mm - counts as a connection and the fab
+    # simply will not make it.  Eroding by POUR_MIN_W/2 means only necks at
+    # least that wide survive to carry connectivity.
+    narrow = np.stack([dilate(~free[L], int(math.ceil(POUR_MIN_W / 2 / GRID)))
+                       for L in (0, 1)])
+    poured = (free & ~narrow).astype(np.uint8)
+    edge = int(math.ceil(2.0 / GRID))            # the pour inset from the outline
+    poured[:, :edge, :] = 0
+    poured[:, -edge:, :] = 0
+    poured[:, :, :edge] = 0
+    poured[:, :, -edge:] = 0
+
+    # Where the two layers are tied together: any plated hole on GND, and
+    # every GND via.
+    joint = np.zeros((2, NY, NX), dtype=np.uint8)
+    for p in pads:
+        if p["net"] == "GND" and p["layer"] == MULTI:
+            a, b, c, d = cells_in_rect(p["x"] - p["w"] / 2, p["y"] - p["h"] / 2,
+                                       p["x"] + p["w"] / 2, p["y"] + p["h"] / 2)
+            joint[:, b:d + 1, a:c + 1] = 1
+            poured[:, b:d + 1, a:c + 1] = 1
+    for vx, vy, vnet in VIAS:
+        if vnet == "GND":
+            a, b, c, d = cells_in_rect(vx - VIA_PAD / 2, vy - VIA_PAD / 2,
+                                       vx + VIA_PAD / 2, vy + VIA_PAD / 2)
+            joint[:, b:d + 1, a:c + 1] = 1
+            poured[:, b:d + 1, a:c + 1] = 1
+
+    # A routed GND trace is real copper and joins whatever it touches,
+    # whether or not it is as wide as the pour's minimum.  It must be put
+    # back AFTER the erosion, not before: a stub threading a 0.5 mm channel
+    # between two SOIC pads is exactly the geometry the erosion is there to
+    # delete, and eroding it away made every plane stub the router
+    # committed count for nothing.  R1.2 was routed to the plane on all six
+    # passes and reported unreached on all six.
+    # Stamped at the trace's real WIDTH, not as a centreline: the flood is
+    # 4-connected, and a chamfered 45 degrees segment sampled as single
+    # cells steps diagonally, so a centreline the router had committed
+    # left a chain of cells the flood could not walk along.  C7.2 and
+    # U1D.12 were routed to the plane on every pass and reported unreached
+    # on every pass.  Half a trace width is ~3 cells, which also matches
+    # what the copper physically covers.
+    _tw = int(math.ceil(net_width("GND") / 2 / GRID))
+    for layer, pts, net in ROUTED:
+        if net != "GND":
+            continue
+        L = layer - 1
+        for (ax, ay), (bx, by) in zip(pts, pts[1:]):
+            n = max(1, int(math.dist((ax, ay), (bx, by)) / (GRID / 2)))
+            for i in range(n + 1):
+                x = int(round((ax + (bx - ax) * i / n) / GRID))
+                y = int(round((ay + (by - ay) * i / n) / GRID))
+                poured[L, max(0, y - _tw):y + _tw + 1,
+                       max(0, x - _tw):x + _tw + 1] = 1
+
+    gnd_pads = [p for p in pads if p["net"] == "GND"]
+    if not gnd_pads:
+        return True, []
+    cells = {}
+    for p in gnd_pads:
+        cs = [(L, x, y) for (L, x, y) in core_cells(p)]
+        cells["%s.%s" % (p["ref"], p["num"])] = cs
+        for L, x, y in cs:
+            poured[L, y, x] = 1
+    seed = cells["%s.%s" % (gnd_pads[0]["ref"], gnd_pads[0]["num"])]
+    seen = croute.flood(poured, joint, seed, NY, NX)
+    missed = [k for k, cs in cells.items()
+              if not any(seen[L, y, x] for (L, x, y) in cs)]
+    return not missed, missed, seen
+
+
+PLANE_LOG = bool(os.environ.get("PLANE_LOG"))
+
+# ==========================================================================
+#  ground plane stubs
+# ==========================================================================
+# A pour cannot squeeze everywhere.  Between two adjacent SOIC pads there is
+# 2.5 units of gap, and a pour needs clearance from both, so the ground pins
+# of the op-amps sit in a pocket the plane cannot reach - which is exactly
+# why a human drops a via right at such a pin rather than hoping.
+#
+# So: pour first, then find the ground pads the plane genuinely missed, and
+# give each one a SHORT route to copper that is already part of the plane.
+# This is the whole of GND's routing - a few stubs a few millimetres long,
+# instead of a tree spanning the board.
+#
+# This runs TWICE, and the first time is the important one.  Running it only
+# after the signal nets simply swapped one problem for its mirror image:
+# GND used to route FIRST and take the best channels from everything else,
+# and running the stubs last left the op-amp ground pins - U1C.10, U2C.10,
+# U1D.12, U2B.5 - with nothing but corridors the signal nets had already
+# spent.  Which pads sit in a structural pocket is knowable before any
+# signal net is routed, because it is a fact about the FOOTPRINTS: pour the
+# board with only pads on it, and whatever the plane cannot reach then is a
+# geometry problem, not a congestion one.  Those stubs get cut while the
+# channels are still free; the second pass then picks up anything that only
+# became isolated once the signal nets were in.
+def plane_stubs():
+    _hopeless = set()
+    for _pass in range(6):
+        _ok, _missed, _seen = pour_connectivity()
+        if _ok:
+            break
+        _gnid = NETID["GND"]
+        _progress = False
+        # A pad that found no route at all can only become routable if the
+        # plane grew underneath it, which only happens when another stub
+        # commits.  Without this the six passes re-run the same hopeless
+        # full-grid A* six times over, and a failing A* is the most expensive
+        # thing the router does.
+        _missed = [m for m in _missed if m not in _hopeless]
+        for _name in _missed:
+            _ref, _, _num = _name.rpartition(".")
+            _p = next((q for q in pads if q["ref"] == _ref and q["num"] == _num), None)
+            if _p is None:
+                continue
+            # Every piece of copper that is genuinely part of the plane and
+            # lies near the pad, on EITHER layer, offered to A* at once - plus
+            # the pads of every ground pin the plane already reaches.
+            #
+            # Two mistakes were made here in turn.  Restricting the target to
+            # the pad's own layer was the first: around an op-amp's ground pin
+            # the top pour is chopped up by the neighbouring pins while the
+            # bottom layer is nearly solid ground, and the obvious move - the
+            # one a person makes without thinking - is a via straight down.
+            # Picking the single NEAREST plane cell was the second: nearest is
+            # not cheapest to reach, and a pad whose closest plane cell is
+            # walled off simply failed when a cell slightly further along an
+            # open channel was free.
+            #
+            # Reached GROUND PADS are targets in their own right.  Ground is
+            # one net: tying a bypass cap's ground pin to the op-amp ground
+            # pin beside it is exactly as good as tying it to the pour, and a
+            # 40-mil pad is a far easier thing for the router to enter than a
+            # sliver of plane that survived the min-width erosion.
+            _px, _py = _p["x"] / GRID, _p["y"] / GRID
+            _anchored = set()
+            for _q in pads:
+                if _q["net"] != "GND" or _q is _p:
+                    continue
+                _qc = core_cells(_q)
+                if any(_seen[L, y, x] for (L, x, y) in _qc):
+                    _anchored |= _qc
+            # One window, not an escalating series.  The reached ground pads
+            # are already board-wide targets, so widening the pour window buys
+            # very little - and a FAILING A* is the most expensive thing the
+            # router does (it drains the queue over the whole reachable grid),
+            # so each extra attempt at a pad that has no escape costs seconds.
+            _r = 160
+            _x0, _x1 = max(0, int(_px - _r)), min(NX, int(_px + _r) + 1)
+            _y0, _y1 = max(0, int(_py - _r)), min(NY, int(_py + _r) + 1)
+            _tgt, _best = set(_anchored), None
+            for _L in (0, 1):
+                _ys, _xs = np.nonzero(_seen[_L, _y0:_y1, _x0:_x1])
+                if not len(_xs):
+                    continue
+                _xs, _ys = _xs + _x0, _ys + _y0
+                _tgt |= set(zip([_L] * len(_xs), _xs.tolist(), _ys.tolist()))
+                _d = (_xs - _px) ** 2 + (_ys - _py) ** 2
+                _i = int(np.argmin(_d))
+                if _best is None or _d[_i] < _best[0]:
+                    _best = (_d[_i], int(_xs[_i]), int(_ys[_i]))
+            if not _tgt:
+                continue
+            _anchor = ((_best[1], _best[2]) if _best else
+                       min(_tgt, key=lambda c: (c[1] - _px) ** 2
+                           + (c[2] - _py) ** 2)[1:])
+            _path = astar(core_cells(_p), _tgt, _gnid, _anchor, 0.0, None)
+            _how = "strict"
+            if _path is None:
+                _path = astar(core_cells(_p), _tgt, _gnid, _anchor, 0.0,
+                              None, relaxed=True)
+                _how = "relaxed"
+            if _path is None:
+                _hopeless.add(_name)
+                if PLANE_LOG:
+                    _cc = core_cells(_p)
+                    _free = [(L, x + dx, y + dy) for (L, x, y) in _cc
+                             for (dx, dy) in ((1, 0), (-1, 0), (0, 1), (0, -1))
+                             if (L, x + dx, y + dy) not in _cc
+                             and 0 <= x + dx < NX and 0 <= y + dy < NY
+                             and occ[L][y + dy, x + dx] in (0, _gnid)
+                             and not contested[L][y + dy, x + dx]]
+                    _nd = min(((c[1] - _px) ** 2 + (c[2] - _py) ** 2)
+                              for c in _tgt) ** 0.5
+                    print("  plane stub %s at (%.1f,%.1f) L%d: no path to "
+                          "%d plane cells (nearest %.1f units, %d free "
+                          "neighbours, via_ok=%s)"
+                          % (_name, _p["x"], _p["y"], _p["layer"], len(_tgt),
+                             _nd * GRID, len(_free),
+                             any(via_ok(x, y, _gnid) for (L, x, y) in _cc)),
+                          flush=True)
+                continue
+            _r, _v, _pl = path_geometry(_path)
+            if path_clearance_ok("GND", _v, _pl):
+                commit_path("GND", _gnid, _r, _v, _pl)
+                _progress = True
+                _hopeless.clear()
+                if PLANE_LOG:
+                    print("  plane stub %s: %s path committed (%d cells)"
+                          % (_name, _how, len(_path)), flush=True)
+            elif PLANE_LOG:
+                print("  plane stub %s: %s path failed clearance"
+                      % (_name, _how), flush=True)
+        if not _progress:
+            break
+
+
+# Cut the structural stubs BEFORE any signal net is routed - see the note
+# above plane_stubs().
+plane_stubs()
+
 FAILED = []
 RETRY = []      # strict-pass failures, retried once below with relaxed margins
 for name in sorted(netdoc["nets"], key=route_order):
+    if name in PLANE_NETS:
+        continue
     nid = NETID[name]
     # a wide net can't rely on a foreign pad's keepout being sized for it -
     # that keepout is deliberately tight at the IC pins - so it independently
@@ -1683,6 +1968,10 @@ for _round in range(3):
     RETRY = still
 for name, nid, route_extra, blocked_extra, tgt in RETRY:
     FAILED.append("%s: %s.%s unreachable" % (name, tgt["ref"], tgt["num"]))
+
+# Second pass: anything the signal nets isolated on their way through.
+plane_stubs()
+
 
 
 # ==========================================================================
@@ -1834,6 +2123,8 @@ def verify():
         if f in PAD_FEATURES and f["net"]:
             bypad.setdefault(f["net"], []).append((i, f["tag"]))
     for name, items in bypad.items():
+        if name in PLANE_NETS:
+            continue        # proven by the pour check below, not by traces
         roots = {find(i) for i, _ in items}
         if len(roots) > 1:
             groups = {}
@@ -1988,6 +2279,10 @@ def verify():
 
 
 ISSUES = verify()
+_pour_ok, _pour_missed, _ = pour_connectivity()
+if not _pour_ok:
+    ISSUES.append("the ground pour does not reach %d pad(s): %s"
+                  % (len(_pour_missed), _pour_missed[:8]))
 
 # SWEEP=1: report the verdict and stop, skipping every artifact write
 # (EasyEDA JSON, SVG, the cairosvg PNG render, BOM and CPL).  A board-size

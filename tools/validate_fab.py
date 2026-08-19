@@ -335,6 +335,7 @@ def check_netlist(doc):
     netdoc = json.load(open(NET))
     want = set(netdoc["nets"])
     on_board, npads = set(), 0
+    pour_layers = {}
     for s in flatten(doc["shape"]):
         f = s.split("~")
         if f[0] == "PAD":
@@ -345,6 +346,9 @@ def check_netlist(doc):
             on_board.add(f[3])
         elif f[0] == "VIA" and f[4]:
             on_board.add(f[4])
+        elif f[0] == "COPPERAREA" and f[3]:
+            on_board.add(f[3])
+            pour_layers.setdefault(f[3], set()).add(f[2])
     unknown = on_board - want
     missing = want - on_board
     if unknown:
@@ -355,6 +359,15 @@ def check_netlist(doc):
             % (len(missing), sorted(missing)[:6]))
     note("%d pads carrying %d distinct nets, all named in the schematic"
          % (npads, len(on_board)))
+    # GND is carried by the pour, not by traces, so the pour is not
+    # decoration any more - it is the net.  A board that lost it would
+    # still pass every other check here, because ground pads and stitching
+    # vias keep the name present.
+    if pour_layers.get("GND", set()) >= {"1", "2"}:
+        note("GND is a plane: copper pour present on both layers")
+    else:
+        bad("GND has no copper pour on both layers - it is not routed as a "
+            "net, so the pour is the only thing connecting it")
 
 
 def check_lcsc(online):

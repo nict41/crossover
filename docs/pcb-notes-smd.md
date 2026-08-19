@@ -18,11 +18,10 @@ The generator routes the board and then checks it with geometry that does not
 reuse the router's own bookkeeping. On the current output:
 
 ```
-board 97.0 x 64.8 mm | 49 footprints | 132 pads | 164 tracks | 100 vias
-board utilisation 63%; largest empty rectangle 17 x 17 mm at (8, 30)
+board 97.5 x 82.3 mm | 54 footprints | 142 pads | 160 tracks | 107 vias
+board utilisation 57%; largest empty rectangle 6 x 60 mm at (90, 5)
 verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
-          pads match the schematic exactly, and no silkscreen sits over a
-          trace or a via
+          pads match the schematic exactly
 ```
 
 The checks are:
@@ -181,8 +180,8 @@ Ground is poured on both layers, and every through-hole part - the five
 pots and all five terminal blocks - ties those two pours together for free
 simply by being a plated hole. The SMD-only ground connections don't get
 that: `R1`, `R3` and `R13` (the input bias return and the two Q-setting
-resistors) reach the opposite pour only through whatever single via the
-router happened to place while treating GND as an ordinary net.
+resistors) would otherwise reach the opposite pour only through whatever
+via a stub happened to need.
 
 Each of those now gets a **deliberate second via placed right beside it**,
 after all routing (including retries) is finished. It matters most at
@@ -572,10 +571,61 @@ on the current layout - longer in absolute terms than before the volume
 pots were added, simply because there is more copper to route across a
 bigger board, not because the search got worse at its job).
 
-Ground is poured on both layers *and* routed explicitly. The pour alone would be
-enough electrically, but only if the person importing the file remembers to
-rebuild copper areas — routing GND as a normal net means ground works whether or
-not the pour is rebuilt.
+## Ground is a plane, not a net
+
+Ground is poured on both layers and is **not routed as an ordinary net**.
+For most of this project's life it was both, on the reasoning that the
+pour alone is only electrically enough if whoever imports the file
+remembers to rebuild copper areas. That belt-and-braces cost far more than
+it looked like it did.
+
+`GND` is the largest net on the board, and `route_order()` deliberately
+sends supply rails first — so ground claimed the best channels near every
+IC before a single signal net got a turn. The board was paying for ground
+twice and spending its scarcest resource doing it. That, not the router
+and not the board size, is what had made three correct circuit
+improvements unfittable for months (see `docs/design-review.md` §3 and §5:
+54 footprints routed clean **0 times in 320** attempts, and shrinking the
+added parts to a third of their area changed nothing).
+
+What made it safe to drop the routed copy is that the pour is now
+**checked**. `pour_connectivity()` models the pour from the router's own
+occupancy grid — a cell can hold pour copper where nothing else has
+claimed it or where GND already has, which is conservative, since `occ`
+reserves clearance plus the widest trace's half-width where the real pour
+only needs clearance. It then:
+
+* **erodes by `POUR_MIN_W`/2**, so a one-cell neck (0.06 mm) cannot count
+  as a connection when the fab will not make it;
+* **adds committed GND traces back at full trace width, after the
+  erosion** — a routed stub is real copper regardless of the pour's
+  minimum width, and it has to be stamped wide because the flood is
+  4-connected and a chamfered 45° centreline steps diagonally;
+* **ties the layers** at every plated GND hole and every GND via;
+* **floods from one ground pad** (`flood()` in `router.c`) and reports any
+  ground pad the flood did not reach.
+
+A pad the plane misses — an op-amp ground pin sits in a pocket the pour
+cannot squeeze into between neighbouring pins — gets a short **stub**: A*
+from the pad to every piece of reached plane copper nearby *on either
+layer*, plus every ground pad the plane already reaches, all offered as
+targets at once. Either-layer matters: the top pour around a SOIC pin is
+chopped up by its neighbours while the bottom layer under it is nearly
+solid ground, so the natural move is a via straight down, which the router
+inserts itself once it is simply allowed to finish on the other layer.
+That is the whole of GND's routing now — a few millimetres of stub instead
+of a tree spanning the board.
+
+**On import, rebuild copper areas.** This used to be optional insurance;
+it is now the thing that connects ground. `tools/validate_fab.py` checks
+the pour is present on both layers for exactly this reason.
+
+The placement search is told about it too (`plane_nets`): a plane net has
+no wirelength and makes no wire demand, so pricing GND's half-perimeter
+and RUDY congestion as if a tree had to be drawn for it was fiction that
+swamped every real signal net. Its pads still count towards the escape
+term, because a ground pin does still have to reach the plane — just not
+across the board.
 
 ## Will it import, and can it be built?
 

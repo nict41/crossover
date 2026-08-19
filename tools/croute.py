@@ -57,11 +57,37 @@ def _load():
             np.ctypeslib.ndpointer(np.int32, flags="C"), ctypes.c_int,   # out
             ctypes.c_long,                                      # max_expand
         ]
+        lib.flood.restype = ctypes.c_int
+        lib.flood.argtypes = [
+            ctypes.c_int, ctypes.c_int,
+            np.ctypeslib.ndpointer(np.uint8, flags="C"),
+            np.ctypeslib.ndpointer(np.uint8, flags="C"),
+            np.ctypeslib.ndpointer(np.int32, flags="C"), ctypes.c_int,
+            np.ctypeslib.ndpointer(np.uint8, flags="C"),
+        ]
         _LIB = lib
     except Exception as e:                     # noqa: BLE001 - any failure falls back
         _ERR = e
         print("croute: falling back to the Python router (%s)" % e,
               file=sys.stderr)
+
+
+def flood(mask, joint, seeds, ny, nx):
+    """Connected cells of a copper pour, across both layers.
+
+    mask/joint are (2, NY, NX) uint8; seeds are (L, x, y).  Returns the
+    reached mask, so the caller can check every ground pad landed in the
+    same piece of copper."""
+    _load()
+    seen = np.zeros((2, ny, nx), dtype=np.uint8)
+    sd = np.array(sorted(seeds), dtype=np.int32).reshape(-1)
+    if sd.size == 0:
+        return seen
+    _LIB.flood(nx, ny,
+               np.ascontiguousarray(mask, dtype=np.uint8),
+               np.ascontiguousarray(joint, dtype=np.uint8),
+               sd, len(sd) // 3, seen)
+    return seen
 
 
 def available():

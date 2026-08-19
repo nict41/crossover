@@ -377,6 +377,30 @@
 <polyline points="179 1336 181 1336" stroke="#000000" stroke-width="1" fill="none"/>
 <circle cx="180" cy="1350" r="2" fill="#0000FF"/>
 <text x="184" y="1353" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">-15V</text>
+<circle cx="250" cy="1240" r="2" fill="#0000FF"/>
+<text x="250" y="1226" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">+15V</text>
+<polyline points="238 1286 262 1286" stroke="#000080" stroke-width="2" fill="none"/>
+<polyline points="238 1294 262 1294" stroke="#000080" stroke-width="2" fill="none"/>
+<path d="M 250 1260 v 26" stroke="#880000" stroke-width="1" fill="none"/>
+<path d="M 250 1320 v -26" stroke="#880000" stroke-width="1" fill="none"/>
+<text x="232" y="1288" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="end">C9</text>
+<text x="232" y="1302" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="end">10uF</text>
+<text x="240" y="1278" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">+</text>
+<polyline points="290 1360 290 1350" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="280 1360 299 1360" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="284 1362 297 1362" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="286 1364 293 1364" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="289 1366 291 1366" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="238 1406 262 1406" stroke="#000080" stroke-width="2" fill="none"/>
+<polyline points="238 1414 262 1414" stroke="#000080" stroke-width="2" fill="none"/>
+<path d="M 250 1380 v 26" stroke="#880000" stroke-width="1" fill="none"/>
+<path d="M 250 1440 v -26" stroke="#880000" stroke-width="1" fill="none"/>
+<text x="232" y="1408" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="end">C10</text>
+<text x="232" y="1422" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="end">10uF</text>
+<text x="240" y="1398" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">+</text>
+<circle cx="250" cy="1460" r="2" fill="#0000FF"/>
+<text x="250" y="1476" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">-15V</text>
+<text x="250" y="1208" fill="#0000A0" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">BULK</text>
 <circle cx="350" cy="1240" r="2" fill="#0000FF"/>
 <text x="350" y="1226" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">+15V</text>
 <polyline points="338 1286 362 1286" stroke="#000080" stroke-width="2" fill="none"/>
@@ -516,8 +540,15 @@
 <polyline points="1884 1262 1897 1262" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="1886 1264 1893 1264" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="1889 1266 1891 1266" stroke="#000000" stroke-width="1" fill="none"/>
-<circle cx="1830" cy="1300" r="2" fill="#0000FF"/>
-<text x="1830" y="1316" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">HIGH</text>
+<polyline points="1818 1320 1842 1320" stroke="#000080" stroke-width="2" fill="none"/>
+<polyline points="1818 1328 1842 1328" stroke="#000080" stroke-width="2" fill="none"/>
+<path d="M 1830 1294 v 26" stroke="#880000" stroke-width="1" fill="none"/>
+<path d="M 1830 1354 v -26" stroke="#880000" stroke-width="1" fill="none"/>
+<text x="1812" y="1322" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="end">C11</text>
+<text x="1812" y="1336" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="end">10uF</text>
+<text x="1820" y="1312" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">+</text>
+<circle cx="1830" cy="1368" r="2" fill="#0000FF"/>
+<text x="1830" y="1384" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">HIGH</text>
 <rect x="1810" y="1354" width="40" height="12" stroke="#000080" stroke-width="1" fill="none"/>
 <path d="M 1800 1360 h 10" stroke="#880000" stroke-width="1" fill="none"/>
 <path d="M 1860 1360 h -10" stroke="#880000" stroke-width="1" fill="none"/>
@@ -532,8 +563,15 @@
 <polyline points="1884 1372 1897 1372" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="1886 1374 1893 1374" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="1889 1376 1891 1376" stroke="#000000" stroke-width="1" fill="none"/>
-<circle cx="1830" cy="1410" r="2" fill="#0000FF"/>
-<text x="1830" y="1426" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">MID</text>
+<polyline points="1818 1430 1842 1430" stroke="#000080" stroke-width="2" fill="none"/>
+<polyline points="1818 1438 1842 1438" stroke="#000080" stroke-width="2" fill="none"/>
+<path d="M 1830 1404 v 26" stroke="#880000" stroke-width="1" fill="none"/>
+<path d="M 1830 1464 v -26" stroke="#880000" stroke-width="1" fill="none"/>
+<text x="1812" y="1432" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="end">C12</text>
+<text x="1812" y="1446" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="end">10uF</text>
+<text x="1820" y="1422" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">+</text>
+<circle cx="1830" cy="1478" r="2" fill="#0000FF"/>
+<text x="1830" y="1494" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">MID</text>
 <rect x="1810" y="1464" width="40" height="12" stroke="#000080" stroke-width="1" fill="none"/>
 <path d="M 1800 1470 h 10" stroke="#880000" stroke-width="1" fill="none"/>
 <path d="M 1860 1470 h -10" stroke="#880000" stroke-width="1" fill="none"/>
@@ -548,8 +586,15 @@
 <polyline points="1884 1482 1897 1482" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="1886 1484 1893 1484" stroke="#000000" stroke-width="1" fill="none"/>
 <polyline points="1889 1486 1891 1486" stroke="#000000" stroke-width="1" fill="none"/>
-<circle cx="1830" cy="1520" r="2" fill="#0000FF"/>
-<text x="1830" y="1536" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">LOW</text>
+<polyline points="1818 1540 1842 1540" stroke="#000080" stroke-width="2" fill="none"/>
+<polyline points="1818 1548 1842 1548" stroke="#000080" stroke-width="2" fill="none"/>
+<path d="M 1830 1514 v 26" stroke="#880000" stroke-width="1" fill="none"/>
+<path d="M 1830 1574 v -26" stroke="#880000" stroke-width="1" fill="none"/>
+<text x="1812" y="1542" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="end">C13</text>
+<text x="1812" y="1556" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="end">10uF</text>
+<text x="1820" y="1532" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">+</text>
+<circle cx="1830" cy="1588" r="2" fill="#0000FF"/>
+<text x="1830" y="1604" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">LOW</text>
 <text x="1800" y="1215" fill="#0000A0" font-family="Verdana" font-size="9pt" font-weight="bold" text-anchor="start">OUTPUT VOLUME (audio taper, wired as attenuator)</text>
 <text x="60" y="1180" fill="#0000A0" font-family="Verdana" font-size="9pt" font-weight="bold" text-anchor="start">SUPPLY BYPASSING - one 100nF ceramic per rail, at each IC</text>
 <text x="60" y="30" fill="#000000" font-family="Verdana" font-size="14pt" font-weight="bold" text-anchor="start">3-Way State Variable Electronic Crossover  -  ESP P148, retuned, two quad op-amps, SMD build for JLCPCB assembly</text>
@@ -557,6 +602,7 @@
 <text x="60" y="1540" fill="#404040" font-family="Verdana" font-size="8pt" font-weight="normal" text-anchor="start">All op-amps MC33079 - 2 x SOIC-14 packages.  Q = 0.5 Linkwitz-Riley with R3 / R13 = 11k; use 11k2 for exact Q = 0.5, or 5k04 for Butterworth (Q = 0.707).</text>
 <text x="60" y="1560" fill="#404040" font-family="Verdana" font-size="8pt" font-weight="normal" text-anchor="start">VR1 and VR2 are dual-gang 20k linear pots wired as rheostats. TP1 / TP2 null at the crossover frequency and may be omitted. VR3/VR4/VR5 are single-gang 10k audio-taper pots wired as attenuators - per-output volume, not part of the filter.</text>
 <circle cx="200" cy="280" r="2.5" fill="#CC0000"/>
+<circle cx="250" cy="1350" r="2.5" fill="#CC0000"/>
 <circle cx="350" cy="1350" r="2.5" fill="#CC0000"/>
 <circle cx="390" cy="300" r="2.5" fill="#CC0000"/>
 <circle cx="490" cy="460" r="2.5" fill="#CC0000"/>
@@ -697,6 +743,11 @@
 <polyline points="130 1290 180 1290" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="130 1320 180 1320" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="130 1350 180 1350" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="250 1240 250 1260" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="250 1320 250 1350" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="250 1350 290 1350" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="250 1350 250 1380" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="250 1440 250 1460" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="350 1240 350 1260" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="350 1320 350 1350" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="350 1350 400 1350" stroke="#008800" stroke-width="1" fill="none"/>
@@ -719,11 +770,14 @@
 <polyline points="1530 1340 1590 1340" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1800 1250 1770 1250" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1860 1250 1890 1250" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="1830 1280 1830 1300" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="1830 1280 1830 1294" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="1830 1354 1830 1368" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1800 1360 1770 1360" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1860 1360 1890 1360" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="1830 1390 1830 1410" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="1830 1390 1830 1404" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="1830 1464 1830 1478" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1800 1470 1770 1470" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1860 1470 1890 1470" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="1830 1500 1830 1520" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="1830 1500 1830 1514" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="1830 1574 1830 1588" stroke="#008800" stroke-width="1" fill="none"/>
 </svg>

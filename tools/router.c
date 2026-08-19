@@ -268,3 +268,62 @@ int route(int NX, int NY,
     free(h.a);
     return len;
 }
+
+/* ------------------------------------------------------------------ *
+ * Copper-pour connectivity.
+ *
+ * The board carries a ground pour on both layers, and nothing checked it:
+ * verify() models pads, tracks and vias only, so the pour was emitted and
+ * simply hoped for.  That is why GND had to be ROUTED as an ordinary net
+ * as well - the plane could not be relied on, so the board paid for ground
+ * twice, and the routed copy went first and claimed the best channels.
+ *
+ * `mask` marks cells the pour can occupy, `joint` marks cells where the two
+ * layers are tied together (a via or a plated through-hole).  This floods
+ * from the seeds and writes back which cells were reached, so the caller
+ * can ask the only question that matters: is every ground pad in the same
+ * piece of copper?
+ * ------------------------------------------------------------------ */
+int flood(int NX, int NY, const unsigned char *mask,
+          const unsigned char *joint, const int *seeds, int nseed,
+          unsigned char *seen)
+{
+    long N = (long) 2 * NY * NX;
+    int *q = (int *) malloc(N * sizeof(int));
+    if (!q) return -1;
+    long head = 0, tail = 0;
+    for (int i = 0; i < nseed; i++) {
+        int L = seeds[3*i], x = seeds[3*i+1], y = seeds[3*i+2];
+        if (x < 0 || y < 0 || x >= NX || y >= NY) continue;
+        long k = ((long) L * NY + y) * NX + x;
+        if (!mask[k] || seen[k]) continue;
+        seen[k] = 1;
+        q[tail++] = (int) k;
+    }
+    long reached = tail;
+    while (head < tail) {
+        int node = q[head++];
+        int L = (int) (node / ((long) NY * NX));
+        int rem = (int) (node % ((long) NY * NX));
+        int y = rem / NX, x = rem % NX;
+        for (int d = 0; d < 5; d++) {
+            int nl = L, nx = x, ny = y;
+            switch (d) {
+                case 0: nx++; break;
+                case 1: nx--; break;
+                case 2: ny++; break;
+                case 3: ny--; break;
+                default: nl = 1 - L; break;      /* only where the layers meet */
+            }
+            if (nx < 0 || ny < 0 || nx >= NX || ny >= NY) continue;
+            long k = ((long) nl * NY + ny) * NX + nx;
+            if (d == 4 && !joint[((long) L * NY + y) * NX + x]) continue;
+            if (!mask[k] || seen[k]) continue;
+            seen[k] = 1;
+            q[tail++] = (int) k;
+            reached++;
+        }
+    }
+    free(q);
+    return (int) (reached > 2147483647L ? 2147483647L : reached);
+}

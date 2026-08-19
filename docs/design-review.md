@@ -69,10 +69,11 @@ at switch-off is usually messier than switch-on, because the two rails
 rarely decay together.
 
 **What a blocking capacitor would and would not do.** The output DC
-blocking caps described under §3 do not stop a thump — the transient edge
-passes straight through them — they only stop the *sustained* offset that
-follows one. They are also not currently in the board. Muting is the fix
-for thumps; a capacitor is the fix for faults.
+blocking caps under §3 are now fitted, and they do not stop a thump — the
+transient edge passes straight through them — they only stop the
+*sustained* offset that follows one. Muting is the fix for thumps; a
+capacitor is the fix for faults. Do not read §3 being fixed as this one
+being fixed.
 
 **What it deliberately does not do.** A muting relay wants a relay, a
 timing circuit, a flyback diode and a transistor per channel, and it needs
@@ -91,8 +92,7 @@ does habit, until the one time it doesn't.
 
 ## 3. A single op-amp failure puts DC into your power amplifiers
 
-**Severity: high impact, low probability. Status: designed, NOT in the
-shipped board — the PCB cannot currently take it.**
+**Severity: high impact, low probability. Status: FIXED and shipped.**
 
 There was no DC blocking on the outputs. If an op-amp section failed with
 its output stuck at a rail, up to about 14 V DC reached the volume pot and
@@ -100,36 +100,50 @@ the wiper delivered a fraction of that to the amplifier input — which a
 DC-coupled power amplifier would faithfully amplify until the speaker gave
 up.
 
-`C11`–`C13` are written into the schematic generator and are enabled with
-`OUTPUT_CAPS=1`: 10 µF in series with each output, on the wiper side of the
+`C11`–`C13` are 10 µF in series with each output, on the wiper side of the
 attenuator. Into a 10 kΩ amplifier input that puts the corner near 1.3 Hz,
-far below anything the LOW band carries.
+far below anything the LOW band carries. They are on by default; set
+`OUTPUT_CAPS=0` to build without them.
 
-**They are off by default because the board will not route with them.**
-Measured, with the placement search made deterministic first:
+**Why this was blocked for so long, and what actually unblocked it.** For
+several rounds these caps were written and switched off, because the board
+would not route with them. Measured, with the placement search made
+deterministic first:
 
 | footprints | what | clean boards |
 |---|---|---|
-| 49 | as shipped | 1 in 80 |
+| 49 | as shipped then | 1 in 80 |
 | 52 | + output blocking caps | **0 in 320** |
 | 54 | + bulk decoupling as well | **0 in 320** |
 | 52 | output caps shrunk to 1210 ceramic (⅓ the area) | **0 in 160** |
 
-The last row is the informative one: making the parts three times smaller
-changed nothing, so it is the extra parts and nets themselves that the
-single-pass router cannot absorb, not the area they occupy. Two other
+The last row is the one that mattered: making the parts three times
+smaller changed nothing, so it was never the area they occupied. Two other
 things were tried and are worth not repeating — putting the caps *between*
-the filter and the pot (electrically better, since it also keeps DC off the
-pot track) splits the `*_PRE` nets, which already cross most of the board,
-and made it strictly worse; and giving the board more room made it worse
-again, for the reason this repo keeps rediscovering.
+the filter and the pot (electrically better, since it also keeps DC off
+the pot track) splits the `*_PRE` nets, which already cross most of the
+board, and made it strictly worse; and giving the board more room made it
+worse again, for the reason this repo keeps rediscovering.
 
-**So: check your amplifiers.** If they are AC-coupled at the input or have
-DC-offset protection, this is a non-event. If they are DC-coupled and
-unprotected, fit a 10 µF cap in each output lead at the amplifier end —
-outside this board, where there is room — or turn `OUTPUT_CAPS=1` on and
-accept that you will have to find a routable seed yourself, or improve the
-router first.
+The fix was not in the router at all. **Ground stopped being routed.** The
+board has always carried a GND pour on both layers, but nothing verified
+it, so ground was *also* drawn as an ordinary net — the largest net on the
+board, and `route_order()` sends supply rails first, so it claimed the
+best channels before a single signal net got a turn. The board was paying
+for ground twice and spending its best routing resource on the payment.
+
+`pour_connectivity()` now proves the plane is one piece of copper that
+reaches every ground pad, modelled conservatively from the router's own
+occupancy and eroded to the pour's minimum width so a hairline neck cannot
+count as a connection. That check is what makes leaning on the plane safe.
+GND is then routed only where the pour genuinely cannot squeeze in — a
+handful of short stubs into the plane, instead of a tree spanning the
+board. With the channels that freed up, 54 footprints route clean, and
+both this fix and §5 are in the shipped board.
+
+The general lesson is worth more than the fix: **when adding a correct
+circuit change is repeatedly impossible, suspect what the board is already
+spending its resources on, not the size of the thing you are adding.**
 
 ---
 
@@ -175,8 +189,7 @@ raise `R1`.
 
 ## 5. No bulk supply decoupling on the board
 
-**Severity: moderate. Status: designed, off by default (`BULK_CAPS=1`) —
-same routing wall as §3.**
+**Severity: moderate. Status: FIXED and shipped.**
 
 The board's entire supply decoupling was 4 × 100 nF. The ±15 V arrives
 over an umbilical from an off-board supply, and wiring runs about 1 µH per
@@ -189,7 +202,10 @@ side — 47–100 µF is the textbook figure — and the value was chosen to
 reuse the 10 µF part already on the board rather than add a BOM line and a
 second electrolytic footprint. It moves the resonance down by a factor of
 ten and damps it with the electrolytic's own ESR, which is most of the
-benefit.
+benefit. On by default; `BULK_CAPS=0` builds without them.
+
+Same history as §3: correct from the day it was written, unfittable until
+ground stopped being routed as a net. See §3 for why.
 
 **Put the larger bulk capacitance at the supply end**, where it belongs
 and where there is room for it. Decoupling an umbilical wants capacitance
@@ -254,7 +270,9 @@ the amplifiers**, and keep it short.
 * **`C569866` (33 nF) had 2001 in stock** and the board uses 6. That is
   about 330 boards' worth — fine for you, but check before a batch.
 * **`C46550416` (10 µF) did not come back from an LCSC search** even
-  though its part page resolves. Confirm it is still orderable.
+  though its part page resolves. Confirm it is still orderable — the board
+  now uses **five** of them (`C9`/`C10` bulk, `C11`–`C13` output blocking),
+  so it is no longer a part you can shrug off if it has gone.
 
 ---
 

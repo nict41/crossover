@@ -112,23 +112,24 @@ VARIANTS = [
          # builds with hand-placed boards; adding parts to them would
          # disturb those layouts for no benefit to the board actually being
          # manufactured.
-         # Bulk decoupling is OFF by default.  It is real but modest, and
-         # with both it and the output blocking caps fitted (54 footprints)
-         # nothing routed across 320 seed/route-order combinations.  The
-         # output caps protect your speakers from a failed op-amp; bulk
-         # decoupling shifts an umbilical resonance that mostly wants
-         # fixing at the supply end anyway - so when only one of them can
-         # fit, it is this one that gives way.  BULK_CAPS=1 turns it on.
-         # Both OFF by default, and both are correct circuit changes that
-         # the PCB cannot currently take.  Measured, with determinism fixed:
-         # 49 footprints route clean about 1 try in 80; add the three output
-         # blocking caps (52) and it is 0 in 320; add bulk as well (54) and
-         # it is 0 in 320 again.  Shrinking the output caps to a 1210
-         # ceramic footprint - a third of the area - did not help either
-         # (0 in 160), so it is the extra parts and nets themselves, not
-         # their size.  See docs/design-review.md.
-         bulk_caps=bool(os.environ.get("BULK_CAPS")),
-         output_caps=bool(os.environ.get("OUTPUT_CAPS"))),
+         # Output DC blocking (C11-C13) and bulk supply decoupling
+         # (C9/C10) are both ON.  Both were written months before they
+         # could be fitted: at 52 and 54 footprints the board routed clean
+         # 0 times in 320 seed/route-order combinations, and shrinking the
+         # parts to a third of their area did not help (0 in 160), so it
+         # was never about the space they take.
+         #
+         # What unblocked them was not the router.  GND stopped being
+         # ROUTED: the board has always carried a ground pour on both
+         # layers, but nothing verified it, so ground was also drawn as an
+         # ordinary net - the largest one on the board, routed FIRST, and
+         # therefore taking the best channels before any signal net got a
+         # turn.  pour_connectivity() in gen_pcb_smd.py now proves the
+         # plane reaches every ground pad, which is what makes leaning on
+         # it safe, and the channels GND used to occupy are what these
+         # five capacitors route through.  See docs/design-review.md.
+         bulk_caps=os.environ.get("BULK_CAPS", "1") != "0",
+         output_caps=os.environ.get("OUTPUT_CAPS", "1") != "0"),
 ]
 
 W_CANVAS, H_CANVAS = 2200, 1600

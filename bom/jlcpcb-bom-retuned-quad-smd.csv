@@ -7,5 +7,5 @@ Comment,Designator,Footprint,LCSC Part #,JLC Library
 100R,"R9,R19,R22",0805,C17408,basic
 4.7k,"R7,R8",0805,C17673,basic
 33nF,"C1,C2,C3A,C3B,C4A,C4B",1210,C569866,extended
-10uF,"C0",CASE-D5xL5.4,C46550416,extended
+10uF,"C0,C9,C10,C11,C12,C13",CASE-D5xL5.4,C46550416,extended
 MC33079,"U1,U2",SOIC-14,C9376,extended

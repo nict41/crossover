@@ -1,4 +1,5 @@
 Qty,Value,Package,Designators,Notes
+5,10uF,CASE-D5xL5.4,"C9, C10, C11, C12, C13",""
 1,10uF,C_AXIAL-0.2,"C0",""
 6,33nF,C_AXIAL-0.2,"C1, C2, C3A, C3B, C4A, C4B",""
 4,100nF,C_AXIAL-0.2,"C5, C6, C7, C8",""

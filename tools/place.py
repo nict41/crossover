@@ -120,8 +120,18 @@ def _side_counts(box, pads, outward=None):
 
 class Placer:
     def __init__(self, parts, fixed_boxes=(), seed=12345, track_pitch=2.4,
-                 cell=10.0, canvas=900.0, near=()):
+                 cell=10.0, canvas=900.0, near=(), plane_nets=()):
         self.parts = parts
+        # Nets carried by a copper plane rather than by traces.  They have
+        # no wirelength and make no wire demand, so pricing them as if the
+        # router had to draw a tree for them is fiction - and expensive
+        # fiction: GND is by far the biggest net on this board, so its
+        # half-perimeter and its RUDY demand swamped every signal net and
+        # pulled the layout towards a shape that suits a net nobody routes.
+        # Their pads still count towards the ESCAPE term, because a ground
+        # pin does still have to reach the plane, just not across the
+        # board.
+        self.plane_nets = set(plane_nets)
         self.n = len(parts)
         self.idx = {p.ref: i for i, p in enumerate(parts)}
         self.rng = random.Random(seed)
@@ -176,8 +186,10 @@ class Placer:
             for k, (net, _dx, _dy) in enumerate(self.padoff[i][p.rots[0]]):
                 if net:
                     nets.setdefault(net, []).append((i, k))
-        self.nets = [v for v in nets.values() if len(v) > 1]
-        self.net_names = [k for k, v in nets.items() if len(v) > 1]
+        self.nets = [v for k, v in nets.items()
+                     if len(v) > 1 and k not in self.plane_nets]
+        self.net_names = [k for k, v in nets.items()
+                          if len(v) > 1 and k not in self.plane_nets]
         self.of_part = [[] for _ in parts]
         for ni, mem in enumerate(self.nets):
             for i, _k in mem:

@@ -60,19 +60,25 @@ The generator verifies its own geometry and `tools/validate_fab.py` checks
 the file against EasyEDA's format and JLCPCB's limits, but a few things can
 only be confirmed by a real import:
 
-1. **Does the silkscreen appear?** This is the one known unknown. Our
+1. **Rebuild the copper areas** (right-click a pour → *Rebuild copper
+   area*, or **Tools → Rebuild all copper areas**). Ground is a **plane**
+   on this board, not a routed net — it is poured on both layers and only
+   a handful of short stubs are drawn as traces. This used to be optional
+   insurance; it is now the thing that connects ground, so do it before
+   the DRC below or the DRC will tell you ground is unconnected.
+2. **Does the silkscreen appear?** This is the one known unknown. Our
    `TEXT` shapes are written without the pre-rendered glyph path that
    EasyEDA's own exports carry, relying on the editor to re-render from the
    text and size. Normal for generated files, expected to work, unverified
    here. If the designators and pin labels are missing, that is why.
-2. **Design → Design Rule Check**, with JLCPCB's rule set. It should be
+3. **Design → Design Rule Check**, with JLCPCB's rule set. It should be
    clean; the repo's own checker already requires ≥ 8 mil clearance against
    JLCPCB's 5 mil limit.
-3. **Look at the 3D view / photo view.** Part orientation is the usual
+4. **Look at the 3D view / photo view.** Part orientation is the usual
    failure mode for a hand-drawn footprint, and the SOIC-14's pin-1
    rotation against JLCPCB's convention is explicitly unconfirmed (see
    "Known limitations").
-4. **Export Gerbers, BOM and CPL from EasyEDA**, not from this repo — see
+5. **Export Gerbers, BOM and CPL from EasyEDA**, not from this repo — see
    "Ordering" in `docs/pcb-notes-smd.md` for why the CPL here is reference
    only.
 
@@ -228,10 +234,9 @@ SMD part a real LCSC line item.
 ![SMD board](pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.png)
 
 ```
-49 footprints | 132 pads | 139 tracks | 79 vias
+board 97.5 x 82.3 mm | 54 footprints | 142 pads | 160 tracks | 107 vias
 verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
-          pads match the schematic exactly, and no silkscreen sits over a
-          trace or a via
+          pads match the schematic exactly
 ```
 
 Sockets on the rear edge; on the front edge, left to right: LOW volume,
