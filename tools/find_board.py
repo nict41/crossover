@@ -40,6 +40,20 @@ PROBLEMS = re.compile(r"^DRC PROBLEMS \((\d+)\)", re.M)
 # against a placement problem.
 POUR = re.compile(r"^  - the ground pour does not reach", re.M)
 UNROUTED = re.compile(r"^  UNROUTED", re.M)
+# The wasted-area complaint is the one entry in verify()'s output that is
+# not a defect.  Every other line means the board would come back from the
+# fab broken or would not work; this one means the layout leaves a hole and
+# could probably be smaller, which is a judgement about quality, not about
+# whether it can be built.
+#
+# It is reported separately because it changes what to DO.  It is set by
+# the placement, not the routing - seed 1 gives the identical "13% at
+# (0,5)" under three different route orders - so a seed carrying it will
+# carry it however the nets fall, and sweeping route orders against it is
+# wasted time.  Do NOT drop the check to make a board pass: the right
+# response is a different seed, and a board that is defect-free but wastes
+# space is still a real, orderable board if you want it.
+WASTED = re.compile(r"^  - a single empty rectangle is", re.M)
 
 
 def problem_count(out):
@@ -122,8 +136,10 @@ def trial(job, env_extra):
         return dict(seed=seed, rseed=rseed, ok=False,
                     note="could not read a DRC verdict")
     pour = len(POUR.findall(out))
+    waste = len(WASTED.findall(out))
     return dict(seed=seed, rseed=rseed, ok=(n == 0), problems=n, w=w, h=h,
-                area=w * h, note="", pour=pour,
+                area=w * h, note="", pour=pour, waste=waste,
+                defects=n - waste,
                 unrouted=len(UNROUTED.findall(out)))
 
 
@@ -201,12 +217,20 @@ def main():
             raise
 
     clean = sorted((r for r in results if r["ok"]), key=lambda r: r["area"])
-    dirty = sorted((r for r in results if not r["ok"] and not r["note"]),
-                   key=lambda r: (r["problems"], r["area"]))
+    sound = sorted((r for r in results
+                    if not r["ok"] and not r["note"] and r["defects"] == 0),
+                   key=lambda r: r["area"])
+    dirty = sorted((r for r in results
+                    if not r["ok"] and not r["note"] and r["defects"] > 0),
+                   key=lambda r: (r["defects"], r["area"]))
     broke = [r for r in results if r["note"]]
 
     for r in clean:
         print("CLEAN  %6.0f mm2  %.1f x %.1f  SEED=%d ROUTE_SEED=%d"
+              % (r["area"], r["w"], r["h"], r["seed"], r["rseed"]))
+    for r in sound:
+        print("SOUND  %6.0f mm2  %.1f x %.1f  SEED=%d ROUTE_SEED=%d  "
+              "(no defects; wastes space)"
               % (r["area"], r["w"], r["h"], r["seed"], r["rseed"]))
     for r in dirty:
         why = []
@@ -214,8 +238,10 @@ def main():
             why.append("%d pour" % r["pour"])
         if r["unrouted"]:
             why.append("%d unrouted" % r["unrouted"])
+        if r["waste"]:
+            why.append("wastes space")
         print("  %2d    %6.0f mm2  %.1f x %.1f  SEED=%d ROUTE_SEED=%d  %s"
-              % (r["problems"], r["area"], r["w"], r["h"], r["seed"],
+              % (r["defects"], r["area"], r["w"], r["h"], r["seed"],
                  r["rseed"], ", ".join(why)))
     for r in broke:
         print("  --                            SEED=%d ROUTE_SEED=%d  (%s)"
@@ -231,8 +257,11 @@ def main():
             else "MAX_EXPAND=%s - confirm the winner with an uncapped run"
                  % cap)
     print("\n%d/%d passed the filter (%s)" % (len(clean), len(results), note))
+    if sound:
+        print("%d board(s) have no DEFECTS and fail only the wasted-area "
+              "check - orderable, just not tight" % len(sound))
     if dirty:
-        pour_only = sum(1 for r in dirty if r["pour"] and r["pour"] == r["problems"])
+        pour_only = sum(1 for r in dirty if r["pour"] and r["pour"] == r["defects"])
         print("%d of %d failures were ground-pour reachability ONLY - that is a "
               "PLACEMENT problem (see place.PLANE_GAP), not a route-order one"
               % (pour_only, len(dirty)))
