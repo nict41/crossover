@@ -2379,6 +2379,7 @@ def route_with_ripup():
     anything.  Hill-climbing from the best keeps every round a variation
     on something that worked."""
     best_score, best = None, None
+    tried_crowding = False
     best_priority = load_route_order()
     ROUTE_PRIORITY[:] = best_priority
     if RIPUP_LOG and best_priority:
@@ -2412,6 +2413,17 @@ def route_with_ripup():
         promote = list(dict.fromkeys(
             [f.split(":")[0] for f in fails] + list(split)))
         if not promote:
+            # Nothing is unrouted or split; the only complaint left is that
+            # the plane cannot reach a pad.  Rerouting the nets crowding it
+            # is worth ONE speculative try - the pour does shift with the
+            # route - but no more than that: measured, every such round
+            # after the first traded a board at 0 unrouted / 0 split for
+            # one at 4 unrouted / 4 split.  A pad sealed in a pocket is a
+            # placement problem, and the router cannot fix it by trying
+            # harder.
+            if tried_crowding:
+                break
+            tried_crowding = True
             promote = _crowding_nets(missed)
         # Never promote a supply rail.  They are already first by
         # route_order()'s own tiering, so "promoting" one only reorders it

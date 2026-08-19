@@ -209,8 +209,13 @@ static void rudy(const Cfg *c, St *s, int ni, double sign) {
     net_rect(c, s, ni, r);
     double org = c->gN * c->cell / 2.0;
     double w = r[2] - r[0], h = r[3] - r[1];
-    if (w < 1e-6) w = 1e-6;
-    if (h < 1e-6) h = 1e-6;
+    /* Clamp to one cell, not to 1e-6.  RUDY divides by the box AREA, so a
+       collinear net - an op-amp follower ties its output to its inverting
+       input, two adjacent pins on the same side of the package, giving a
+       box of exactly zero width - injected ~1e7 of demand into one cell.
+       See _rudy() in place.py for the measurement. */
+    if (w < c->cell) w = c->cell;
+    if (h < c->cell) h = c->cell;
     int a = (int)((r[0] + org) / c->cell), b = (int)((r[1] + org) / c->cell);
     int d = (int)((r[2] + org) / c->cell), e = (int)((r[3] + org) / c->cell);
     if (a < 0) a = 0; if (b < 0) b = 0;

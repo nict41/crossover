@@ -353,8 +353,23 @@ class Placer:
         return min(xs), min(ys), max(xs), max(ys)
 
     def _rudy(self, ni, sign):
+        """Spread a net's wire demand over its bounding box.
+
+        The box is clamped to one congestion CELL, not to 1e-6.  RUDY
+        divides by the box AREA, so a net whose pads are collinear - the
+        box has zero width or zero height - divided by an area of 1e-6 and
+        injected about 1e7 of demand into a single cell.  A net like that
+        is not exotic: an op-amp section wired as a follower joins its
+        output to its inverting input, two adjacent pins on the SAME side
+        of the package, so the box is exactly zero wide.  Adding a quad of
+        output buffers created four of them at once and took the placement
+        cost from ~2e4 to ~5e7, of which 49999955 was this term - three
+        orders of magnitude of noise on top of every real one, and nearly
+        constant, so the anneal was optimising almost nothing else.
+        Clamping to the cell says the honest thing instead: a net confined
+        to one cell demands about one cell's worth of routing."""
         x0, y0, x1, y1 = self._net_rect(ni)
-        w, h = max(x1 - x0, 1e-6), max(y1 - y0, 1e-6)
+        w, h = max(x1 - x0, self.cell), max(y1 - y0, self.cell)
         a = int((x0 + self.org) / self.cell), int((y0 + self.org) / self.cell)
         b = int((x1 + self.org) / self.cell), int((y1 + self.org) / self.cell)
         a = (max(a[0], 0), max(a[1], 0))
