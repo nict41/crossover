@@ -1397,7 +1397,7 @@ def emit(cfg, primary):
     with open(os.path.join(docdir, name), "w") as f:
         f.write("\n".join(lines) + "\n")
 
-    # machine-readable form, consumed by tools/gen_pcb.py
+    # machine-readable form, consumed by tools/gen_pcb_smd.py
     parts = {}
     for sh in shapes:
         if not sh.startswith("LIB~"):

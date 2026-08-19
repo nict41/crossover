@@ -2,3 +2,5 @@
 .place-cache/
 __pycache__/
 tools/_router.so
+scratchpad/
+tools/_anneal.so

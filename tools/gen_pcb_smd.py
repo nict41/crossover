@@ -588,7 +588,7 @@ def fp_pot(pkg_ref, gang_a, gang_b, x, y, net_of):
     near-universal 9 mm dual pattern (Alps RK09K12, RV09 dual and the many
     equivalents).  Real parts are on 5.00 mm; the 0.08 mm/pitch difference is
     absorbed by the 1.2 mm holes.  VERIFY against your pot's datasheet.
-    Two non-plated holes take the locating bosses.
+    No locating-boss holes are drawn - see the note beside POT_BOSSES.
 
     Body width here (52 units) is NOT the same number as the single-gang
     RK097 footprint's (37 units, see fp_pot_single) - a first pass tried
@@ -1000,6 +1000,24 @@ for _k, _ref in enumerate(PANEL):
 WEIGHTS = dict(
     ov=60.0,         # ramped hard by the anneal - see place.anneal()
     esc=40.0,        # pin-escape starvation: the failure this board keeps hitting
+    # A plane pad with no room for a via.  `the ground pour does not reach
+    # N pad(s)` is the complaint that rejected almost every candidate this
+    # project ever searched, always at an op-amp ground pin or a bypass
+    # cap's, and the escape term above cannot express it: it is capped on
+    # pad COUNT, so a SOIC face scores the same whether the gap in front of
+    # it is three units or nine, and three fits no via.
+    #
+    # Priced above escape because escape has a fallback - a pin with a
+    # cramped corridor may still route the long way round - and this does
+    # not.  A fully sealed pad costs about 19 units of board height.
+    #
+    # Honest caveat: this does NOT change the PRE-ROUTING pour verdict.
+    # Screening 40 seeds passes 40 with the term on and 40 with
+    # PLANE_GAP=0, because plane_stubs() running before the signal nets
+    # already vias its way out of those pockets.  Whatever this buys is
+    # room for the pour to SURVIVE routing, which has not been isolated
+    # from seed-to-seed noise.  See docs/pcb-notes-smd.md.
+    pesc=60.0,
     cong=5.0,        # RUDY overflow
     hpwl=0.15,       # wirelength, as a proxy for everything not modelled
     # The size pressure is an env knob because it is the one weight worth
@@ -1057,6 +1075,7 @@ def _place_key():
     # BYPASS_NEAR belongs in the key: it changes the placement, so without
     # it here, switching the constraint on silently reuses a layout
     # computed without it.
+    h.update(repr(place.PLANE_GAP).encode())
     h.update(repr((MOVES, RESTARTS, PANEL_PITCH, OUTPUT_PITCH, EDGE,
                    MOUNT_INSET, MOUNT_KEEP, SEED,
                    os.environ.get("ESC_CAP"), os.environ.get("ESC_FLOOR"),
@@ -1185,14 +1204,23 @@ for _ref in sorted(POSE):
     placed.append((_x + EDGE + _b[0], _y + EDGE + _b[1],
                    _x + EDGE + _b[2], _y + EDGE + _b[3]))
 
-for _ref in POT_GANGS:
-    _x, _y, _rot = POSE[_ref]
-    # Locating-boss holes, measured clear of every pad by verify()'s own
-    # geometry rather than nested inside the drawn body outline - a real
-    # boss position for this part is not known (no verified dual-gang
-    # datasheet), so agreeing with the pads beats agreeing with a guess.
-    POT_BOSSES.extend([(_x + EDGE - 14, _y + EDGE - 22),
-                       (_x + EDGE + 14, _y + EDGE - 22)])
+# NO locating-boss holes are drilled.  They used to be, at a position that
+# was openly a guess - no verified dual-gang drawing was ever found, and
+# LCSC's footprint API (the one CLAUDE.md documents) now answers 403, so
+# there is no way from here to turn the guess into a measurement.
+#
+# Between shipping an unverified hole and shipping none, none is strictly
+# safer: a missing hole is two minutes with a drill against your own part's
+# datasheet, and a hole in the wrong place is a re-order.  These pots are
+# panel-mounted with the shaft through the front panel and a nut, so the
+# panel carries the mechanical load and the bosses are an aid, not the
+# fixing.
+#
+# It also removes, for free, the only thing the sweep-range silkscreen was
+# colliding with.
+#
+# If the pots you buy DO have locating bosses, drill the two holes to match
+# their datasheet before ordering the board - see docs/pcb-notes-smd.md.
 
 
 # ==========================================================================
@@ -1413,21 +1441,37 @@ def via_ok(x, y, nid, extra=0.0):
 def dilate(mask, r_cells):
     """Box-dilate a boolean grid by r_cells in every direction.  A box is a
     safe superset of the disk we actually want, so this stays conservative.
-    Shift-and-OR rather than a per-cell scan: O((2r+1)^2) vectorised passes
-    over the whole grid, done ONCE per net, instead of a window check redone
-    at every single cell A* visits - that per-cell version is what made the
-    first attempt at this take minutes instead of seconds."""
+    Shift-and-OR rather than a per-cell scan: vectorised passes over the
+    whole grid, done ONCE per net, instead of a window check redone at every
+    single cell A* visits - that per-cell version is what made the first
+    attempt at this take minutes instead of seconds.
+
+    SEPARABLE, which is exact and not an approximation: dilating by a box
+    is the Minkowski sum with that box, and a box is the sum of a horizontal
+    segment and a vertical one, so dilating along x and then along y gives
+    the identical mask in 2*(2r+1) passes instead of (2r+1)^2.  At the
+    values in use - r = 4 cells for POUR_CLEAR - that is 18 passes rather
+    than 81, on a function pour_connectivity() calls four times and which
+    itself runs about a dozen times per board.  Measured 5x faster on a
+    1600x1400 grid, and checked bit-identical against the square version
+    over random grids and every single-cell border position."""
     if r_cells <= 0:
         return mask
-    out = mask.copy()
     h, w = mask.shape
+    tmp = mask.copy()
+    for dx in range(-r_cells, r_cells + 1):
+        if dx == 0:
+            continue
+        xs = slice(max(0, dx), w + min(0, dx))
+        xs_src = slice(max(0, -dx), w + min(0, -dx))
+        tmp[:, xs] |= mask[:, xs_src]
+    out = tmp.copy()
     for dy in range(-r_cells, r_cells + 1):
-        for dx in range(-r_cells, r_cells + 1):
-            if dx == 0 and dy == 0:
-                continue
-            ys, ys_src = slice(max(0, dy), h + min(0, dy)), slice(max(0, -dy), h + min(0, -dy))
-            xs, xs_src = slice(max(0, dx), w + min(0, dx)), slice(max(0, -dx), w + min(0, -dx))
-            out[ys, xs] |= mask[ys_src, xs_src]
+        if dy == 0:
+            continue
+        ys = slice(max(0, dy), h + min(0, dy))
+        ys_src = slice(max(0, -dy), h + min(0, -dy))
+        out[ys, :] |= tmp[ys_src, :]
     return out
 
 
@@ -1938,7 +1982,7 @@ _FOREIGN_STATIC = None
 
 def _foreign_static():
     """Copper that cannot move once the parts are placed: pads, mounting
-    holes, pot bosses.  Built once and copied.
+    holes.  Built once and copied.
 
     pour_connectivity() runs up to a dozen times in a board - six stub
     passes before routing and six after, plus the final check - and
@@ -2094,7 +2138,7 @@ def pour_connectivity():
 
     gnd_pads = [p for p in pads if p["net"] == "GND"]
     if not gnd_pads:
-        return True, []
+        return True, [], poured
     cells = {}
     for p in gnd_pads:
         cs = [(L, x, y) for (L, x, y) in core_cells(p)]
@@ -2716,6 +2760,52 @@ def route_with_ripup():
     save_route_order(best_priority)
     return fails
 
+
+# --------------------------------------------------------------------------
+#  the structural pre-filter
+# --------------------------------------------------------------------------
+# A ground pad the plane cannot reach BEFORE any signal net is routed can
+# never be reached after one.  Signal traces are foreign copper: they only
+# ever take room away from the pour, and the second plane_stubs() pass runs
+# on a board with strictly more of them.  So this verdict is final, and it
+# costs one stub pass (~seconds) instead of seven full routes (~minutes).
+#
+# That matters because it is the failure mode a SEARCH spends most of its
+# time on.  Every rejected candidate in this project's history failed on
+# `the ground pour does not reach N pad(s)` and nothing else, and each one
+# was paid for at full price: rip-up dutifully re-routed the whole board six
+# more times, learned a route order for it, and arrived at the same pocket
+# it started with - a pocket made by the PLACER, which no route order can
+# open.  find_board.py now rejects those in seconds.
+#
+# Off by default in production, where the point is to build the board and
+# the full verify has to run regardless; on by default under SWEEP=1, where
+# the point is a verdict.
+PLANE_PREFILTER = (os.environ.get("PLANE_PREFILTER",
+                                  "1" if os.environ.get("SWEEP") else "0")
+                   != "0")
+
+if PLANE_PREFILTER:
+    plane_stubs()
+    _pok, _pmissed, _ = pour_connectivity()
+    reset_routing()
+    if not _pok:
+        print("board %.1f x %.1f mm | %d footprints | %d pads | %d tracks | "
+              "%d vias" % (BW * 0.254, BH * 0.254, len(FP_SPANS), len(pads),
+                           0, 0))
+        print("  - the ground pour does not reach %d pad(s): %s"
+              % (len(_pmissed), ", ".join(sorted(_pmissed))))
+        print("  (rejected before routing - see PLANE_PREFILTER)")
+        print("DRC PROBLEMS (%d)" % len(_pmissed))
+        raise SystemExit(0)
+    if os.environ.get("PLANE_PREFILTER_ONLY"):
+        # Screening mode: say the placement is worth routing and stop.  A
+        # search wants this verdict on every seed before it spends minutes
+        # on any of them.
+        print("board %.1f x %.1f mm | %d footprints | %d pads | 0 tracks | "
+              "0 vias" % (BW * 0.254, BH * 0.254, len(FP_SPANS), len(pads)))
+        print("PREFILTER OK")
+        raise SystemExit(0)
 
 FAILED = route_with_ripup()
 

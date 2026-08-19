@@ -8,9 +8,12 @@ Two cascaded 2nd-order state variable filters, 12 dB/octave, with continuously
 variable crossover frequencies and adjustable Q. One channel — build two for
 stereo.
 
-Two variants are provided. They are the **same circuit** — identical topology,
-identical netlist — differing only in the six components that set the frequency
-range:
+Four variants are provided. They are the **same circuit** — identical filter
+topology and identical signal connectivity, which the generator asserts on
+every build — differing in the components that set the frequency range, in
+whether the eight op-amp sections are packaged as four duals or two quads,
+and in whether the board extras (volume controls, buffered outputs, muting)
+are drawn:
 
 | Variant | High/Mid | Mid/Low | Op-amps | File |
 |---|---|---|---|---|
@@ -84,25 +87,32 @@ only be confirmed by a real import:
 
 ## Before you build this
 
-Read [`docs/design-review.md`](docs/design-review.md). It lists the
-failure modes that pass every automated check — including why turn-on transients from an active crossover are a tweeter problem
-specifically, and why three per-band volume knobs with no master is the
-wrong control architecture if you intend to use this as a preamp.
+Read [`docs/design-review.md`](docs/design-review.md). It lists the failure
+modes that pass every automated check, marks which of them the board now
+fixes, and keeps the reasoning for the ones it does — including why turn-on
+transients from an active crossover are a tweeter problem specifically
+(fixed: JFET muting with soft start), and why per-band volume knobs with no
+master is the wrong control architecture for a preamp (fixed: `VR6`). What
+is left is mostly mechanical: unverified hand-drawn footprints, and the
+fact that nothing here has been built and measured.
 
 ## Repository layout
 
 ```
 schematic/   EasyEDA schematics (.json + .legacy.json), one pair per variant,
              each with a matching .svg / .png preview
-pcb/         EasyEDA PCB for the retuned-quad variant (+ .svg / .png preview)
+pcb/         the routed SMD board (+ .svg / .png preview)
 docs/        circuit-notes.md      — how the circuit works, design equations
+             pcb-notes-smd.md      — the board: layout, routing, verification
+             design-review.md      — what could still go wrong
              crossover-ranges.svg  — tuning-range diagram (+ .png)
              netlist.txt           — netlist extracted back out of the drawing
 bom/         one bom-*.csv per variant
 tools/       gen_schematic.py     — generates the schematics
-             gen_pcb.py           — through-hole PCB (placement only)
              gen_pcb_smd.py       — SMD PCB, routed + verified
              gen_range_diagram.py — generates the range diagram
+             validate_fab.py      — EasyEDA import + JLCPCB limit checks
+             find_board.py        — searches seeds/route orders for a clean board
 ```
 
 ## Regenerating
@@ -112,13 +122,13 @@ can't drift apart:
 
 ```sh
 python3 tools/gen_schematic.py      # schematics, previews, netlists, BOMs
-python3 tools/gen_pcb.py            # through-hole board (placement)
 python3 tools/gen_pcb_smd.py        # SMD board (routed; needs numpy)
 python3 tools/gen_range_diagram.py  # docs/crossover-ranges.svg + .png
+python3 tools/validate_fab.py --online   # EasyEDA import + JLCPCB limits
 ```
 
-`gen_pcb.py` reads the netlist JSON that `gen_schematic.py` writes, so the board
-cannot drift from the schematic — run them in that order.
+`gen_pcb_smd.py` reads the netlist JSON that `gen_schematic.py` writes, so the
+board cannot drift from the schematic — run them in that order.
 
 Both need `cairosvg` for PNG output (`pip install cairosvg`); the SVGs are
 written regardless.
@@ -133,6 +143,11 @@ netlist, so a retune that accidentally changed a connection would fail the
 build rather than ship quietly.
 
 ## Circuit summary
+
+Designators below are the **four-dual** drawing's. On the quad variants —
+including the board — the same eight sections are U1A–D and U2A–D; that
+mapping, and every part the board adds beyond the filter, is in
+[`docs/circuit-notes.md`](docs/circuit-notes.md#function-blocks-on-the-smd-board).
 
 | | Filter 1 | Filter 2 |
 |---|---|---|
@@ -202,10 +217,18 @@ The ESP figures deliberately leave out supply wiring. This schematic adds it so
 the netlist is complete:
 
 * **J1** — ±15 V and ground input.
-* **C5–C12** — 100 nF ceramic from each op-amp's pin 8 and pin 4 to ground, as
-  the article's text requires. Mount them right at the ICs.
+* **C5–C10** — 100 nF ceramic from each op-amp package's positive and negative
+  supply pin to ground, as the article's text requires. Mount them right at
+  the ICs; the board's placement search prices the distance directly.
+* **C11, C12** — 10 µF bulk reservoir, one per rail.
 * **R10/R11** and **R23/R24** — the unlabelled 10 k test-point resistors in
   Figure 2, given designators.
+
+The `retuned-quad-smd` variant — the one the board is built from — adds more
+still: a master volume, per-band volume trims, buffered outputs with DC
+blocking and bleeders, and per-output muting with soft start. Every part and
+what it does is listed in
+[`docs/circuit-notes.md`](docs/circuit-notes.md#function-blocks-on-the-smd-board).
 
 ## Known limitations
 
@@ -216,6 +239,8 @@ the netlist is complete:
   only, which is the usual convention.
 * **VR1 and VR2 are two dual-gang 20 k pots**, drawn as four gangs (VR1A, VR1B,
   VR2A, VR2B). Both gangs of a pot must track reasonably well.
+* **VR3–VR6 are single-gang audio-taper pots** — three band trims and a
+  master. They are passive attenuators, not part of any filter.
 * **Footprints are placeholders.** Assign real ones from the EasyEDA/LCSC
   library for your parts (axial vs. 0805, pot body, etc.).
 * One deliberate wire crossing per filter, where the low-pass feedback rail
@@ -225,11 +250,21 @@ the netlist is complete:
 
 ### SMD board, routed, for JLCPCB fab + assembly
 
-`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **97.0 × 64.8 mm**,
-two layers, **fully routed**, five front-panel controls on the board (a
-frequency pot and an output-volume trim per band), trace width matched to
-purpose (12 mil signal, 16 mil power/ground), 45° chamfered corners, every
-SMD part a real LCSC line item.
+`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **114.3 ×
+102.9 mm**, two layers, **fully routed**, six front-panel controls on the
+board (a frequency pot and a volume trim per band, plus a master volume),
+trace width matched to purpose (12 mil signal, 16 mil power/ground), 45°
+chamfered corners, every SMD part a real LCSC line item.
+
+Beyond the filter itself it carries buffered outputs with build-out
+resistors, DC blocking and bleeders, a 47 kΩ line input, bulk and per-IC
+supply decoupling, and **per-output muting with power-up soft start** — a
+JFET shunting each buffer input, steering diodes so one button mutes one
+band, and an RC that holds everything muted until the rails settle and
+re-mutes fast when they collapse. The switches and LEDs are panel hardware
+on a loom to `J6`; no audio leaves the board. Which parts do what, block
+by block, is in
+[`docs/circuit-notes.md`](docs/circuit-notes.md#function-blocks-on-the-smd-board).
 
 ![SMD board](pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.png)
 
@@ -239,13 +274,14 @@ verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
           pads match the schematic exactly
 ```
 
-Sockets on the rear edge; on the front edge, left to right: LOW volume,
-MID/LOW frequency, MID volume, HIGH/MID frequency, HIGH volume - the board
-mounts flat behind the front panel. The volume trims are single-gang 10 kΩ
-audio-taper pots (Alps RK097, LCSC C470577) wired as attenuators between
-each filter's output and its terminal block; the frequency pots are the
-standard 9 mm dual-gang pattern. Both **need checking against your parts'
-datasheets**; see the notes.
+Sockets on the rear edge; on the front edge, left to right: MASTER, LOW
+volume, MID/LOW frequency, MID volume, HIGH/MID frequency, HIGH volume —
+the board mounts flat behind the front panel, and the frequency pots carry
+their sweep range on the silkscreen. The volume controls are single-gang
+audio-taper pots (Alps RK097 pattern) wired as attenuators; the frequency
+pots are the standard 9 mm dual-gang pattern. Both **need checking against
+your parts' datasheets** — there are no locating-boss holes, deliberately;
+see the notes.
 
 Routing is checked by geometry that doesn't reuse the router's own bookkeeping:
 exact pairwise clearance between every copper feature, union-find connectivity
@@ -262,29 +298,6 @@ knows that at export time.
 
 JLCPCB won't assemble through-hole parts, so the pots, power, I/O and test
 points are yours to solder — but there is no off-board pot wiring any more.
-
-### Through-hole board, placement only
-
-A board for the **retuned-quad** (DIP) variant is in
-`pcb/esp-p148-3way-crossover-retuned-quad-pcb.json` — 101.6 × 83.8 mm, two
-layers, all through-hole. Open it the same way as a schematic.
-
-![Board placement](pcb/esp-p148-3way-crossover-retuned-quad-pcb.png)
-
-It contains the outline, mounting holes, all 44 footprints placed, all 117 pads
-netted, silkscreen, and a bottom-side ground pour — but **no routed signal
-traces**. Route in EasyEDA once you're happy with the placement.
-
-That split is deliberate: placement is checkable here (pad-to-net agreement with
-the schematic, courtyard overlaps, coincident pads, parts inside the outline,
-and total ratsnest length are all verified on every run) whereas routing needs a
-real DRC against a real fabricator's rules. A board carrying unverified copper
-is worse than one carrying none, because it looks finished.
-
-Placement isn't a plain grid — parts are permuted within each functional group
-and scored on ratsnest length, which took it from 1663 mm to 1422 mm. Layout
-rationale, routing order and the pre-order checklist are in
-[`docs/pcb-notes.md`](docs/pcb-notes.md).
 
 ## Getting the most out of it
 

@@ -33,7 +33,7 @@ class Cfg(ctypes.Structure):
         ("n", ctypes.c_int), ("nr", ctypes.c_int), ("nnets", ctypes.c_int),
         ("nfixed", ctypes.c_int), ("nnear", ctypes.c_int),
         ("ngroups", ctypes.c_int),
-        ("rot_base", _ip), ("box", _dp), ("need", _dp),
+        ("rot_base", _ip), ("box", _dp), ("need", _dp), ("pneed", _dp),
         ("pad_base", _ip), ("pad_dx", _dp), ("pad_dy", _dp),
         ("group", _ip), ("outward", _ip),
         ("net_base", _ip), ("net_part", _ip), ("net_pk", _ip),
@@ -42,10 +42,11 @@ class Cfg(ctypes.Structure):
         ("near_a", _ip), ("near_b", _ip), ("near_pka", _ip), ("near_pkb", _ip),
         ("near_tgt", _dp),
         ("w_ov", ctypes.c_double), ("w_esc", ctypes.c_double),
+        ("w_pesc", ctypes.c_double),
         ("w_cong", ctypes.c_double), ("w_hpwl", ctypes.c_double),
         ("w_h", ctypes.c_double), ("w_w", ctypes.c_double),
         ("w_wfloor", ctypes.c_double), ("w_edge", ctypes.c_double),
-        ("w_near", ctypes.c_double),
+        ("w_near", ctypes.c_double), ("plane_gap", ctypes.c_double),
         ("t0", ctypes.c_double), ("t1", ctypes.c_double),
         ("amp0", ctypes.c_double), ("amp1", ctypes.c_double),
         ("ov_hi_mul", ctypes.c_double),
@@ -96,10 +97,12 @@ def build(p, w):
     from place import _rotate
     _KEEP.clear()
     rot_base, box, need, pad_base, pdx, pdy, outward = [0], [], [], [0], [], [], []
+    pneed = []
     for i, part in enumerate(p.parts):
         for r in part.rots:
             box.extend(p.boxoff[i][r])
             need.extend(p.need[i][r])
+            pneed.extend(p.pneed[i][r])
             pads = p.padoff[i][r]
             pdx.extend(q[1] for q in pads)
             pdy.extend(q[2] for q in pads)
@@ -147,6 +150,7 @@ def build(p, w):
     c.rot_base = A(rot_base, np.int32).ctypes.data_as(_ip)
     c.box = A(box, np.float64).ctypes.data_as(_dp)
     c.need = A(need, np.float64).ctypes.data_as(_dp)
+    c.pneed = A(pneed, np.float64).ctypes.data_as(_dp)
     c.pad_base = A(pad_base, np.int32).ctypes.data_as(_ip)
     c.pad_dx = A(pdx, np.float64).ctypes.data_as(_dp)
     c.pad_dy = A(pdy, np.float64).ctypes.data_as(_dp)
@@ -163,9 +167,12 @@ def build(p, w):
     c.near_pka = A(npka, np.int32).ctypes.data_as(_ip)
     c.near_pkb = A(npkb, np.int32).ctypes.data_as(_ip)
     c.near_tgt = A(ntg, np.float64).ctypes.data_as(_dp)
-    c.w_ov = w["ov"]; c.w_esc = w["esc"]; c.w_cong = w["cong"]
+    c.w_ov = w["ov"]; c.w_esc = w["esc"]; c.w_pesc = w["pesc"]
+    c.w_cong = w["cong"]
     c.w_hpwl = w["hpwl"]; c.w_h = w["h"]; c.w_w = w["w"]
     c.w_wfloor = w["wfloor"]; c.w_edge = w["edge"]; c.w_near = w.get("near", 0.0)
+    from place import PLANE_GAP
+    c.plane_gap = PLANE_GAP
     c.t0 = w.get("t0", 120.0); c.t1 = w.get("t1", 0.5)
     c.amp0 = w.get("amp0", 30.0); c.amp1 = w.get("amp1", 1.0)
     c.ov_hi_mul = 400.0

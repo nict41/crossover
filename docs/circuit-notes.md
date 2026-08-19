@@ -23,7 +23,161 @@ INPUT -> U1A -> filter 1 (VR1, 680 Hz - 4.8 kHz)
                                                                   (inverter)
 ```
 
+## Function blocks on the SMD board
+
+The board carries a good deal more than the ESP figure does, and the
+designators moved when the four duals became two quads, so this is the map:
+**every part on the board, grouped by the job it does.** It is written
+against the `retuned-quad-smd` variant, which is the one in `pcb/`.
+
+Signal path, end to end:
+
+```
+J2 -> VR6 -> C0/R1/U1A -> filter 1 -+-> HIGH_PRE -> VR3 -> R31 -+-> U3A -> R25 -> C13 -> J3
+   in   master   input buffer       |                          |  buffer  DC block  HIGH
+        volume                      |                          Q1 (mute)
+                                    |
+                                    +-> LP1 -> filter 2 -+-> MID_PRE -> VR4 -> R32 -+-> U3B -> R26 -> C14 -> J4
+                                                         |                          Q2 (mute)
+                                                         +-> LOW_PRE -> VR5 -> R33 -+-> U3C -> R27 -> C15 -> J5
+```
+
+### Input and master volume
+
+| Part | Value | Job |
+|---|---|---|
+| `J2` | 2-pin terminal block | Line input |
+| `VR6` | 50 kΩ log | Master volume, ahead of everything |
+| `C0` | 10 µF | DC block into the buffer |
+| `R1` | 47 kΩ | Input bias return; sets input impedance |
+| `U1A` | ¼ MC33079 | Unity-gain input buffer |
+
+`VR6` sits **before** the buffer, not after it, so the master control also
+sets how hard the filter is driven — turn it down and the whole chain gets
+quieter and cleaner together. `R1` at 47 kΩ is high enough not to load a
+typical source; it was 10 kΩ until this round.
+
+### Crossover filter 1 — the HIGH / MID split
+
+The whole of `U1` plus its passives. `VR1` (dual-gang 20 kΩ, panel) sets the
+frequency; `R3` sets Q.
+
+| Part | Value | Job |
+|---|---|---|
+| `U1B`, `R2`, `R4`, `R5`, `R6` | 5.6 kΩ each | Summing amp — its output **is** the high-pass, `HIGH_PRE` |
+| `R3` | 11 kΩ | Q = (5.6k + Rq)/(3·Rq) = 0.503, near Linkwitz-Riley |
+| `U1C`, `VR1A`, `R7`, `C1` | 4.7 kΩ, 33 nF | Integrator 1 — bandpass, used only as feedback |
+| `U1D`, `VR1B`, `R8`, `C2` | 4.7 kΩ, 33 nF | Integrator 2 — low-pass out (`LP1`), feeds filter 2 |
+| `R9` | 100 Ω | Build-out from the filter into the volume pot |
+| `R10`, `R11`, `TP1` | 10 kΩ | Sums HP and LP; nulls at the crossover point |
+
+Range 195 Hz – 1.03 kHz, printed on the silkscreen next to `VR1`.
+
+### Crossover filter 2 — the MID / LOW split
+
+The whole of `U2`, fed from `LP1`. Same topology, different values.
+
+| Part | Value | Job |
+|---|---|---|
+| `U2A`, `R12`, `R14`, `R15`, `R16` | 5.6 kΩ each | Summing amp — high-pass out, which is `MID` |
+| `R13` | 11 kΩ | Q |
+| `U2B`, `VR2A`, `R17`, `C3A`+`C3B` | 13 kΩ, 2 × 33 nF | Integrator 1 — feedback only |
+| `U2C`, `VR2B`, `R18`, `C4A`+`C4B` | 13 kΩ, 2 × 33 nF | Integrator 2 — low-pass out |
+| `U2D`, `R20`, `R21` | 5.6 kΩ | Inverter, on the **bass** output (see below) |
+| `R19`, `R22` | 100 Ω | Build-out into the MID and LOW volume pots |
+| `R23`, `R24`, `TP2` | 10 kΩ | Second null test point |
+
+Range 73 – 186 Hz. The tuning caps are two 33 nF in parallel rather than one
+68 nF — see [`pcb-notes-smd.md`](pcb-notes-smd.md#why-the-tuning-caps-are-two-33nf-in-parallel).
+
+### Level controls
+
+Four pots on the front edge, all passive attenuators, all audio (log) taper.
+
+| Part | Value | Job |
+|---|---|---|
+| `VR6` | 50 kΩ log | Master, before the input buffer |
+| `VR3` | 10 kΩ log | HIGH band trim |
+| `VR4` | 10 kΩ log | MID band trim |
+| `VR5` | 10 kΩ log | LOW band trim |
+
+The three band trims sit between each filter's output and its buffer, not at
+the terminal block: the filter op-amps are low impedance and drive 10 kΩ
+without effect, a divider only ever attenuates so there is no new clipping
+risk, and putting the buffer *after* the pot means the output impedance the
+amplifier sees is `R25`–`R27` and not the pot's wiper.
+
+### Output buffers and DC blocking
+
+| Part | Value | Job |
+|---|---|---|
+| `U3A`, `U3B`, `U3C` | ¼ MC33079 | Unity-gain buffer per band |
+| `R25`, `R26`, `R27` | 100 Ω | Build-out — isolates the buffer from cable capacitance |
+| `C13`, `C14`, `C15` | 10 µF | DC block, so an op-amp offset never reaches an amplifier |
+| `R28`, `R29`, `R30` | 100 kΩ | Bleeder — holds the cap's outer plate at 0 V |
+| `J3`, `J4`, `J5` | 2-pin terminal blocks | HIGH / MID / LOW out, each with its **own** ground return |
+| `U3D` | ¼ MC33079 | Spare section: input grounded, output tied back |
+
+Each output has its own ground pin rather than sharing one, because each
+runs to a separate power amplifier and a shared return is a hum loop. The
+bleeders cost 0.16 Hz of corner frequency against the 10 µF and stop the
+board thumping when something is plugged into an output that has been
+sitting idle.
+
+`U3D` is grounded rather than left floating: an unused op-amp section with
+floating inputs is a comparator with a metre of stray capacitance on it, and
+it will oscillate into the three sections sharing its supply pins.
+
+### Muting and soft start
+
+| Part | Value | Job |
+|---|---|---|
+| `Q1`, `Q2`, `Q3` | MMBFJ111 JFET | Shunts one buffer input to ground = that band muted |
+| `R31`, `R32`, `R33` | 10 kΩ | Series resistor the JFET shunts against |
+| `R34`, `R35`, `R36` | 1 MΩ | Gate pulldown to −15 V — this is what **un**mutes |
+| `D1`, `D2`, `D3` | 1N4148W | Steering, so one button pulls only its own gate |
+| `R40`, `C16` | 1 MΩ, 10 µF | Soft-start RC on `MUTE_SS`, ≈ 2 s |
+| `D4` | 1N4148W | Fast re-mute when the −15 V rail collapses |
+| `R37`, `R38`, `R39` | 2.2 kΩ | Panel LED current, one per band |
+| `J6` | 8-pin header | Loom to the panel: `MG1`–`MG3`, `LD1`–`LD3`, 2 × GND |
+
+A J111 is a **depletion-mode** JFET: it conducts at Vgs = 0. That is the
+whole trick — with the rails still coming up, every gate sits near 0 V and
+every band is muted, for free, with no logic and no relay. `R40`/`C16` then
+walk `MUTE_SS` down to −15 V over about two seconds, the 1 MΩ pulldowns
+pinch the JFETs off, and the outputs come alive after the filter has stopped
+lurching. `D4` does the reverse on the way down: as −15 V collapses it drags
+`MUTE_SS` up and mutes everything while the rails are still falling, which
+is the messier of the two transients.
+
+Pressing a panel button pulls its `MG` line to `MUTE_SS`; the diode is what
+keeps that from muting the other two. **No audio leaves the board** — the
+switches and LEDs are panel hardware on the `J6` loom, so the only thing on
+that cable is DC.
+
+### Power and decoupling
+
+| Part | Value | Job |
+|---|---|---|
+| `J1` | 3-pin terminal block | ±15 V and ground |
+| `C11`, `C12` | 10 µF | Bulk reservoir, one per rail |
+| `C5`, `C7`, `C9` | 100 nF | +15 V bypass, one at each of `U1`, `U2`, `U3` |
+| `C6`, `C8`, `C10` | 100 nF | −15 V bypass, likewise |
+
+Supply pins live on the `A` section of `U1` and `U2` and on `U3D`. The
+placement search is told which bypass cap belongs to which op-amp
+(`BYPASS_NEAR`) and prices the pin-to-pin distance directly, because nothing
+else in the cost model can see it — a cap on two board-spanning nets costs
+almost no wirelength wherever it is put. They are 4.2–10.0 mm from their
+pins on the committed board, against 37–63 mm before that term existed.
+
 ## Stage-by-stage
+
+Designators here are the **original four-dual** drawing's (U1-U4), which is
+what the ESP figure and the two through-hole schematic variants use. On the
+quad variants - including the board - the same eight sections live in two
+14-pin packages and are numbered U1A-D and U2A-D; the section above is the
+map for those.
 
 | Stage | Devices | Function |
 |---|---|---|

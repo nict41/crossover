@@ -9,21 +9,28 @@ generator in `tools/` and re-run it.
 
 ```sh
 python3 tools/gen_schematic.py    # schematics, previews, netlists, BOMs
-python3 tools/gen_pcb.py          # through-hole board (placement only)
 python3 tools/gen_pcb_smd.py      # SMD board, routed + verified (needs numpy)
 python3 tools/gen_range_diagram.py
 python3 tools/validate_fab.py --online   # EasyEDA import + JLCPCB limits
 python3 tools/find_board.py --seeds 1-24 --route-seeds 0-7   # search for a clean board
 ```
 
-**Order matters**: `gen_pcb*.py` read the netlist JSON that `gen_schematic.py`
+**Order matters**: `gen_pcb_smd.py` reads the netlist JSON that `gen_schematic.py`
 writes, so the board cannot drift from the schematic. Run the schematic first.
 
 `gen_pcb_smd.py` knobs (all optional): `MOVES` / `RESTARTS` / `SEED` tune the
 placement search, `PLACE_LOG=n` prints its cost breakdown every n moves,
 `GRID` sets the routing grid, `SWEEP=1` skips writing artifacts, `PANEL_PITCH`
 sets the front-panel control spacing, `PLANE_LOG=1` traces the ground-plane
-stubs. There is deliberately no `BOARD_W` or `BOARD_H` — see below.
+stubs, `RIPUP_LOG=1` traces the rip-up rounds, `PLANE_GAP` sets the
+plane-escape distance (`0` disables that placement term),
+`PLANE_PREFILTER=0/1` overrides the pre-routing pour check, and
+`PLANE_PREFILTER_ONLY=1` stops after it (that is the search's cheap screen).
+There is deliberately no `BOARD_W` or `BOARD_H` — see below.
+
+`find_board.py` screens every seed with the pre-filter before routing any of
+them, and stops at the first clean board (`--all` sweeps the whole field,
+`--no-screen` skips the screen).
 
 `gen_schematic.py` builds all four variants and asserts they share identical
 signal connectivity, so a retune that accidentally changed a connection fails
@@ -63,6 +70,7 @@ costed on:
 |---|---|
 | overlap | courtyards may not intersect (ramped hard; asserted afterwards) |
 | **escape** | each part side needs clear depth ∝ the pads breaking out through it |
+| plane escape | a side carrying a pad on a POURED net needs room for a via |
 | congestion | RUDY wire-demand vs tracks that physically fit per cell |
 | wirelength | half-perimeter per net |
 | size | height, plus width past the panel row's floor |
@@ -159,7 +167,7 @@ Consequence for the user: **rebuild copper areas on import.** That is now
 load-bearing, and `validate_fab.py` checks the pour is present on both
 layers.
 
-## Four ways a fix can look applied and not be
+## Five ways a fix can look applied and not be
 
 Every one of these shipped a commit message that was wrong, and every one
 was caught by measuring the ARTIFACT rather than reading the change.
@@ -183,6 +191,17 @@ was caught by measuring the ARTIFACT rather than reading the change.
   `verify()` then found `TP1` in two pieces - the router thinks in
   0.25-unit cells. It now scores with `split_nets()`, the same exact
   geometry `verify()` uses.
+* **The problem had already been fixed by something else.** The plane-escape
+  placer term was built against "every failing board has a ground pad sealed
+  in a pocket before any signal net is routed", which this file asserted and
+  which was true when it was written. Screening 40 seeds says otherwise now:
+  40 of 40 pour clean pre-routing, with the term AND with `PLANE_GAP=0`.
+  `plane_stubs()` running before the signal nets had already closed those
+  pockets, and the note describing them had gone stale without anyone
+  noticing. *Measure the metric a change targets, in both arms, before
+  believing the change did anything.* Cost: one full search round. The term
+  was kept - an A/B on routed boards showed it does help - but for a
+  different reason than the one it was built for.
 
 ## Hard-won learnings (each of these cost real debugging time)
 
@@ -406,6 +425,16 @@ placement is **~4.5 s**. Before: ~25 minutes. What did it:
   connectivity checks consider ~2.9M pairs but only a handful are near each
   other. Expanded-box distance is a lower bound on the real gap, so
   skipping the rest is exact, not approximate.
+* **Separable `dilate()`** — a box dilation is the Minkowski sum with a
+  box, and a box is a horizontal segment summed with a vertical one, so
+  dilating along x then along y is *identical* in `2(2r+1)` passes rather
+  than `(2r+1)^2`. At `r=4` that is 18 passes against 81; measured 5x on a
+  1600x1400 grid, and checked bit-for-bit against the square version over
+  random grids and every single-cell border position. It is on the hot path
+  of `pour_connectivity()`, which runs about a dozen times per board.
+* **The plane pre-filter** (`PLANE_PREFILTER`) — not a speedup of a run,
+  but of a SEARCH: it settles in ~1.5 s whether a placement's ground plane
+  is reachable at all, so `find_board.py` never routes one that cannot work.
 
 Measured and NOT worth doing: caching the anneal's cost across moves
 (changed the search trajectory and cost a verified board), and replacing
@@ -452,26 +481,47 @@ numpy with plain Python in the placer (numpy is still ~3x faster at n=49).
   sequence moved, and the same SEED gave a different board about one run in
   three - which silently invalidated a whole round of searches. If a search
   result will not reproduce, suspect ordering before anything else.
-* **The next real lever is now the PLACER, on one specific point: a
-  ground pad needs a clear line to open board.** Every board that fails
-  now fails the same way - `the ground pour does not reach N pad(s)`, and
-  the pads are always op-amp ground pins (`U1C.10`, `U2C.10`, `U1D.12`,
-  `U2B.5`) or a bypass cap's ground pin. Dumping the occupancy grid around
-  one of them shows a sealed pocket: the gap between two SOIC pads, closed
-  at both ends by a neighbouring part's pad keepout, formed *before any
-  signal net is routed*. The escape term prices pads-per-side against the
-  gap in front of them, which is not the same statement - it does not know
-  that a plane net's pad needs a path to the plane specifically. Candidates
-  22% smaller in area than the committed board (95.8 x 65.3 mm at
-  `SEED=26 ROUTE_SEED=2`) fail on exactly this and nothing else, so this
-  is where the area is.
-* **The other real lever is the router.** It is still
-  single-pass with no rip-up, which is why route *order* matters and why
-  `route_order()` exists at all. Negotiated congestion routing (route
-  everything, price up contested cells, reroute) deletes that entire
-  category — and now that a full route costs ~20s instead of ~20min, it is
-  affordable to develop. `router.c` already carries the `use`/`hist` cost
-  terms it needs, unused.
+* **The placer now prices what actually rejected boards: a plane-net pad
+  needs room for a VIA.** Every board this project failed to verify failed
+  the same way - `the ground pour does not reach N pad(s)`, always at an
+  op-amp ground pin (`U1C.10`, `U2C.10`, `U1D.12`, `U2B.5`) or a bypass
+  cap's, always a sealed pocket formed *before any signal net is routed*.
+  The escape term could not express it: it is capped on pad count, so a
+  SOIC face asks for four track pitches and scores the same whether the gap
+  in front of it is three units or nine - and three fits no via. `pesc`
+  (`place.PLANE_GAP`, 4.4 units = `VIA_PAD + 2*CLEAR`, weight 60) prices
+  the shortfall per plane pad per side, sharing `escape_of()`'s neighbour
+  scan so it costs four multiplications rather than a second pass. Mirrored
+  in `anneal.c`; `canneal.Cfg` must stay field-for-field identical.
+  **Its benefit is not measured.** It does not change the pre-routing pour
+  verdict (see the pre-filter below), so whatever it buys is room for the
+  pour to survive signal routing, and that has not been isolated from
+  seed-to-seed noise. What IS measured is that it moves every placement:
+  `SEED=38`, which routed clean, does not any more. Treat it as an
+  unsettled term, not a fix.
+* **The structural pre-filter.** `PLANE_PREFILTER` pours the board with
+  only pads on it and asks whether every ground pad can reach the plane. A
+  pad unreached there can never be reached later - signal traces are
+  foreign copper, they only take room away - so the verdict is final and
+  costs one stub pass instead of seven full routes. `find_board.py` screens
+  every seed with it first (`PLANE_PREFILTER_ONLY=1`, ~1.5 s each against
+  several minutes) and routes only the survivors. Default: off in
+  production, on under `SWEEP=1`.
+  **It currently rejects nothing** - 40 seeds out of 40 pour clean before
+  routing, with `pesc` on *and* with `PLANE_GAP=0` - which dates the
+  "sealed pocket before any signal net" note above: those were closed by
+  running `plane_stubs()` before the signal nets, not by the placer. The
+  pour failures that remain are made by the signal traces. Keep the screen
+  anyway: exact, one second, and it catches the thing that used to cost a
+  search round.
+* **The remaining lever is the router.** Route *order* still matters, which
+  is why `route_order()` and rip-up exist. Negotiated congestion routing
+  (route everything, price up contested cells, reroute) deletes that whole
+  category; it was tried once and would not converge (see below), and
+  `router.c` already carries the `use`/`hist` cost terms unused.
 * Not built or measured — verified against its own netlist and geometry only.
 * Hand-drawn footprints still to confirm against datasheets before ordering:
-  SOIC-14, the 10 µF electrolytic, the dual-gang pot body/boss positions.
+  SOIC-14, the 10 µF electrolytic, the dual-gang pot body. The pot
+  locating-boss holes are **gone**, not fixed: they were a guess, LCSC's
+  footprint API now answers 403, and a hole in the wrong place is a
+  re-order where a missing one is a hand drill.

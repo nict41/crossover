@@ -23,6 +23,21 @@ What the search optimises, in the order the weights actually favour:
               sides has seven pins queuing to get out.  Starved escape
               corridors - not board area - are what actually left nets
               unroutable every time it happened here.
+  plane escape
+              a pad on a net carried by a POUR is a special case of the
+              above and needs its own term.  It does not need a channel
+              wide enough for a track; it needs somewhere a VIA will fit,
+              because the move a person makes at a ground pin the plane
+              cannot reach is a via straight down to the solid side.  The
+              escape term cannot express that: it is capped on pad count,
+              so a SOIC face already asks for four track pitches and gets
+              scored the same whether the gap in front of it is three
+              units or nine - and three units fits no via at all.  Every
+              board this project failed to verify carried this complaint,
+              usually alongside others.  Note what it is NOT: the pocket
+              is not there before routing - plane_stubs() vias its way out
+              of those - it is what the signal traces close up afterwards,
+              so what this term buys is margin, not a guarantee.
   congestion  RUDY: each net spreads an estimated wire demand over its
               bounding box; cells where demand exceeds the tracks that
               physically fit there are penalised.  Catches the case escape
@@ -58,6 +73,17 @@ except ImportError:                     # reference implementation still works
     canneal = None
 
 INF = float("inf")
+
+# Clear depth a plane-net pad needs beyond its courtyard, in board units.
+#
+# Not a tuned number: it is what a VIA physically costs.  A via pad is 2.8
+# units across and wants the routing clearance (0.8) on either side of it,
+# so 4.4 units of empty board is the least that will take one.  Anything
+# less and the pad's only remaining hope is a trace stub threading out
+# between two of its own package's pads - which for a SOIC is a 2.5 unit
+# channel, narrower than a track plus its clearances, so there is no hope
+# at all.
+PLANE_GAP = float(os.environ.get("PLANE_GAP", 4.4))
 
 
 class Part:
@@ -174,6 +200,24 @@ class Placer:
                           for c in cnt]
             self.need.append(per)
 
+        # Plane-net pads, counted per side the same way.  Kept separate from
+        # `need` rather than folded into it because the two ask for
+        # different things: `need` wants depth proportional to the traffic
+        # leaving a face, and saturates; this wants a fixed depth - room for
+        # one via - and must never saturate, since the pad it is speaking
+        # for has no other way out.
+        self.pneed = []
+        for p in parts:
+            per = {}
+            for r in p.rots:
+                out = (_rotate(p.outward, r // 90)
+                       if p.outward is not None else None)
+                pl = [pd for pd in p.pads(r) if pd[2] in self.plane_nets]
+                per[r] = ([0.0, 0.0, 0.0, 0.0] if not pl
+                          else [float(c) for c in
+                                _side_counts(p.box(r), pl, out)])
+            self.pneed.append(per)
+
         # --- rigid groups (the front-panel row) --------------------------
         self.groups = {}
         for i, p in enumerate(parts):
@@ -222,6 +266,7 @@ class Placer:
         self.BX1 = np.zeros(self.n)
         self.BY1 = np.zeros(self.n)
         self.esc = np.zeros(self.n)
+        self.pesc = np.zeros(self.n)
         self.net_hpwl = np.zeros(len(self.nets))
 
         self._swap_pool = {}
@@ -290,10 +335,17 @@ class Placer:
         count needs.  Neighbours that do not overlap this part's span on
         the perpendicular axis are not in the way and are skipped, which is
         what stops a part diagonally offset from this one from looking like
-        a wall."""
+        a wall.
+
+        Returns (escape, plane escape).  Both are scored here, off the same
+        four gaps, because finding those gaps is a scan over every other
+        part and the arithmetic afterwards is four multiplications - doing
+        it twice would double the cost of the hottest term in the search to
+        compute something already in hand."""
         need = self.need[i][self.R[i]]
-        if not any(need):
-            return 0.0
+        pneed = self.pneed[i][self.R[i]]
+        if not any(need) and not any(pneed):
+            return 0.0, 0.0
         x0, y0, x1, y1 = self.BX0[i], self.BY0[i], self.BX1[i], self.BY1[i]
         span_y = (self.BY0 < y1) & (self.BY1 > y0)
         span_x = (self.BX0 < x1) & (self.BX1 > x0)
@@ -315,7 +367,9 @@ class Placer:
                     gaps[2] = min(gaps[2], y0 - fy1)
                 if fy0 >= y1:
                     gaps[3] = min(gaps[3], fy0 - y1)
-        return sum(max(0.0, nd - g) ** 2 for nd, g in zip(need, gaps))
+        return (sum(max(0.0, nd - g) ** 2 for nd, g in zip(need, gaps)),
+                sum(c * max(0.0, PLANE_GAP - g) ** 2
+                    for c, g in zip(pneed, gaps) if c))
 
     def _pin_on(self, i, net):
         """Position of part i's pad on `net`, or its anchor if it has none."""
@@ -433,7 +487,7 @@ class Placer:
         approximation from accumulating into a cost the layout doesn't
         actually have."""
         for i in range(self.n):
-            self.esc[i] = self.escape_of(i)
+            self.esc[i], self.pesc[i] = self.escape_of(i)
         self.demand[:] = 0.0
         for ni in range(len(self.nets)):
             self._rudy(ni, +1)
@@ -445,6 +499,7 @@ class Placer:
         x0, y0, x1, y1 = self.extent()
         return dict(ov=w["ov"] * ov,
                     esc=w["esc"] * float(self.esc.sum()),
+                    pesc=w["pesc"] * float(self.pesc.sum()),
                     cong=w["cong"] * self.congestion(),
                     hpwl=w["hpwl"] * float(self.net_hpwl.sum()),
                     h=w["h"] * (y1 - y0),
@@ -541,7 +596,7 @@ class Placer:
             moved = undo[0]
             d_ov = sum(self.overlap_of(i) for i in moved) - undo[1]
             for i in moved:
-                self.esc[i] = self.escape_of(i)
+                self.esc[i], self.pesc[i] = self.escape_of(i)
             for ni in undo[3]:
                 self._rudy(ni, +1)
                 x0, y0, x1, y1 = self._net_rect(ni)
@@ -556,10 +611,11 @@ class Placer:
             if report and step % report == 0:
                 x0, y0, x1, y1 = self.extent()
                 t = self.terms(w, ov)
-                print("  %6d T=%7.2f  %.0fx%.0f  ov %8.0f esc %7.0f cong %7.0f "
-                      "hpwl %6.0f size %6.0f edge %7.0f"
+                print("  %6d T=%7.2f  %.0fx%.0f  ov %8.0f esc %7.0f pesc %6.0f "
+                      "cong %7.0f hpwl %6.0f size %6.0f edge %7.0f"
                       % (step, temp, x1 - x0, y1 - y0, t["ov"], t["esc"],
-                         t["cong"], t["hpwl"], t["h"] + t["w"], t["edge"]),
+                         t["pesc"], t["cong"], t["hpwl"], t["h"] + t["w"],
+                         t["edge"]),
                       flush=True)
             if step % 2000 == 1999:      # re-sync the approximate terms
                 self.full_cost(w)
@@ -708,7 +764,7 @@ class Placer:
         for i, x, y, r in before:
             self.set_pose(i, x, y, r)
         for i in group:
-            self.esc[i] = self.escape_of(i)
+            self.esc[i], self.pesc[i] = self.escape_of(i)
         for ni in nets:
             self._rudy(ni, +1)
             x0, y0, x1, y1 = self._net_rect(ni)

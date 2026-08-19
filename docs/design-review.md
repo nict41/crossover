@@ -50,11 +50,15 @@ expensive to run far enough.
 
 ## 2. Turn-on and turn-off thumps go straight to your tweeters
 
-**Severity: high, for this specific application. Status: partly mitigated;
-the real fix is off-board and deliberately so.**
+**Severity: high, for this specific application. Status: FIXED on the
+board.** Every output now has a JFET mute (`Q1`-`Q3`) with a power-up soft
+start (`R40`/`C16`, ~2 s) and a fast re-mute as the rails collapse (`D4`),
+plus 10 µF DC blocking (`C13`-`C15`) and bleeders (`R28`-`R30`). See
+[`circuit-notes.md`](circuit-notes.md#muting-and-soft-start). The text
+below is what the board looked like before, and why it mattered.
 
-Every output is DC-coupled — op-amp, 100 Ω series resistor, volume pot,
-terminal block — and there is no muting, no output relay and no power-up
+Every output was DC-coupled — op-amp, 100 Ω series resistor, volume pot,
+terminal block — with no muting, no output relay and no power-up
 delay. When the ±15 V supply comes up, the filter sections settle through
 whatever transient their RC networks dictate, and that transient appears
 at all three outputs at once.
@@ -149,10 +153,12 @@ spending its resources on, not the size of the thing you are adding.**
 
 ## 4. Using this as a preamp means three volume knobs and no master
 
-**Severity: high usability. Status: architectural, worth deciding before
-you build.**
+**Severity: high usability. Status: FIXED.** `VR6` is a 50 kΩ audio-taper
+master, sitting ahead of the input buffer so it sets listening level
+without touching the crossover balance; the three band pots became trims.
+The reasoning below is why that was the right place to put it.
 
-The three volume pots are per-band level controls. There is no master
+The three volume pots are per-band level controls. There was no master
 volume. To change listening level you have to move three knobs together
 and match them, which is not practical to do accurately by ear or by eye —
 and any mismatch is a change in crossover balance, not just level.
@@ -300,9 +306,11 @@ interconnect.
   The SOIC-14 is a hand-drawn footprint. Check pin 1 in the assembly
   preview before paying — this is the classic way an assembled board comes
   back useless.
-* **The pot locating-boss holes are a guess.** No verified dual-gang
-  mechanical drawing was found. Check them against your actual pots before
-  ordering, or the pots will not sit flat.
+* **The pots have no locating-boss holes.** There is no verified dual-gang
+  mechanical drawing to place them from, and shipping a hole in the wrong
+  place is a re-order where a missing one is a hand drill. Check your parts:
+  if yours have bosses, drill for them before soldering, or the pots will
+  not sit flat.
 * **The pots are board-mount with shafts perpendicular to the PCB**, so
   the board mounts *parallel to and behind* the front panel, with shafts
   through it. If you were planning to mount the board horizontally on the

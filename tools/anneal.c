@@ -31,6 +31,7 @@ typedef struct {
     const int *rot_base;        /* n+1 : first (part,rot) slot of each part */
     const double *box;          /* nr*4 */
     const double *need;         /* nr*4 */
+    const double *pneed;        /* nr*4 : plane-net pads per side */
     const int *pad_base;        /* nr+1 */
     const double *pad_dx, *pad_dy;
     const int *group;           /* n : rigid-group id, or -1 */
@@ -42,7 +43,8 @@ typedef struct {
     const double *fixed;        /* nfixed*4 */
     const int *near_a, *near_b, *near_pka, *near_pkb;
     const double *near_tgt;
-    double w_ov, w_esc, w_cong, w_hpwl, w_h, w_w, w_wfloor, w_edge, w_near;
+    double w_ov, w_esc, w_pesc, w_cong, w_hpwl, w_h, w_w, w_wfloor, w_edge, w_near;
+    double plane_gap;
     double t0, t1, amp0, amp1, ov_hi_mul;
     double cell, supply;
     int gN;
@@ -52,7 +54,7 @@ typedef struct {
     double *X, *Y;
     int *R;                     /* index of the chosen slot within the part */
     double *BX0, *BY0, *BX1, *BY1;
-    double *esc, *nethp, *demand;
+    double *esc, *pesc, *nethp, *demand;
     double ov;
 } St;
 
@@ -116,10 +118,16 @@ static double total_overlap(const Cfg *c, const St *s) {
     return p / 2.0 + f;
 }
 
-static double escape_of(const Cfg *c, const St *s, int i) {
+/* Scores BOTH escape terms, because finding the four gaps is a scan over
+   every other part and the arithmetic afterwards is a handful of
+   multiplications - see Placer.escape_of() for what each one prices. */
+static void escape_of(const Cfg *c, St *s, int i) {
     int pr = SLOT(c, s, i);
     const double *nd = c->need + pr * 4;
-    if (nd[0] == 0 && nd[1] == 0 && nd[2] == 0 && nd[3] == 0) return 0.0;
+    const double *pn = c->pneed + pr * 4;
+    s->esc[i] = s->pesc[i] = 0.0;
+    if (nd[0] == 0 && nd[1] == 0 && nd[2] == 0 && nd[3] == 0 &&
+        pn[0] == 0 && pn[1] == 0 && pn[2] == 0 && pn[3] == 0) return;
     double x0 = s->BX0[i], y0 = s->BY0[i], x1 = s->BX1[i], y1 = s->BY1[i];
     double g[4] = { INF_D, INF_D, INF_D, INF_D };
     for (int j = 0; j < c->n; j++) {
@@ -144,10 +152,16 @@ static double escape_of(const Cfg *c, const St *s, int i) {
             if (f[1] >= y1 && f[1] - y1 < g[3]) g[3] = f[1] - y1;
         }
     }
-    double pen = 0.0;
-    for (int k = 0; k < 4; k++)
+    double pen = 0.0, ppen = 0.0;
+    for (int k = 0; k < 4; k++) {
         if (nd[k] > 0 && g[k] < nd[k]) { double d = nd[k] - g[k]; pen += d * d; }
-    return pen;
+        if (pn[k] > 0 && g[k] < c->plane_gap) {
+            double d = c->plane_gap - g[k];
+            ppen += pn[k] * d * d;
+        }
+    }
+    s->esc[i] = pen;
+    s->pesc[i] = ppen;
 }
 
 static double edge_violation(const Cfg *c, const St *s) {
@@ -235,24 +249,25 @@ static double congestion(const Cfg *c, const St *s) {
 }
 
 static double score(const Cfg *c, St *s, double w_ov, double ov) {
-    double x0 = INF_D, y0 = INF_D, x1 = -INF_D, y1 = -INF_D, e = 0.0, hp = 0.0;
+    double x0 = INF_D, y0 = INF_D, x1 = -INF_D, y1 = -INF_D, e = 0.0, pe = 0.0, hp = 0.0;
     for (int i = 0; i < c->n; i++) {
         if (s->BX0[i] < x0) x0 = s->BX0[i];
         if (s->BY0[i] < y0) y0 = s->BY0[i];
         if (s->BX1[i] > x1) x1 = s->BX1[i];
         if (s->BY1[i] > y1) y1 = s->BY1[i];
         e += s->esc[i];
+        pe += s->pesc[i];
     }
     for (int k = 0; k < c->nnets; k++) hp += s->nethp[k];
     double wide = (x1 - x0) - c->w_wfloor;
     if (wide < 0) wide = 0;
-    return w_ov * ov + c->w_esc * e + c->w_cong * congestion(c, s)
+    return w_ov * ov + c->w_esc * e + c->w_pesc * pe + c->w_cong * congestion(c, s)
          + c->w_hpwl * hp + c->w_h * (y1 - y0) + c->w_w * wide
          + c->w_edge * edge_violation(c, s) + c->w_near * near_penalty(c, s);
 }
 
 static void refresh(const Cfg *c, St *s) {
-    for (int i = 0; i < c->n; i++) s->esc[i] = escape_of(c, s, i);
+    for (int i = 0; i < c->n; i++) escape_of(c, s, i);
     memset(s->demand, 0, sizeof(double) * c->gN * c->gN);
     for (int k = 0; k < c->nnets; k++) {
         rudy(c, s, k, +1.0);
@@ -270,6 +285,7 @@ int anneal(const Cfg *c, int moves, unsigned long long seed,
     st.BX0 = malloc(sizeof(double) * c->n); st.BY0 = malloc(sizeof(double) * c->n);
     st.BX1 = malloc(sizeof(double) * c->n); st.BY1 = malloc(sizeof(double) * c->n);
     st.esc = malloc(sizeof(double) * c->n);
+    st.pesc = malloc(sizeof(double) * c->n);
     st.nethp = malloc(sizeof(double) * (c->nnets ? c->nnets : 1));
     st.demand = malloc(sizeof(double) * c->gN * c->gN);
     double *bX = malloc(sizeof(double) * c->n), *bY = malloc(sizeof(double) * c->n);
@@ -384,7 +400,7 @@ int anneal(const Cfg *c, int moves, unsigned long long seed,
 
         double d_ov = -ov_before;
         for (int k = 0; k < ng; k++) d_ov += overlap_of(c, &st, grp[k]);
-        for (int k = 0; k < ng; k++) st.esc[grp[k]] = escape_of(c, &st, grp[k]);
+        for (int k = 0; k < ng; k++) escape_of(c, &st, grp[k]);
         for (int k = 0; k < nt; k++) {
             rudy(c, &st, touch[k], +1.0);
             double r[4];
@@ -405,7 +421,7 @@ int anneal(const Cfg *c, int moves, unsigned long long seed,
             for (int k = 0; k < nt; k++) rudy(c, &st, touch[k], -1.0);
             for (int k = 0; k < ng; k++) { X[grp[k]] = oX[k]; Y[grp[k]] = oY[k]; R[grp[k]] = oR[k]; }
             for (int k = 0; k < ng; k++) sync_box(c, &st, grp[k]);
-            for (int k = 0; k < ng; k++) st.esc[grp[k]] = escape_of(c, &st, grp[k]);
+            for (int k = 0; k < ng; k++) escape_of(c, &st, grp[k]);
             for (int k = 0; k < nt; k++) {
                 rudy(c, &st, touch[k], +1.0);
                 double r[4];
@@ -423,7 +439,7 @@ int anneal(const Cfg *c, int moves, unsigned long long seed,
         memcpy(R, bR, sizeof(int) * c->n);
     }
     free(st.BX0); free(st.BY0); free(st.BX1); free(st.BY1);
-    free(st.esc); free(st.nethp); free(st.demand);
+    free(st.esc); free(st.pesc); free(st.nethp); free(st.demand);
     free(bX); free(bY); free(bR); free(touch); free(grp);
     return ok;
 }

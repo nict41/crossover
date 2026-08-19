@@ -25,12 +25,21 @@ import os
 import re
 import subprocess
 import sys
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GEN = os.path.join(HERE, "gen_pcb_smd.py")
 BOARD = re.compile(r"^board ([\d.]+) x ([\d.]+) mm", re.M)
 PROBLEMS = re.compile(r"^DRC PROBLEMS \((\d+)\)", re.M)
+# What KIND of problem a board has decides what to do about it, and the
+# counts alone cannot say.  A board failing only on "the ground pour does
+# not reach N pad(s)" has a structural pocket the placer made, and more
+# route orders will not open it; a board with unrouted nets or clearance
+# violations may well come good on a different order.  Sweeping without
+# this distinction is how several rounds got spent re-rolling route seeds
+# against a placement problem.
+POUR = re.compile(r"^  - the ground pour does not reach", re.M)
+UNROUTED = re.compile(r"^  UNROUTED", re.M)
 
 
 def problem_count(out):
@@ -61,6 +70,38 @@ def problem_count(out):
 SEARCH_MAX_EXPAND = "400000"
 
 
+PREFILTER_OK = re.compile(r"^PREFILTER OK", re.M)
+
+
+def screen(seed, env_extra):
+    """Cheap structural verdict for one placement: place it, pour it, and
+    see whether every ground pad can reach the plane before a single signal
+    net exists.
+
+    A placement that fails here can never be rescued by routing - signal
+    traces only take room away from the pour - so the minutes a full route
+    would spend on it are known waste before they are spent.  A seed costs
+    a second or two here against several minutes there.
+
+    Measured at the current part count it rejects NOTHING: 40 seeds of 40
+    pour clean before routing, because plane_stubs() runs before the signal
+    nets and vias its way out of the structural pockets.  Kept regardless -
+    it is exact, it costs a second, and it is the check that tells a
+    placement problem apart from a route-order one."""
+    env = dict(os.environ, SWEEP="1", SEED=str(seed), ROUTE_SEED="0",
+               PLANE_PREFILTER_ONLY="1", **env_extra)
+    env.setdefault("MAX_EXPAND", SEARCH_MAX_EXPAND)
+    try:
+        out = subprocess.run([sys.executable, GEN], env=env, timeout=600,
+                             capture_output=True, text=True).stdout
+    except subprocess.TimeoutExpired:
+        return seed, False, "timeout"
+    if PREFILTER_OK.search(out):
+        return seed, True, ""
+    m = POUR.search(out)
+    return seed, False, ("pour-blocked" if m else "no verdict")
+
+
 def trial(job, env_extra):
     seed, rseed = job
     env = dict(os.environ, SWEEP="1", SEED=str(seed),
@@ -80,8 +121,10 @@ def trial(job, env_extra):
     if n is None:
         return dict(seed=seed, rseed=rseed, ok=False,
                     note="could not read a DRC verdict")
+    pour = len(POUR.findall(out))
     return dict(seed=seed, rseed=rseed, ok=(n == 0), problems=n, w=w, h=h,
-                area=w * h, note="")
+                area=w * h, note="", pour=pour,
+                unrouted=len(UNROUTED.findall(out)))
 
 
 def parse_seeds(spec):
@@ -101,15 +144,61 @@ def main():
     ap.add_argument("--route-seeds", default="0",
                     help="net-order permutations to try per placement")
     ap.add_argument("--jobs", type=int, default=4)
+    ap.add_argument("--all", action="store_true",
+                    help="run every trial even after a clean board is found "
+                         "(for comparing the whole field, not for finding one)")
+    ap.add_argument("--no-screen", action="store_true",
+                    help="skip the cheap ground-plane pre-screen and route "
+                         "every seed (for measuring the screen itself)")
     ap.add_argument("--env", action="append", default=[],
                     help="extra VAR=VALUE passed to every trial")
     a = ap.parse_args()
     extra = dict(kv.split("=", 1) for kv in a.env)
-    jobs = [(s, r) for s in parse_seeds(a.seeds)
-            for r in parse_seeds(a.route_seeds)]
+    seeds = parse_seeds(a.seeds)
 
+    # Stage one: throw out the placements that cannot work, before paying to
+    # route any of them.
+    if not a.no_screen:
+        with ThreadPoolExecutor(max_workers=a.jobs) as pool:
+            screened = list(pool.map(lambda s: screen(s, extra), seeds))
+        keep = [s for s, ok, _ in screened if ok]
+        for s, ok, why in screened:
+            if not ok:
+                print("  screened out SEED=%d (%s)" % (s, why))
+        print("%d of %d placements have a reachable ground plane; routing "
+              "those" % (len(keep), len(seeds)), flush=True)
+        if not keep:
+            print("nothing to route - every placement seals a ground pad. "
+                  "That is place.PLANE_GAP's job, not the router's.")
+            return 1
+        seeds = keep
+
+    jobs = [(s, r) for s in seeds for r in parse_seeds(a.route_seeds)]
+
+    # Stop as soon as a clean board turns up.  A search exists to find ONE
+    # verifying layout, and running the remaining trials after that is pure
+    # waste - on the run that found SEED=38 the answer arrived a third of
+    # the way in and the other two thirds of the compute told us nothing we
+    # acted on.  Trials already in flight are allowed to finish (they are
+    # subprocesses, and killing them mid-write is how a half-written
+    # artifact would happen); only unstarted ones are cancelled.
+    results = []
     with ThreadPoolExecutor(max_workers=a.jobs) as pool:
-        results = list(pool.map(lambda j: trial(j, extra), jobs))
+        futures = {pool.submit(trial, j, extra): j for j in jobs}
+        try:
+            for fut in as_completed(futures):
+                r = fut.result()
+                results.append(r)
+                if r["ok"] and not a.all:
+                    print("clean board found - cancelling the rest "
+                          "(pass --all to sweep every trial)", flush=True)
+                    for f in futures:
+                        f.cancel()
+                    break
+        except KeyboardInterrupt:
+            for f in futures:
+                f.cancel()
+            raise
 
     clean = sorted((r for r in results if r["ok"]), key=lambda r: r["area"])
     dirty = sorted((r for r in results if not r["ok"] and not r["note"]),
@@ -120,8 +209,14 @@ def main():
         print("CLEAN  %6.0f mm2  %.1f x %.1f  SEED=%d ROUTE_SEED=%d"
               % (r["area"], r["w"], r["h"], r["seed"], r["rseed"]))
     for r in dirty:
-        print("  %2d    %6.0f mm2  %.1f x %.1f  SEED=%d ROUTE_SEED=%d"
-              % (r["problems"], r["area"], r["w"], r["h"], r["seed"], r["rseed"]))
+        why = []
+        if r["pour"]:
+            why.append("%d pour" % r["pour"])
+        if r["unrouted"]:
+            why.append("%d unrouted" % r["unrouted"])
+        print("  %2d    %6.0f mm2  %.1f x %.1f  SEED=%d ROUTE_SEED=%d  %s"
+              % (r["problems"], r["area"], r["w"], r["h"], r["seed"],
+                 r["rseed"], ", ".join(why)))
     for r in broke:
         print("  --                            SEED=%d ROUTE_SEED=%d  (%s)"
               % (r["seed"], r["rseed"], r["note"]))
@@ -136,6 +231,11 @@ def main():
             else "MAX_EXPAND=%s - confirm the winner with an uncapped run"
                  % cap)
     print("\n%d/%d passed the filter (%s)" % (len(clean), len(results), note))
+    if dirty:
+        pour_only = sum(1 for r in dirty if r["pour"] and r["pour"] == r["problems"])
+        print("%d of %d failures were ground-pour reachability ONLY - that is a "
+              "PLACEMENT problem (see place.PLANE_GAP), not a route-order one"
+              % (pour_only, len(dirty)))
     if clean:
         print("smallest clean: SEED=%d ROUTE_SEED=%d at %.1f x %.1f mm"
               % (clean[0]["seed"], clean[0]["rseed"], clean[0]["w"], clean[0]["h"]))
