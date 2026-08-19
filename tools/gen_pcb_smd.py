@@ -417,7 +417,11 @@ def fp_sod123(ref, x, y, net_of, value):
         pad_rect(ref, i + 1, x + dx, y, net_of(ref, i + 1), pw, ph)
     silk_rect(x - 5.3, y - 3.1, x + 5.3, y + 3.1)
     track([(x + 3.0, y - 3.1), (x + 3.0, y + 3.1)], TOPSILK, SILK_W)
-    silk_ref(x - 4, y - ph / 2 - 1.5, ref)
+    # Beside the part, not "somewhere near it".  Both pads escape along
+    # +/-X, so the label goes clear along Y and silk_ref_beside() keeps it
+    # there at every rotation.
+    silk_ref_beside((x - off - pw / 2, y - ph / 2, x + off + pw / 2,
+                     y + ph / 2), ref, DESIG_SIZE, (0, -1))
     fp_end(ref, _m, x, y)
     part_record(ref, value, x, y, True, "SOD-123")
 
@@ -432,7 +436,15 @@ def fp_sot23(ref, x, y, net_of, value):
     pad_rect(ref, 2, x + sep, y - row, net_of(ref, 2), pw, ph)
     pad_rect(ref, 3, x, y + row, net_of(ref, 3), pw, ph)
     silk_rect(x - 5.7, y - 2.6, x + 5.7, y + 2.6)
-    silk_ref(x - 4, y - row - ph / 2 - 1.5, ref)
+    # Hand-placing this put 'Q1' straight on top of pad Q1.1 - five of the
+    # six DRC problems on the first 82-footprint board were this, not
+    # routing.  Same bug the SOIC designator caused when it was placed by
+    # hand, and the same fix: name the box and the local side, and let
+    # silk_ref_beside() work out where the text actually lands once the
+    # part is rotated.
+    silk_ref_beside((x - sep - pw / 2, y - row - ph / 2,
+                     x + sep + pw / 2, y + row + ph / 2),
+                    ref, DESIG_SIZE, (-1, 0))
     fp_end(ref, _m, x, y)
     part_record(ref, value, x, y, True, "SOT-23")
 
@@ -449,7 +461,8 @@ def fp_hdr(ref, n, x, y, net_of, labels=()):
         if i < len(labels):
             silk(px - 4, y + 7.5, labels[i], DESIG_SIZE - 1.2)
     silk_rect(x - span / 2 - 5, y - 5.5, x + span / 2 + 5, y + 5.5)
-    silk_ref(x - span / 2 - 5, y - 5.5 - 6, ref)
+    silk_ref_beside((x - span / 2 - 5, y - 5.5, x + span / 2 + 5, y + 5.5),
+                    ref, DESIG_SIZE, (0, -1))
     fp_end(ref, _m, x, y)
     part_record(ref, "MUTE", x, y, False, "HDR-1X%d" % n)
 
