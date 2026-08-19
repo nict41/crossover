@@ -1520,14 +1520,52 @@ def path_geometry(path):
     return runs, via_pts, polys
 
 
+def drill_filter(net, via_pts):
+    """The vias of a candidate path that actually need drilling, or None if
+    one of them cannot be drilled.
+
+    The C router picks its own layer changes and never calls via_ok(), so
+    the drill-spacing rule cannot be enforced inside the search - it has to
+    be enforced here, on the way in.  Two outcomes:
+
+    * a via exactly on top of an existing one of the SAME net is dropped.
+      The layers are already tied at that point, so the path is complete
+      without it.  This is not a corner case: plane stubs stacked 11 vias
+      on one cell, and the board came out with 203 vias at 152 distinct
+      positions.
+    * anything else that breaks the drill-to-drill minimum rejects the
+      whole path, and the caller reroutes.  Dropping such a via instead
+      would leave the path's two layers unjoined at that point."""
+    out = []
+    for vx, vy in via_pts:
+        same = next((v for v in VIAS if v[0] == vx and v[1] == vy), None)
+        if same is not None:
+            if same[2] != net:
+                return None          # someone else's hole, in the way
+            continue                 # already tied here
+        cx, cy = int(round(vx / GRID)), int(round(vy / GRID))
+        if not hole_ok(cx, cy):
+            return None
+        if any(math.dist((vx, vy), (ox, oy)) < VIA_DRILL + MIN_HOLE_GAP
+               for ox, oy in out):
+            return None
+        out.append((vx, vy))
+    return out
+
+
 def commit_path(net, nid, runs, via_pts, polys):
     """Stamp occupancy and record the geometry from path_geometry - the
-    side-effecting half of what emit_path used to do in one step."""
+    side-effecting half of what emit_path used to do in one step.
+
+    Returns False without changing anything if a via cannot be drilled."""
+    keep = drill_filter(net, via_pts)
+    if keep is None:
+        return False
     # Occupancy is about to change, so every cached via_ok answer becomes a
     # statement about a board that no longer exists.  See via_ok().
     VIA_MEMO.clear()
     own_dil = net_width(net) / 2 + CLEAR + MAX_W / 2 + GRID
-    for vx, vy in via_pts:
+    for vx, vy in keep:
         VIAS.append((vx, vy, net))
         stamp_disc(MULTI, vx, vy, VIA_DIL, nid)
         stamp_hole(vx, vy)
@@ -1536,12 +1574,13 @@ def commit_path(net, nid, runs, via_pts, polys):
             stamp_disc(c[0] + 1, c[1] * GRID, c[2] * GRID, own_dil, nid)
     for layer, pts in polys:
         ROUTED.append((layer, pts, net))
+    return True
 
 
 def emit_path(path, net, nid):
     """Split a cell path into per-layer polylines, stamping as we go."""
     runs, via_pts, polys = path_geometry(path)
-    commit_path(net, nid, runs, via_pts, polys)
+    return commit_path(net, nid, runs, via_pts, polys)
 
 
 def path_clearance_ok(net, via_pts, polys):
@@ -2055,8 +2094,8 @@ def plane_stubs():
                           flush=True)
                 continue
             _r, _v, _pl = path_geometry(_path)
-            if path_clearance_ok("GND", _v, _pl):
-                commit_path("GND", _gnid, _r, _v, _pl)
+            if (path_clearance_ok("GND", _v, _pl)
+                    and commit_path("GND", _gnid, _r, _v, _pl)):
                 _progress = True
                 _hopeless.clear()
                 if PLANE_LOG:
@@ -2257,7 +2296,14 @@ def route_pass():
                 todo.remove(tgt)
                 done.append(tgt)
                 continue
-            emit_path(path, name, nid)
+            if not emit_path(path, name, nid):
+                # A via on the path cannot be drilled where it landed.
+                # Same handling as an outright routing failure: hand it to
+                # the relaxed pass, which will find a different way round.
+                RETRY.append((name, nid, route_extra, blocked_extra, tgt))
+                todo.remove(tgt)
+                done.append(tgt)
+                continue
             connected |= set(path) | tc
             todo.remove(tgt)
             done.append(tgt)
@@ -2298,9 +2344,8 @@ def route_pass():
                 still.append((name, nid, route_extra, blocked_extra, tgt))
                 continue
             runs, via_pts, polys = path_geometry(path)
-            if path_clearance_ok(name, via_pts, polys):
-                commit_path(name, nid, runs, via_pts, polys)
-            else:
+            if not (path_clearance_ok(name, via_pts, polys)
+                    and commit_path(name, nid, runs, via_pts, polys)):
                 still.append((name, nid, route_extra, blocked_extra, tgt))
         RETRY = still
     for name, nid, route_extra, blocked_extra, tgt in RETRY:
