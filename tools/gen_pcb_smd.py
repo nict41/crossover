@@ -895,6 +895,18 @@ def _place_key():
                           for r, gg in sorted(GEOM.items())))).encode())
     h.update(repr(sorted(netdoc["nets"].items())).encode())
     h.update(repr(sorted((k, v) for k, v in WEIGHTS.items())).encode())
+    # The cost MODEL, not just its weights.  A cached pose is only valid
+    # for the function that produced it, and editing that function is
+    # exactly when a stale one does the most damage: the RUDY box-clamp fix
+    # changed every placement on the board, and the next run happily
+    # reported "reusing the cached layout" and re-routed the old one.  Both
+    # placers are hashed because either can be the one in use.
+    for _src in ("place.py", "anneal.c", "canneal.py"):
+        try:
+            with open(os.path.join(HERE, _src), "rb") as _f:
+                h.update(_f.read())
+        except OSError:
+            pass
     # BYPASS_NEAR belongs in the key: it changes the placement, so without
     # it here, switching the constraint on silently reuses a layout
     # computed without it.
