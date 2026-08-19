@@ -920,8 +920,18 @@ BYPASS_NEAR = [("C5", "U1", "+15V", 40.0), ("C6", "U1", "-15V", 40.0),
                ("C7", "U2", "+15V", 40.0), ("C8", "U2", "-15V", 40.0),
                ("C9", "U3", "+15V", 40.0), ("C10", "U3", "-15V", 40.0)]
 
+# The mute shunts belong on their own buffer's input pin, for the same
+# reason the bypass caps belong on their own supply pin: the constraint is
+# local and physical, and nothing else in the cost model can see it.  A
+# JFET's drain is the node it mutes, so left free the search will happily
+# put it across the board, where the shunt picks up everything the trace
+# runs past and the gate line has to be dragged back to the panel header.
+MUTE_NEAR = [("Q1", "U3", "HIGH_MUTE", 40.0),
+             ("Q2", "U3", "MID_MUTE", 40.0),
+             ("Q3", "U3", "LOW_MUTE", 40.0)]
+
 PLACER = place.Placer(_parts, seed=SEED,
-                      track_pitch=MAX_W + CLEAR, near=BYPASS_NEAR,
+                      track_pitch=MAX_W + CLEAR, near=BYPASS_NEAR + MUTE_NEAR,
                       plane_nets=PLANE_NETS)
 
 # The panel row: fixed pitch, fixed order, all on one line.
@@ -999,7 +1009,7 @@ def _place_key():
     h.update(repr((MOVES, RESTARTS, PANEL_PITCH, OUTPUT_PITCH, EDGE,
                    MOUNT_INSET, MOUNT_KEEP, SEED,
                    os.environ.get("ESC_CAP"), os.environ.get("ESC_FLOOR"),
-                   os.environ.get("SUPPLY"), BYPASS_NEAR,
+                   os.environ.get("SUPPLY"), BYPASS_NEAR, MUTE_NEAR,
                    sorted(PLANE_NETS),
                    os.environ.get("PLACER"))).encode())
     return h.hexdigest()[:32]

@@ -850,7 +850,18 @@ def draw(cfg):
                          dx=-4, dy=3)
                 w((bx - 250, oy - 20), (bx - 220, oy - 20))
                 resistor("R%d" % (31 + k), "10k", bx - 190, oy - 20)
-                w((bx - 160, oy - 20), (bx - 20, oy - 20))
+                # Name the shunt node.  It is otherwise auto-named from
+                # its coordinates, and the PLACEMENT refers to it by name
+                # to keep each JFET next to the buffer it mutes - a
+                # constraint that cannot be written against a label which
+                # moves whenever the schematic does.  The wire is split so
+                # the label lands on an ENDPOINT: net labels bind to the
+                # connectivity graph's nodes, and mid-wire there is no node
+                # to bind to, so a label there is silently ignored.
+                w((bx - 160, oy - 20), (bx - 60, oy - 20))
+                w((bx - 60, oy - 20), (bx - 20, oy - 20))
+                netlabel(nm + "_MUTE", bx - 60, oy - 20, anchor="middle",
+                         dy=-10)
                 # The shunt itself, drain on the buffer input, source to
                 # ground, gate on this band's mute line.
                 jfet("Q%d" % (1 + k), "MMBFJ111", bx - 110, oy + 40)

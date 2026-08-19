@@ -604,6 +604,8 @@
 <path d="M 1900 1230 h -10" stroke="#880000" stroke-width="1" fill="none"/>
 <text x="1870" y="1218" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">R31</text>
 <text x="1870" y="1252" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">10k</text>
+<circle cx="2000" cy="1230" r="2" fill="#0000FF"/>
+<text x="2000" y="1220" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">HIGH_MUTE</text>
 <polyline points="1950 1272 1950 1308" stroke="#000080" stroke-width="2" fill="none"/>
 <polyline points="1932 1290 1950 1290" stroke="#000080" stroke-width="1" fill="none"/>
 <polygon points="1940 1285 1940 1295 1948 1290" stroke="#000080" stroke-width="1" fill="#000080"/>
@@ -663,6 +665,8 @@
 <path d="M 1900 1380 h -10" stroke="#880000" stroke-width="1" fill="none"/>
 <text x="1870" y="1368" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">R32</text>
 <text x="1870" y="1402" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">10k</text>
+<circle cx="2000" cy="1380" r="2" fill="#0000FF"/>
+<text x="2000" y="1370" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">MID_MUTE</text>
 <polyline points="1950 1422 1950 1458" stroke="#000080" stroke-width="2" fill="none"/>
 <polyline points="1932 1440 1950 1440" stroke="#000080" stroke-width="1" fill="none"/>
 <polygon points="1940 1435 1940 1445 1948 1440" stroke="#000080" stroke-width="1" fill="#000080"/>
@@ -722,6 +726,8 @@
 <path d="M 1900 1530 h -10" stroke="#880000" stroke-width="1" fill="none"/>
 <text x="1870" y="1518" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">R33</text>
 <text x="1870" y="1552" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="middle">10k</text>
+<circle cx="2000" cy="1530" r="2" fill="#0000FF"/>
+<text x="2000" y="1520" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">LOW_MUTE</text>
 <polyline points="1950 1572 1950 1608" stroke="#000080" stroke-width="2" fill="none"/>
 <polyline points="1932 1590 1950 1590" stroke="#000080" stroke-width="1" fill="none"/>
 <polygon points="1940 1585 1940 1595 1948 1590" stroke="#000080" stroke-width="1" fill="#000080"/>
@@ -1016,6 +1022,9 @@
 <circle cx="1968" cy="1230" r="2.5" fill="#CC0000"/>
 <circle cx="1968" cy="1380" r="2.5" fill="#CC0000"/>
 <circle cx="1968" cy="1530" r="2.5" fill="#CC0000"/>
+<circle cx="2000" cy="1230" r="2.5" fill="#CC0000"/>
+<circle cx="2000" cy="1380" r="2.5" fill="#CC0000"/>
+<circle cx="2000" cy="1530" r="2.5" fill="#CC0000"/>
 <circle cx="2170" cy="1250" r="2.5" fill="#CC0000"/>
 <circle cx="2170" cy="1400" r="2.5" fill="#CC0000"/>
 <circle cx="2170" cy="1550" r="2.5" fill="#CC0000"/>
@@ -1161,7 +1170,8 @@
 <polyline points="1860 1470 1890 1470" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1830 1500 1830 1520" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1810 1230 1840 1230" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="1900 1230 1968 1230 2040 1230" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="1900 1230 1968 1230 2000 1230" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="2000 1230 2040 1230" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1968 1250 1968 1230" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1968 1330 1968 1350" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1910 1290 1870 1290" stroke="#008800" stroke-width="1" fill="none"/>
@@ -1173,7 +1183,8 @@
 <polyline points="2390 1250 2390 1275" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="2390 1335 2390 1355" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1810 1380 1840 1380" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="1900 1380 1968 1380 2040 1380" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="1900 1380 1968 1380 2000 1380" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="2000 1380 2040 1380" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1968 1400 1968 1380" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1968 1480 1968 1500" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1910 1440 1870 1440" stroke="#008800" stroke-width="1" fill="none"/>
@@ -1185,7 +1196,8 @@
 <polyline points="2390 1400 2390 1425" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="2390 1485 2390 1505" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1810 1530 1840 1530" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="1900 1530 1968 1530 2040 1530" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="1900 1530 1968 1530 2000 1530" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="2000 1530 2040 1530" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1968 1550 1968 1530" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1968 1630 1968 1650" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1910 1590 1870 1590" stroke="#008800" stroke-width="1" fill="none"/>
