@@ -226,6 +226,10 @@
    "package": "TESTPOINT"
   }
  },
+ "ranges": {
+  "VR1": "195 Hz - 1.03 kHz",
+  "VR2": "71 Hz - 180 Hz"
+ },
  "nets": {
   "INPUT": [
    "C0.1",

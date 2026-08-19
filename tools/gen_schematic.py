@@ -1205,7 +1205,12 @@ def emit(cfg, primary):
                 val = part.split("~")[12]
         parts[ref] = {"value": val, "package": pkg}
     with open(os.path.join(docdir, "netlist-%s.json" % cfg["slug"]), "w") as f:
+        # The tuning ranges travel with the netlist so the PCB can put them
+        # on the silkscreen without a second, hand-maintained copy.  A
+        # constant tuned against a board that has since been retuned is
+        # exactly the class of bug this repo keeps rediscovering.
         json.dump({"variant": cfg["slug"], "parts": parts,
+                   "ranges": {"VR1": cfg["range1"], "VR2": cfg["range2"]},
                    "nets": {k: sorted(v) for k, v in nets.items()}}, f, indent=1)
     print("\n".join(lines))
     if touches:

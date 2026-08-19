@@ -298,6 +298,10 @@
    "package": "SOIC-14"
   }
  },
+ "ranges": {
+  "VR1": "195 Hz - 1.03 kHz",
+  "VR2": "73 Hz - 186 Hz  (C3, C4 = 2 x 33nF)"
+ },
  "nets": {
   "INPUT": [
    "C0.1",

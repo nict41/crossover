@@ -526,7 +526,19 @@ def fp_pot(pkg_ref, gang_a, gang_b, x, y, net_of):
     flay = by0 - 3
     ftext = "HIGH/MID" if pkg_ref == "VR1" else "MID/LOW"
     silk(bx0, flay, ftext, LABEL_SIZE)
-    silk_ref(bx0, flay - 8, pkg_ref, LABEL_SIZE)
+    rng = RANGES.get(pkg_ref)
+    if rng:
+        # Its own row, at a smaller size, deliberately narrower than the
+        # 52-unit body.  Appending it to the function label instead was
+        # tried and cost 15 mm of board height: the footprint's bounding
+        # box is PROBED from the shapes it emits, silk included, so a label
+        # wider than the part makes the part wider, and five of them on a
+        # fixed panel pitch then shove the whole row apart.  Silkscreen is
+        # not decoration here in more ways than one.
+        silk(bx0, flay - 7, rng, LABEL_SIZE - 1.4)
+        silk_ref(bx0, flay - 15, pkg_ref, LABEL_SIZE)
+    else:
+        silk_ref(bx0, flay - 8, pkg_ref, LABEL_SIZE)
     fp_end(pkg_ref, _m, x, y + 10)
     part_record(pkg_ref, "20k dual", x, y + 10, False, "POT-9MM-DUAL")
 
@@ -625,6 +637,21 @@ def N(ref, num):
 
 VALUE = {r: netdoc["parts"][r]["value"] for r in netdoc["parts"]}
 
+
+def _compact_range(text):
+    """'195 Hz - 1.03 kHz' -> '195Hz-1.03kHz'.  Silkscreen space is
+    routing space, so the spaces come out."""
+    return (text.split("(")[0].strip()
+            .replace(" Hz", "Hz").replace(" kHz", "kHz").replace(" - ", "-"))
+
+
+# What each frequency pot actually sweeps, taken from the netlist rather
+# than written out again here.  A knob marked only "HIGH/MID" tells you
+# which crossover it is and nothing about where you can put it; the range
+# is the part a person setting the board up needs.  Reading it from the
+# netlist means a retune cannot leave the silkscreen lying.
+RANGES = {k: _compact_range(v) for k, v in netdoc.get("ranges", {}).items()}
+
 # ==========================================================================
 #  layout
 #
@@ -692,7 +719,7 @@ PANEL_PITCH = float(os.environ.get("PANEL_PITCH", 80))
 # straight across the middle.  Squarer text tucks into a corner instead.
 TITLE_LINES = ["ESP P148 3-WAY VARIABLE CROSSOVER",
                "RETUNED QUAD SMD - ONE CHANNEL",
-               "195Hz-1.03kHz / 73-186Hz"]
+               "%s / %s" % (RANGES.get("VR1", ""), RANGES.get("VR2", ""))]
 
 # Electrolytics are identified by VALUE, not by designator.  C0 used to be
 # the only one and was named explicitly; the board now also has bulk supply
@@ -1518,6 +1545,11 @@ LONG_HAUL = set(sorted(
     key=_pad_span, reverse=True)[:4])
 
 
+# Nets promoted to the front of the route order because a previous attempt
+# could not finish them.  Filled in by route_with_ripup().
+ROUTE_PRIORITY = []
+
+
 def route_order(n):
     """Supply rails and long-haul nets first, then IC pins, then everything
     else by size.
@@ -1561,6 +1593,12 @@ def route_order(n):
     be this time - so the ordering stays as conservative as the version
     that verified clean, without pretending to know the answer in advance."""
     members = netdoc["nets"][n]
+    # A net that failed on a previous attempt jumps the whole queue, in the
+    # order it failed.  This is the entire mechanism behind rip-up and
+    # reroute below: the three tiers under it are hand-reasoned guesses
+    # about who will need a channel most, and this one is measurement.
+    if n in ROUTE_PRIORITY:
+        return (-2, ROUTE_PRIORITY.index(n), 0)
     tier = (-1 if (n in ("GND", "+15V", "-15V") or n in LONG_HAUL)
             else 0 if any(m.startswith("U") for m in members) else 1)
     return (tier, len(members), _ORDER_JITTER.get(n, 0))
@@ -1957,167 +1995,9 @@ def plane_stubs():
             break
 
 
-# Cut the structural stubs BEFORE any signal net is routed - see the note
-# above plane_stubs().
-plane_stubs()
-
-FAILED = []
-RETRY = []      # strict-pass failures, retried once below with relaxed margins
-for name in sorted(netdoc["nets"], key=route_order):
-    if name in PLANE_NETS:
-        continue
-    nid = NETID[name]
-    # a wide net can't rely on a foreign pad's keepout being sized for it -
-    # that keepout is deliberately tight at the IC pins - so it independently
-    # checks a wider neighbourhood while pathfinding.  0 for signal nets keeps
-    # them exactly as tight as before, preserving SOIC pin-escape routing.
-    # The check is a mask built once per net (cheap - only the 3 power nets
-    # need one at all), not recomputed at every cell A* visits.
-    route_extra = max(0.0, (net_width(name) - SIG_W) / 2)
-    if route_extra > 0:
-        r_cells = int(math.ceil(route_extra / GRID))
-        blocked_extra = [dilate((occ[L] != 0) & (occ[L] != nid), r_cells)
-                         for L in (0, 1)]
-    else:
-        blocked_extra = None
-    mine = [p for p in pads if p["net"] == name]
-    if len(mine) < 2:
-        continue
-    connected = core_cells(mine[0])
-    done = [mine[0]]
-    todo = mine[1:]
-    while todo:
-        tgt = min(todo, key=lambda p: min(math.dist((p["x"], p["y"]),
-                                                    (q["x"], q["y"])) for q in done))
-        tc = core_cells(tgt)
-        tx = int(round(tgt["x"] / GRID))
-        ty = int(round(tgt["y"] / GRID))
-        path = astar(connected, tc, nid, (tx, ty), route_extra, blocked_extra)
-        if path is None:
-            RETRY.append((name, nid, route_extra, blocked_extra, tgt))
-            todo.remove(tgt)
-            done.append(tgt)
-            continue
-        emit_path(path, name, nid)
-        connected |= set(path) | tc
-        todo.remove(tgt)
-        done.append(tgt)
-
-# Second (and third, ...) pass over whatever the strict pass couldn't
-# reach.  A miss there often means CONTESTED - not real copper, just two
-# nets' conservative dilated margins overlapping over a still-empty cell -
-# was the only thing in the way; own_dil already carries CLEAR + MAX_W/2 +
-# GRID of real margin, so a contested cell often still has adequate actual
-# clearance.  Retried now that the whole board's occupancy is final,
-# against every other pad of the same net (not just the ones the first
-# pass happened to reach) - and re-tried across a few rounds, since a pad
-# that connects on round 1 grows the target for whatever's still isolated
-# on round 2 (a straight single retry left one net in two pieces instead
-# of five - clear progress, but not yet whole; three rounds cleared it).
-# Nothing here is trusted blind: the independent geometric verifier below
-# re-measures exact distances on whatever this finds, same as every other
-# track on the board.
-if os.environ.get("RETRY_LOG"):
-    print("  strict pass: %d net-targets needed a relaxed retry" % len(RETRY),
-          flush=True)
-for _round in range(3):
-    if not RETRY:
-        break
-    still = []
-    for name, nid, route_extra, blocked_extra, tgt in RETRY:
-        others = [p for p in pads if p["net"] == name and p is not tgt]
-        if not others:
-            still.append((name, nid, route_extra, blocked_extra, tgt))
-            continue
-        connected = set()
-        for p in others:
-            connected |= core_cells(p)
-        tc = core_cells(tgt)
-        tx, ty = int(round(tgt["x"] / GRID)), int(round(tgt["y"] / GRID))
-        path = astar(connected, tc, nid, (tx, ty), route_extra, blocked_extra, relaxed=True)
-        if path is None:
-            still.append((name, nid, route_extra, blocked_extra, tgt))
-            continue
-        runs, via_pts, polys = path_geometry(path)
-        if path_clearance_ok(name, via_pts, polys):
-            commit_path(name, nid, runs, via_pts, polys)
-        else:
-            still.append((name, nid, route_extra, blocked_extra, tgt))
-    RETRY = still
-for name, nid, route_extra, blocked_extra, tgt in RETRY:
-    FAILED.append("%s: %s.%s unreachable" % (name, tgt["ref"], tgt["num"]))
-
-# Second pass: anything the signal nets isolated on their way through.
-plane_stubs()
-
-
-
-# ==========================================================================
-#  ground stitching vias
-# ==========================================================================
-# Every through-hole GND pad (terminal blocks, all five pots) already ties
-# the top and bottom copper pours together, just by being a plated hole -
-# but the SMD-only ground connections (R1/R3/R13's Q-setting/bias returns)
-# rely solely on whatever single via the router happened to place while
-# routing GND as an ordinary signal.  A deliberate second via right next to
-# each one lowers the local ground-plane impedance exactly where the board
-# has the least of it already reinforced - most worth doing near R1, the
-# input stage's ground reference, where the signal is at its most
-# vulnerable to hum pickup before any gain stage.  Added after all routing
-# (including retries) is finished, each candidate checked with the same
-# strict via_ok() the router itself trusts, so a spot that would actually
-# crowd real copper is skipped rather than forced through.
-GND_STITCH_REFS = ["R1", "R3", "R13"]
-GND_NID = NETID["GND"]
-for _ref in GND_STITCH_REFS:
-    _p = next((p for p in pads if p["ref"] == _ref and p["net"] == "GND"), None)
-    if _p is None:
-        continue
-    for _dx, _dy in ((3.0, 0), (-3.0, 0), (0, 3.0), (0, -3.0)):
-        _vx, _vy = _p["x"] + _dx, _p["y"] + _dy
-        _cx, _cy = int(round(_vx / GRID)), int(round(_vy / GRID))
-        # via_ok() is net-aware and so will happily put a GND stitching via
-        # right up against a GND via the router already placed - fine for
-        # copper, but the FAB still has to drill both, and hole-to-hole
-        # spacing is a property of the drill, not of the net.  JLCPCB wants
-        # 0.5 mm edge to edge; without this a stitching via landed 0.43 mm
-        # from a routed one, which no electrical check would ever object to.
-        if any(math.dist((_vx, _vy), (_ox, _oy)) < VIA_DRILL + MIN_HOLE_GAP
-               for _ox, _oy, _ in VIAS):
-            continue
-        if via_ok(_cx, _cy, GND_NID):
-            VIAS.append((_vx, _vy, "GND"))
-            stamp_disc(MULTI, _vx, _vy, VIA_DIL, GND_NID)
-            break
-
-
-# ==========================================================================
-#  independent verification - exact geometry, not the router's own bookkeeping
-# ==========================================================================
-# (d_pt_seg / d_seg_seg / d_pt_rect / d_seg_rect / d_rect_rect / gap moved
-# above the routing section - the relaxed retry pass needs them too, to
-# check a candidate path for real before committing it, not just hope a
-# relaxed pass is safe because it usually is)
-FEATURES = []
-for p in pads:
-    FEATURES.append(dict(net=p["net"], k="rect", hw=0.0,
-                         L={1, 2} if p["layer"] == MULTI else {p["layer"]},
-                         g=(p["x"] - p["w"] / 2, p["y"] - p["h"] / 2,
-                            p["x"] + p["w"] / 2, p["y"] + p["h"] / 2),
-                         tag="%s.%s" % (p["ref"], p["num"])))
-PAD_FEATURES = list(FEATURES)
-for layer, pts, name in ROUTED:
-    for a, b in zip(pts, pts[1:]):
-        FEATURES.append(dict(net=name, k="seg", hw=net_width(name) / 2, L={layer},
-                             g=(a, b), tag="track"))
-for x, y, name in VIAS:
-    FEATURES.append(dict(net=name, k="pt", hw=VIA_PAD / 2, L={1, 2},
-                         g=(x, y), tag="via"))
-
-
-REPORT = []
-
-
+# --------------------------------------------------------------------------
+#  exact-geometry features, and the split-net test built on them
+# --------------------------------------------------------------------------
 def _feature_bbox(f):
     """Axis-aligned bounds of a feature's geometry, before its half-width."""
     if f["k"] == "rect":
@@ -2166,6 +2046,338 @@ def _near_pairs(i, arr, limit):
                       & (layer[j] & layer[i] != 0))[0] + i + 1
 
 
+# These live here, above the routing section, because the rip-up loop needs
+# them.  Scoring an attempt by the ROUTER's own bookkeeping is scoring the
+# wrong thing: the router works on a 0.25-unit grid and thinks in cells, and
+# it will happily report a net finished that the exact-geometry checker
+# then reports in two pieces.  The first rip-up run did exactly that - three
+# attempts, "0 unrouted" on the third, and verify() found TP1 split.  The
+# loop now optimises the same measure the checker applies, so it cannot
+# declare victory on a board the checker will fail.
+FEATURES = []
+PAD_FEATURES = []
+
+
+def build_features():
+    """Rebuild the exact-geometry feature list from the current copper."""
+    FEATURES.clear()
+    for p in pads:
+        FEATURES.append(dict(net=p["net"], k="rect", hw=0.0,
+                             L={1, 2} if p["layer"] == MULTI else {p["layer"]},
+                             g=(p["x"] - p["w"] / 2, p["y"] - p["h"] / 2,
+                                p["x"] + p["w"] / 2, p["y"] + p["h"] / 2),
+                             tag="%s.%s" % (p["ref"], p["num"])))
+    PAD_FEATURES[:] = list(FEATURES)
+    for layer, pts, name in ROUTED:
+        for a, b in zip(pts, pts[1:]):
+            FEATURES.append(dict(net=name, k="seg", hw=net_width(name) / 2,
+                                 L={layer}, g=(a, b), tag="track"))
+    for x, y, name in VIAS:
+        FEATURES.append(dict(net=name, k="pt", hw=VIA_PAD / 2, L={1, 2},
+                             g=(x, y), tag="via"))
+
+
+def split_nets():
+    """Nets whose pads are not all one piece of touching copper, by exact
+    geometry.  Returns {net: [[tag, ...], ...]}."""
+    arr = _feature_arrays()
+    fnet = arr[4]
+    parent = list(range(len(FEATURES)))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    for i, f in enumerate(FEATURES):
+        for j in _near_pairs(i, arr, 1e-6):
+            if fnet[j] == fnet[i] and gap(f, FEATURES[j]) <= 1e-9:
+                parent[find(i)] = find(j)
+    bypad = {}
+    for i, f in enumerate(FEATURES):
+        if f in PAD_FEATURES and f["net"] and f["net"] not in PLANE_NETS:
+            bypad.setdefault(f["net"], []).append((i, f["tag"]))
+    out = {}
+    for name, items in bypad.items():
+        groups = {}
+        for i, tag in items:
+            groups.setdefault(find(i), []).append(tag)
+        if len(groups) > 1:
+            out[name] = list(groups.values())
+    return out
+
+
+# ==========================================================================
+#  routing, with rip-up and reroute
+# ==========================================================================
+# The board is snapshotted here, after every fixed reservation (holes, pad
+# keepouts, silkscreen) and before a single trace exists, so a routing
+# attempt can be thrown away and redone from a clean grid in O(grid)
+# instead of being unpicked.
+OCC0 = OCC.copy()
+CON0 = CONTESTED.copy()
+
+
+def reset_routing():
+    OCC[:] = OCC0
+    CONTESTED[:] = CON0
+    ROUTED.clear()
+    VIAS.clear()
+
+
+def route_pass():
+    """One complete attempt: plane stubs, every signal net, the relaxed
+    retries, plane stubs again, stitching vias.  Returns the nets it could
+    not finish."""
+    # Cut the structural stubs BEFORE any signal net is routed - see the note
+    # above plane_stubs().
+    plane_stubs()
+
+    FAILED = []
+    RETRY = []      # strict-pass failures, retried once below with relaxed margins
+    for name in sorted(netdoc["nets"], key=route_order):
+        if name in PLANE_NETS:
+            continue
+        nid = NETID[name]
+        # a wide net can't rely on a foreign pad's keepout being sized for it -
+        # that keepout is deliberately tight at the IC pins - so it independently
+        # checks a wider neighbourhood while pathfinding.  0 for signal nets keeps
+        # them exactly as tight as before, preserving SOIC pin-escape routing.
+        # The check is a mask built once per net (cheap - only the 3 power nets
+        # need one at all), not recomputed at every cell A* visits.
+        route_extra = max(0.0, (net_width(name) - SIG_W) / 2)
+        if route_extra > 0:
+            r_cells = int(math.ceil(route_extra / GRID))
+            blocked_extra = [dilate((occ[L] != 0) & (occ[L] != nid), r_cells)
+                             for L in (0, 1)]
+        else:
+            blocked_extra = None
+        mine = [p for p in pads if p["net"] == name]
+        if len(mine) < 2:
+            continue
+        connected = core_cells(mine[0])
+        done = [mine[0]]
+        todo = mine[1:]
+        while todo:
+            tgt = min(todo, key=lambda p: min(math.dist((p["x"], p["y"]),
+                                                        (q["x"], q["y"])) for q in done))
+            tc = core_cells(tgt)
+            tx = int(round(tgt["x"] / GRID))
+            ty = int(round(tgt["y"] / GRID))
+            path = astar(connected, tc, nid, (tx, ty), route_extra, blocked_extra)
+            if path is None:
+                RETRY.append((name, nid, route_extra, blocked_extra, tgt))
+                todo.remove(tgt)
+                done.append(tgt)
+                continue
+            emit_path(path, name, nid)
+            connected |= set(path) | tc
+            todo.remove(tgt)
+            done.append(tgt)
+
+    # Second (and third, ...) pass over whatever the strict pass couldn't
+    # reach.  A miss there often means CONTESTED - not real copper, just two
+    # nets' conservative dilated margins overlapping over a still-empty cell -
+    # was the only thing in the way; own_dil already carries CLEAR + MAX_W/2 +
+    # GRID of real margin, so a contested cell often still has adequate actual
+    # clearance.  Retried now that the whole board's occupancy is final,
+    # against every other pad of the same net (not just the ones the first
+    # pass happened to reach) - and re-tried across a few rounds, since a pad
+    # that connects on round 1 grows the target for whatever's still isolated
+    # on round 2 (a straight single retry left one net in two pieces instead
+    # of five - clear progress, but not yet whole; three rounds cleared it).
+    # Nothing here is trusted blind: the independent geometric verifier below
+    # re-measures exact distances on whatever this finds, same as every other
+    # track on the board.
+    if os.environ.get("RETRY_LOG"):
+        print("  strict pass: %d net-targets needed a relaxed retry" % len(RETRY),
+              flush=True)
+    for _round in range(3):
+        if not RETRY:
+            break
+        still = []
+        for name, nid, route_extra, blocked_extra, tgt in RETRY:
+            others = [p for p in pads if p["net"] == name and p is not tgt]
+            if not others:
+                still.append((name, nid, route_extra, blocked_extra, tgt))
+                continue
+            connected = set()
+            for p in others:
+                connected |= core_cells(p)
+            tc = core_cells(tgt)
+            tx, ty = int(round(tgt["x"] / GRID)), int(round(tgt["y"] / GRID))
+            path = astar(connected, tc, nid, (tx, ty), route_extra, blocked_extra, relaxed=True)
+            if path is None:
+                still.append((name, nid, route_extra, blocked_extra, tgt))
+                continue
+            runs, via_pts, polys = path_geometry(path)
+            if path_clearance_ok(name, via_pts, polys):
+                commit_path(name, nid, runs, via_pts, polys)
+            else:
+                still.append((name, nid, route_extra, blocked_extra, tgt))
+        RETRY = still
+    for name, nid, route_extra, blocked_extra, tgt in RETRY:
+        FAILED.append("%s: %s.%s unreachable" % (name, tgt["ref"], tgt["num"]))
+
+    # Second pass: anything the signal nets isolated on their way through.
+    plane_stubs()
+
+
+
+    # ==========================================================================
+    #  ground stitching vias
+    # ==========================================================================
+    # Every through-hole GND pad (terminal blocks, all five pots) already ties
+    # the top and bottom copper pours together, just by being a plated hole -
+    # but the SMD-only ground connections (R1/R3/R13's Q-setting/bias returns)
+    # rely solely on whatever single via the router happened to place while
+    # routing GND as an ordinary signal.  A deliberate second via right next to
+    # each one lowers the local ground-plane impedance exactly where the board
+    # has the least of it already reinforced - most worth doing near R1, the
+    # input stage's ground reference, where the signal is at its most
+    # vulnerable to hum pickup before any gain stage.  Added after all routing
+    # (including retries) is finished, each candidate checked with the same
+    # strict via_ok() the router itself trusts, so a spot that would actually
+    # crowd real copper is skipped rather than forced through.
+    GND_STITCH_REFS = ["R1", "R3", "R13"]
+    GND_NID = NETID["GND"]
+    for _ref in GND_STITCH_REFS:
+        _p = next((p for p in pads if p["ref"] == _ref and p["net"] == "GND"), None)
+        if _p is None:
+            continue
+        for _dx, _dy in ((3.0, 0), (-3.0, 0), (0, 3.0), (0, -3.0)):
+            _vx, _vy = _p["x"] + _dx, _p["y"] + _dy
+            _cx, _cy = int(round(_vx / GRID)), int(round(_vy / GRID))
+            # via_ok() is net-aware and so will happily put a GND stitching via
+            # right up against a GND via the router already placed - fine for
+            # copper, but the FAB still has to drill both, and hole-to-hole
+            # spacing is a property of the drill, not of the net.  JLCPCB wants
+            # 0.5 mm edge to edge; without this a stitching via landed 0.43 mm
+            # from a routed one, which no electrical check would ever object to.
+            if any(math.dist((_vx, _vy), (_ox, _oy)) < VIA_DRILL + MIN_HOLE_GAP
+                   for _ox, _oy, _ in VIAS):
+                continue
+            if via_ok(_cx, _cy, GND_NID):
+                VIAS.append((_vx, _vy, "GND"))
+                stamp_disc(MULTI, _vx, _vy, VIA_DIL, GND_NID)
+                break
+
+
+    return FAILED
+
+
+# --------------------------------------------------------------------------
+#  rip-up and reroute
+# --------------------------------------------------------------------------
+# Why this exists, in one measurement.  An SOIC-14's pads are 2.5 units
+# apart edge to edge, and a 12 mil trace needs 1.2 + 2 x 0.8 = 2.8 units to
+# pass between two of them.  It does not fit.  Every pin on every IC has to
+# escape OUTWARD along a channel it shares with its neighbours, so whichever
+# net is routed first takes the channel and the rest are locked out - not
+# for want of board area, and not for want of a better placement, but
+# because single-pass routing meets a pitch that does not admit a second
+# trace.  That is why route_order() has grown three separate special cases,
+# and why adding parts kept costing whole search campaigns.
+#
+# The fix is to let a net that failed take the channel back.  This does NOT
+# unpick one net at a time: that is where the negotiated-congestion attempt
+# deadlocked, because the net that has to move is usually not either of the
+# two in conflict.  It throws the entire route away and runs it again with
+# the nets that failed promoted to the front of the order.  Each attempt is
+# a full route, which is affordable now one costs seconds, and the order is
+# LEARNED from what actually failed rather than guessed by sweeping
+# ROUTE_SEED across separate processes.
+#
+# Every attempt is scored with the same measure the search uses - unrouted
+# nets plus ground pads the plane cannot reach - and the best attempt is
+# what gets kept, so a round that makes things worse cannot ship.
+RIPUP_ROUNDS = int(os.environ.get("RIPUP_ROUNDS", 6))
+RIPUP_LOG = bool(os.environ.get("RIPUP_LOG"))
+
+
+def _crowding_nets(missed):
+    """Which nets are sitting on top of a ground pad the plane cannot
+    reach.  A pour miss names no net of its own - GND is not routed - so
+    without this the loop has nothing to promote and stops on the first
+    attempt that routes every signal net but strands a ground pin."""
+    out = []
+    r = int(math.ceil((VIA_PAD / 2 + CLEAR) / GRID))
+    by_id = {v: k for k, v in NETID.items()}
+    for name in missed:
+        ref, _, num = name.rpartition(".")
+        p = next((q for q in pads if q["ref"] == ref and q["num"] == num), None)
+        if p is None:
+            continue
+        cx, cy = int(p["x"] / GRID), int(p["y"] / GRID)
+        for L in (0, 1):
+            sub = occ[L][max(0, cy - r):cy + r + 1, max(0, cx - r):cx + r + 1]
+            for v in np.unique(sub):
+                n = by_id.get(int(v))
+                if n and n not in PLANE_NETS and n not in out:
+                    out.append(n)
+    return out
+
+
+def route_with_ripup():
+    """Route the board up to RIPUP_ROUNDS + 1 times, promoting whatever
+    failed last time, and keep the best attempt."""
+    best_score, best = None, None
+    for attempt in range(RIPUP_ROUNDS + 1):
+        reset_routing()
+        fails = route_pass()
+        # Score with the CHECKER's measure, not the router's.  A net the
+        # router calls finished can still be in two pieces by exact
+        # geometry - it thinks in 0.25-unit cells - and a loop that stops
+        # when the router is happy stops one problem short.
+        build_features()
+        split = split_nets()
+        _ok, missed, _seen = pour_connectivity()
+        score = len(fails) + len(split) + len(missed)
+        if RIPUP_LOG:
+            print("  route attempt %d: %d unrouted, %d split, %d pads off "
+                  "the plane%s" % (attempt, len(fails), len(split), len(missed),
+                                   (" (promoted: %s)" % ", ".join(ROUTE_PRIORITY))
+                                   if ROUTE_PRIORITY else ""), flush=True)
+        if best_score is None or score < best_score:
+            best_score = score
+            best = (list(ROUTED), list(VIAS), list(fails),
+                    OCC.copy(), CONTESTED.copy())
+        if score == 0:
+            break
+        promote = [n for n in (f.split(":")[0] for f in fails)
+                   if n not in ROUTE_PRIORITY]
+        promote += [n for n in split if n not in ROUTE_PRIORITY
+                    and n not in promote]
+        if not promote:
+            promote = [n for n in _crowding_nets(missed)
+                       if n not in ROUTE_PRIORITY]
+        if not promote:
+            break                     # nothing new to learn; stop burning time
+        # Newest failure to the very front: it has just proved it cannot win
+        # the channel at the position it had.
+        ROUTE_PRIORITY[:0] = promote
+    ROUTED[:], VIAS[:], fails, occ_b, con_b = best
+    OCC[:] = occ_b
+    CONTESTED[:] = con_b
+    return fails
+
+
+FAILED = route_with_ripup()
+
+# ==========================================================================
+#  independent verification - exact geometry, not the router's own bookkeeping
+# ==========================================================================
+# (d_pt_seg / d_seg_seg / d_pt_rect / d_seg_rect / d_rect_rect / gap moved
+# above the routing section - the relaxed retry pass needs them too, to
+# check a candidate path for real before committing it, not just hope a
+# relaxed pass is safe because it usually is)
+build_features()
+
+
+REPORT = []
+
+
 def verify():
     problems = []
     arr = _feature_arrays()
@@ -2181,35 +2393,12 @@ def verify():
                 problems.append("clearance %.2f mil between %s (%s) and %s (%s)"
                                 % (d * 10, f["tag"], f["net"],
                                    g["tag"], g["net"]))
-    # -- connectivity: union-find over touching same-net features
-    parent = list(range(len(FEATURES)))
-
-    def find(a):
-        while parent[a] != a:
-            parent[a] = parent[parent[a]]
-            a = parent[a]
-        return a
-
-    for i, f in enumerate(FEATURES):
-        for j in _near_pairs(i, arr, 1e-6):
-            if netid[j] != netid[i]:
-                continue
-            if gap(f, FEATURES[j]) <= 1e-9:
-                parent[find(i)] = find(j)
-    bypad = {}
-    for i, f in enumerate(FEATURES):
-        if f in PAD_FEATURES and f["net"]:
-            bypad.setdefault(f["net"], []).append((i, f["tag"]))
-    for name, items in bypad.items():
-        if name in PLANE_NETS:
-            continue        # proven by the pour check below, not by traces
-        roots = {find(i) for i, _ in items}
-        if len(roots) > 1:
-            groups = {}
-            for i, tag in items:
-                groups.setdefault(find(i), []).append(tag)
-            problems.append("net %s is in %d pieces: %s"
-                            % (name, len(roots), list(groups.values())))
+    # -- connectivity: union-find over touching same-net features.  Shared
+    # with the rip-up loop, which has to score attempts by exactly this.
+    # Plane nets are exempt - proven by the pour check below, not by traces.
+    for name, groups in sorted(split_nets().items()):
+        problems.append("net %s is in %d pieces: %s"
+                        % (name, len(groups), groups))
     # -- nothing may sit under a mounting hole
     for hx, hy in MOUNT_HOLES + [(a, b) for a, b in POT_BOSSES]:
         for f in FEATURES:
