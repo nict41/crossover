@@ -2321,8 +2321,16 @@ def _crowding_nets(missed):
 
 def route_with_ripup():
     """Route the board up to RIPUP_ROUNDS + 1 times, promoting whatever
-    failed last time, and keep the best attempt."""
-    best_score, best = None, None
+    failed, and keep the best attempt.
+
+    Each round extends the BEST order found so far, not the last one
+    tried.  Extending the last one turns the search into a random walk:
+    the first version did that, reached 0 unrouted and 0 split on attempt
+    3, and then spent attempts 4, 5 and 6 wandering away from it with a
+    priority list that had grown to fifteen nets and no longer meant
+    anything.  Hill-climbing from the best keeps every round a variation
+    on something that worked."""
+    best_score, best, best_priority = None, None, []
     for attempt in range(RIPUP_ROUNDS + 1):
         reset_routing()
         fails = route_pass()
@@ -2341,22 +2349,21 @@ def route_with_ripup():
                                    if ROUTE_PRIORITY else ""), flush=True)
         if best_score is None or score < best_score:
             best_score = score
+            best_priority = list(ROUTE_PRIORITY)
             best = (list(ROUTED), list(VIAS), list(fails),
                     OCC.copy(), CONTESTED.copy())
         if score == 0:
             break
-        promote = [n for n in (f.split(":")[0] for f in fails)
-                   if n not in ROUTE_PRIORITY]
-        promote += [n for n in split if n not in ROUTE_PRIORITY
-                    and n not in promote]
+        # What this attempt could not finish, newest first: each of these
+        # has just proved it cannot win its channel from where it sat.
+        promote = list(dict.fromkeys(
+            [f.split(":")[0] for f in fails] + list(split)))
         if not promote:
-            promote = [n for n in _crowding_nets(missed)
-                       if n not in ROUTE_PRIORITY]
+            promote = _crowding_nets(missed)
+        promote = [n for n in promote if n not in best_priority]
         if not promote:
             break                     # nothing new to learn; stop burning time
-        # Newest failure to the very front: it has just proved it cannot win
-        # the channel at the position it had.
-        ROUTE_PRIORITY[:0] = promote
+        ROUTE_PRIORITY[:] = promote + best_priority
     ROUTED[:], VIAS[:], fails, occ_b, con_b = best
     OCC[:] = occ_b
     CONTESTED[:] = con_b
