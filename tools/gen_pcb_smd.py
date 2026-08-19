@@ -2639,8 +2639,14 @@ RIPUP_LOG = bool(os.environ.get("RIPUP_LOG"))
 
 
 def _order_cache_file():
-    return os.path.join(PLACE_CACHE, "%s-order%d.json"
-                        % (_place_key(), _ROUTE_SEED))
+    # LONG_HAUL_N belongs in the key.  A learned order is only meaningful
+    # against the base order it was learned on top of, and LONG_HAUL_N
+    # changes that base - so without it here, an A/B of the knob would
+    # start each arm from the order the OTHER arm had learned and measure
+    # nothing.  That is precisely how a _rudy fix once got credited to a
+    # cached pose computed under the bug.
+    return os.path.join(PLACE_CACHE, "%s-order%d-lh%d.json"
+                        % (_place_key(), _ROUTE_SEED, LONG_HAUL_N))
 
 
 def load_route_order():
