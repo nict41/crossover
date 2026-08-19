@@ -151,6 +151,16 @@ LCSC = {                              # verified live against the JLCPCB API
     "4.7k":    ("C17673", "0805", "basic", 6989256),
     "5.6k":    ("C4382", "0805", "basic", 787448),
     "10k":     ("C17414", "0805", "basic", 34645450),
+    # 47k and 100k joined the BOM with R1's input impedance and the output
+    # bleeders.  Same UNI-ROYAL 0805 1% family as the rest, and the MPN
+    # decodes the value: 0805W8F-<3 sig figs><decade>, cross-checked
+    # against three entries already verified here (C17408 = 1000 = 100R,
+    # C17414 = 1002 = 10k, C17673 = 4701 = 4.7k).  So 4702 = 47k and
+    # 1003 = 100k.  Marked extended rather than basic because the search
+    # API does not report library membership and guessing "basic" is the
+    # direction that UNDER-states the assembly cost.
+    "47k":     ("C17713", "0805", "extended", 1661600),
+    "100k":    ("C17407", "0805", "extended", 248500),
     "11k":     ("C17429", "0805", "extended", 78383),
     "13k":     ("C2933304", "0805", "extended", 213066),
     "33nF":    ("C569866", "1210", "extended", 2001),
@@ -1225,7 +1235,15 @@ def via_ok(x, y, nid, extra=0.0):
     nothing downstream re-checks a via before treating the cells around it
     as claimed.
 
-    Memoised per A* call (VIA_MEMO, cleared in astar()).  This is the
+    Memoised (VIA_MEMO), cleared by anything that changes occupancy -
+    astar() and commit_path() both.  It used to be cleared only by
+    astar(), justified by "occ cannot change during a single search":
+    true, and not enough, because the ground-stitching pass calls via_ok()
+    DIRECTLY, outside any A* call, after every trace is committed, and read
+    answers cached while those traces did not exist.  That put a GND
+    stitching via 4.5 mil INSIDE an LP1 track - real overlap, caught only
+    by the final geometric verifier, and only on some route orders.  This
+    is the
     router's hottest path by a wide margin: it runs once per expanded
     node, does six numpy operations on an 11x11x2 window each time, and
     the same cell gets checked again from every neighbour that reaches it
@@ -1238,6 +1256,9 @@ def via_ok(x, y, nid, extra=0.0):
     hit = VIA_MEMO.get(key)
     if hit is not None:
         return hit
+    if not hole_ok(x, y):
+        VIA_MEMO[key] = False
+        return False
     r = int(math.ceil((VIA_EXTRA + extra) / GRID))
     ok = True
     for L in (0, 1):
@@ -1316,6 +1337,33 @@ def passable(L, x, y, nid, blocked_extra=None, relaxed=False):
 # the via_ok memo below and from running sweeps in parallel, neither of
 # which changes a single routing decision.
 MAX_EXPAND = int(os.environ.get("MAX_EXPAND", 10 ** 9))
+
+
+# Where another DRILL may not go.  Hole-to-hole spacing is a property of
+# the drill bit, not of the net: via_ok() is net-aware and will happily put
+# a GND via on top of another GND via, which is perfectly good copper and
+# impossible to manufacture.  A guard for exactly this already existed on
+# the ground-stitching pass, and was never applied to the vias the ROUTER
+# places - so once rip-up started producing 200+ vias a board, two GND
+# vias landed with their drills overlapping by 0.305 mm.  Clean by every
+# electrical check; rejected by validate_fab.
+#
+# A grid, not a scan over VIAS: via_ok() is the router's hottest call and
+# an O(n) distance loop against a list that grows to a couple of hundred
+# entries does not belong inside it.
+HOLE_KEEP = np.zeros((NY, NX), dtype=bool)
+HOLE_R = int(math.ceil((VIA_DRILL + MIN_HOLE_GAP) / GRID))
+
+
+def stamp_hole(x, y):
+    """Reserve the drill exclusion around a hole at board coords x, y."""
+    cx, cy = int(round(x / GRID)), int(round(y / GRID))
+    a, b = max(0, cx - HOLE_R), max(0, cy - HOLE_R)
+    HOLE_KEEP[b:cy + HOLE_R + 1, a:cx + HOLE_R + 1] = True
+
+
+def hole_ok(cx, cy):
+    return not (0 <= cx < NX and 0 <= cy < NY and HOLE_KEEP[cy, cx])
 
 
 VIA_MEMO = {}
@@ -1475,10 +1523,14 @@ def path_geometry(path):
 def commit_path(net, nid, runs, via_pts, polys):
     """Stamp occupancy and record the geometry from path_geometry - the
     side-effecting half of what emit_path used to do in one step."""
+    # Occupancy is about to change, so every cached via_ok answer becomes a
+    # statement about a board that no longer exists.  See via_ok().
+    VIA_MEMO.clear()
     own_dil = net_width(net) / 2 + CLEAR + MAX_W / 2 + GRID
     for vx, vy in via_pts:
         VIAS.append((vx, vy, net))
         stamp_disc(MULTI, vx, vy, VIA_DIL, nid)
+        stamp_hole(vx, vy)
     for run in runs:
         for c in run:
             stamp_disc(c[0] + 1, c[1] * GRID, c[2] * GRID, own_dil, nid)
@@ -2139,11 +2191,23 @@ def split_nets():
 # instead of being unpicked.
 OCC0 = OCC.copy()
 CON0 = CONTESTED.copy()
+# Drills that exist before any via: the mounting holes, the pot locating
+# bosses, and every plated through-hole pad.
+for _hx, _hy in MOUNT_HOLES:
+    stamp_hole(_hx, _hy)
+for _hx, _hy in POT_BOSSES:
+    stamp_hole(_hx, _hy)
+for _p in pads:
+    if _p["layer"] == MULTI:
+        stamp_hole(_p["x"], _p["y"])
+HOLE0 = HOLE_KEEP.copy()
 
 
 def reset_routing():
     OCC[:] = OCC0
     CONTESTED[:] = CON0
+    HOLE_KEEP[:] = HOLE0
+    VIA_MEMO.clear()
     ROUTED.clear()
     VIAS.clear()
 
@@ -2283,6 +2347,8 @@ def route_pass():
             if via_ok(_cx, _cy, GND_NID):
                 VIAS.append((_vx, _vy, "GND"))
                 stamp_disc(MULTI, _vx, _vy, VIA_DIL, GND_NID)
+                stamp_hole(_vx, _vy)
+                VIA_MEMO.clear()
                 break
 
 
