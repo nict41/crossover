@@ -642,7 +642,13 @@ U1S = {1: "U1A", 2: "U1A", 3: "U1A", 4: "U1A", 5: "U1B", 6: "U1B", 7: "U1B",
        8: "U1C", 9: "U1C", 10: "U1C", 11: "U1A", 12: "U1D", 13: "U1D", 14: "U1D"}
 U2S = {1: "U2A", 2: "U2A", 3: "U2A", 4: "U2A", 5: "U2B", 6: "U2B", 7: "U2B",
        8: "U2C", 9: "U2C", 10: "U2C", 11: "U2A", 12: "U2D", 13: "U2D", 14: "U2D"}
-SOIC_SECTIONS = {"U1": U1S, "U2": U2S}
+# U3 is the output-buffer quad.  Its supply pins belong to section D, not
+# section A: D is the spare, and it is the one drawn with room around it on
+# the schematic sheet for the rail labels.
+U3S = {1: "U3A", 2: "U3A", 3: "U3A", 4: "U3D", 5: "U3B", 6: "U3B", 7: "U3B",
+       8: "U3C", 9: "U3C", 10: "U3C", 11: "U3D", 12: "U3D", 13: "U3D",
+       14: "U3D"}
+SOIC_SECTIONS = {"U1": U1S, "U2": U2S, "U3": U3S}
 
 TERMS = {
     "J2": dict(n=2, names=["IN", "GND"]),
@@ -793,7 +799,8 @@ for _ref, _rots in ROTS.items():
 # the very next search found a clean board in 80 trials (SEED=11), which is
 # a fair summary of what the performance work was actually for.
 BYPASS_NEAR = [("C5", "U1", "+15V", 40.0), ("C6", "U1", "-15V", 40.0),
-               ("C7", "U2", "+15V", 40.0), ("C8", "U2", "-15V", 40.0)]
+               ("C7", "U2", "+15V", 40.0), ("C8", "U2", "-15V", 40.0),
+               ("C9", "U3", "+15V", 40.0), ("C10", "U3", "-15V", 40.0)]
 
 PLACER = place.Placer(_parts, seed=SEED,
                       track_pitch=MAX_W + CLEAR, near=BYPASS_NEAR,

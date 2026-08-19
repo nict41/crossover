@@ -1,10 +1,10 @@
 {
  "head": "1~1.7.5~~",
- "canvas": "CA~2200~1600~#FFFFFF~yes~#CCCCCC~10~2200~1600~line~10~pixel~5~0~0",
+ "canvas": "CA~2560~1860~#FFFFFF~yes~#CCCCCC~10~2560~1860~line~10~pixel~5~0~0",
  "shape": [
   "N~60~280~0~#0000FF~INPUT~gge2~end~56~283~Verdana~7pt",
   "LIB~130~280~package`C_AXIAL-0.2`nameAlias`Value`Value`10uF`spicePre`C`spiceSymbolName`Capacitor`~~0~gge10#@$PL~126 268 126 292~#000080~2~0~none~gge3#@$PL~134 268 134 292~#000080~2~0~none~gge4#@$P~show~0~1~100~280~180~gge5^^100~280^^M 100 280 h 26~#880000^^0~100~280~0~~start~~^^0~100~280~0~1~start~~^^0~100~280^^0~#@$P~show~0~2~160~280~0~gge6^^160~280^^M 160 280 h -26~#880000^^0~160~280~0~~start~~^^0~160~280~0~2~start~~^^0~160~280^^0~#@$T~P~130~260~0~#000080~Verdana~7pt~~~~comment~C0~1~middle~gge7#@$T~N~130~310~0~#000080~Verdana~7pt~~~~comment~10uF~1~middle~gge8#@$T~L~110~270~0~#000080~Verdana~7pt~~~~comment~+~1~middle~gge9",
-  "LIB~200~350~package`R_AXIAL-0.4`nameAlias`Value`Value`10k`spicePre`R`spiceSymbolName`Resistor`~~0~gge16#@$R~194~330~~~12~40~#000080~1~0~none~gge11#@$P~show~0~1~200~320~270~gge12^^200~320^^M 200 320 v 10~#880000^^0~200~320~0~~start~~^^0~200~320~0~1~start~~^^0~200~320^^0~#@$P~show~0~2~200~380~90~gge13^^200~380^^M 200 380 v -10~#880000^^0~200~380~0~~start~~^^0~200~380~0~2~start~~^^0~200~380^^0~#@$T~P~212~348~0~#000080~Verdana~7pt~~~~comment~R1~1~start~gge14#@$T~N~212~362~0~#000080~Verdana~7pt~~~~comment~10k~1~start~gge15",
+  "LIB~200~350~package`R_AXIAL-0.4`nameAlias`Value`Value`47k`spicePre`R`spiceSymbolName`Resistor`~~0~gge16#@$R~194~330~~~12~40~#000080~1~0~none~gge11#@$P~show~0~1~200~320~270~gge12^^200~320^^M 200 320 v 10~#880000^^0~200~320~0~~start~~^^0~200~320~0~1~start~~^^0~200~320^^0~#@$P~show~0~2~200~380~90~gge13^^200~380^^M 200 380 v -10~#880000^^0~200~380~0~~start~~^^0~200~380~0~2~start~~^^0~200~380^^0~#@$T~P~212~348~0~#000080~Verdana~7pt~~~~comment~R1~1~start~gge14#@$T~N~212~362~0~#000080~Verdana~7pt~~~~comment~47k~1~start~gge15",
   "F~part_netLabel_gnD~200~400~~gge22^^200~400^^GND~#000080~189~387~0~start~0~Verdana~7pt^^PL~200 410 200 400~#000000~1~0~none~gge17^^PL~190 410 209 410~#000000~1~0~none~gge18^^PL~194 412 207 412~#000000~1~0~none~gge19^^PL~196 414 203 414~#000000~1~0~none~gge20^^PL~199 416 201 416~#000000~1~0~none~gge21",
   "LIB~295~300~package`DIP-14`nameAlias`Model`Model`MC33079`spicePre`U`spiceSymbolName`Opamp`~~0~gge33#@$PG~260 260 260 340 330 300~#000080~1~0~none~gge23#@$P~show~0~3~240~280~180~gge24^^240~280^^M 240 280 h 20~#880000^^0~240~280~0~~start~~^^1~238~276~0~3~end~~7pt^^0~240~280^^0~#@$P~show~0~2~240~320~180~gge25^^240~320^^M 240 320 h 20~#880000^^0~240~320~0~~start~~^^1~238~332~0~2~end~~7pt^^0~240~320^^0~#@$P~show~0~1~350~300~0~gge26^^350~300^^M 350 300 h -20~#880000^^0~350~300~0~~start~~^^1~334~294~0~1~start~~7pt^^0~350~300^^0~#@$T~L~268~286~0~#000080~Verdana~9pt~~~~comment~+~1~middle~gge27#@$T~L~268~322~0~#000080~Verdana~9pt~~~~comment~\u2212~1~middle~gge28#@$P~show~4~4~280~240~270~gge29^^280~240^^M 280 240 v 30~#880000^^0~280~240~0~~start~~^^1~284~256~0~4~start~~7pt^^0~280~240^^0~#@$P~show~4~11~280~360~90~gge30^^280~360^^M 280 360 v -30~#880000^^0~280~360~0~~start~~^^1~284~352~0~11~start~~7pt^^0~280~360^^0~#@$T~P~292~252~0~#000080~Verdana~7pt~~~~comment~U1A~1~start~gge31#@$T~N~274~306~0~#000080~Verdana~7pt~~~~comment~MC33079~1~start~gge32",
   "N~280~240~0~#0000FF~+15V~gge34~middle~280~232~Verdana~7pt",
@@ -264,8 +264,8 @@
  "BBox": {
   "x": 0,
   "y": 0,
-  "width": 2200,
-  "height": 1600
+  "width": 2560,
+  "height": 1860
  },
  "colors": {}
 }

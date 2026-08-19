@@ -73,9 +73,30 @@ QUAD_ICS = {
     "int3": ("U2B", (6, "-"), (5, "+"), 7, None),
     "int4": ("U2C", (9, "-"), (10, "+"), 8, None),
     "inv":  ("U2D", (13, "-"), (12, "+"), 14, None),
+    # A third quad, fitted only where output_buffers is on: one unity-gain
+    # follower per band between that band's volume pot and its terminal
+    # block.  The supply pins are put on the SPARE section rather than on
+    # section A as elsewhere - the +15V/-15V labels amp() draws reach 76 px
+    # below the centreline, which lands on the next row's designator when
+    # the three buffers are stacked on a 110 px pitch.  The spare has a
+    # row to itself and the room for them.
+    "obufH": ("U3A", (3, "+"), (2, "-"), 1, None),
+    "obufM": ("U3B", (5, "+"), (6, "-"), 7, None),
+    "obufL": ("U3C", (10, "+"), (9, "-"), 8, None),
+    "ospare": ("U3D", (12, "+"), (13, "-"), 14, (4, 11)),
 }
 
 PIN_ROLE = {}      # (refdes, pin) -> "role.function", for cross-variant checks
+
+# Buffered outputs.  Without them the source impedance at each terminal
+# block is the volume pot's wiper - up to a quarter of the pot's track, so
+# 2.5 kohm at the worst setting on a 10k pot - and the amplifier's input
+# impedance sits across the lower half of that track, so it both loses
+# level and bends the taper by an amount that depends on which amplifier is
+# plugged in.  That is tolerable for a crossover fed from a preamp and
+# wrong for something used AS a preamp.  A unity-gain follower per band
+# makes the output impedance the op-amp's, which is milliohms.
+_OBUF = os.environ.get("OUTPUT_BUFFERS", "1") != "0"
 
 VARIANTS = [
     dict(slug="esp-p148-3way-state-variable-crossover",
@@ -100,14 +121,15 @@ VARIANTS = [
          packages=["U1", "U2"], caps={"C1": ["C1"], "C2": ["C2"], "C3": ["C3"], "C4": ["C4"]}),
     dict(slug="esp-p148-3way-crossover-retuned-quad-smd",
          title="3-Way State Variable Electronic Crossover  -  ESP P148, "
-               "retuned, two quad op-amps, SMD build for JLCPCB assembly",
+               "retuned, three quad op-amps, SMD build for JLCPCB assembly",
          rs1="4.7k", c1="33nF", range1="195 Hz - 1.03 kHz",
          rs2="13k", c2="33nF", range2="73 Hz - 186 Hz  (C3, C4 = 2 x 33nF)", rq="11k",
          ics=QUAD_ICS, model="MC33079", pkg="SOIC-14", pwr="pins 4 / 11",
-         packages=["U1", "U2"],
+         packages=["U1", "U2"] + (["U3"] if _OBUF else []),
          caps={"C1": ["C1"], "C2": ["C2"],
                "C3": ["C3A", "C3B"], "C4": ["C4A", "C4B"]},
          volume_pots=True,
+         output_buffers=_OBUF,
          # SMD variant only.  The through-hole variants are reference
          # builds with hand-placed boards; adding parts to them would
          # disturb those layouts for no benefit to the board actually being
@@ -132,7 +154,9 @@ VARIANTS = [
          output_caps=os.environ.get("OUTPUT_CAPS", "1") != "0"),
 ]
 
-W_CANVAS, H_CANVAS = 2200, 1600
+# Wide enough for the output-buffer column at x = 1980-2490 and tall
+# enough for the spare section's supply labels at y = 1776.
+W_CANVAS, H_CANVAS = 2560, 1860
 
 
 # --------------------------------------------------------------------------
@@ -386,6 +410,13 @@ def cap_bank(cfg, slot, x, y):
 
 def draw(cfg):
     """Place every component and wire for one variant of the crossover."""
+    # Per variant, not cumulative.  The dual-op-amp variants call U3A/U3B
+    # filter 2's summing amp and first integrator; the SMD variant calls
+    # them output buffers.  Leaving both sets of roles in one global dict
+    # means whichever variant is drawn last wins for a designator neither
+    # of them shares, which is exactly the kind of thing that makes a
+    # cross-variant check quietly stop checking.
+    PIN_ROLE.clear()
     OY = 600        # vertical offset of the second (lower frequency) filter
     # Variants with a volume_pots flag get a per-output attenuator between the
     # filter and its terminal block, so the raw filter output needs a net name
@@ -400,7 +431,21 @@ def draw(cfg):
     w((60, 280), (100, 280))
     w((160, 280), (240, 280))                       # C0 -> U1A pin 3
 
-    resistor("R1", "10k", 200, 350, vertical=True)
+    # R1 IS the input impedance: it is the bias return for the buffer's
+    # non-inverting input, and C0 blocks DC, so nothing else sets what the
+    # source sees.  10k is a power-amp input, not a line input - it loads a
+    # passive volume control or a valve output stage hard enough to lose
+    # level and bass, and a 10k master volume pot ahead of the board would
+    # have its taper badly distorted by it.  47k is the ordinary line-level
+    # figure and makes an external master volume work properly.
+    #
+    # The cost is DC offset: a bipolar-input op-amp's bias current flows in
+    # R1, and 300 nA (MC33079 typical) through 47k is 14 mV at the buffer
+    # output, carried DC-coupled to all three outputs.  That is only
+    # acceptable because C11-C13 now block it before it reaches an
+    # amplifier - it would not have been before they were fitted.  A
+    # FET-input part (OPA1644, OPA4134, TL074) drops it to nothing.
+    resistor("R1", "47k", 200, 350, vertical=True)
     w((200, 280), (200, 320))
     w((200, 380), (200, 400))
     gnd(200, 400)
@@ -669,7 +714,15 @@ def draw(cfg):
             netlabel(nm + "_PRE", vx - 60, oy, anchor="end", dx=-4, dy=3)
             w((vx + 30, oy), (vx + 60, oy))
             gnd(vx + 60, oy)
-            if cfg.get("output_caps"):
+            if cfg.get("output_buffers"):
+                # The wiper drives the buffer block below, which carries
+                # the build-out resistor and the DC blocking cap.  A net
+                # label rather than a wire: the two blocks are on opposite
+                # sides of the sheet and this is how every other long hop
+                # in this schematic is drawn.
+                w((vx, oy + 30), (vx, oy + 50))
+                netlabel(nm + "_VOL", vx, oy + 50, anchor="middle", dy=16)
+            elif cfg.get("output_caps"):
                 # Series DC blocking, on the WIPER side of the attenuator.
                 # A failed op-amp stuck at a rail can no longer push DC into
                 # a DC-coupled power amplifier and from there into a
@@ -695,8 +748,79 @@ def draw(cfg):
             else:
                 w((vx, oy + 30), (vx, oy + 50))
                 netlabel(nm, vx, oy + 50, anchor="middle", dy=16)
-        note(vx - 30, 1215, "OUTPUT VOLUME (audio taper, wired as attenuator)",
-             weight="bold")
+        note(vx - 60, 1215, "OUTPUT VOLUME", weight="bold")
+
+    # ---------------- per-output buffer ---------------------------------
+    # Unity-gain follower per band, between the volume pot's wiper and the
+    # terminal block.  Two things change: the output impedance stops being
+    # the pot wiper's (up to 2.5 k) and becomes the op-amp's, and the pot
+    # stops being loaded by whatever amplifier is plugged in, so its taper
+    # is the taper it was bought with.
+    #
+    # Order along the chain is deliberate: pot, buffer, build-out resistor,
+    # blocking capacitor, terminal.  The capacitor stays LAST so that it
+    # still blocks a failure of the last active device in the path - moving
+    # it ahead of the buffer would keep DC off the pot track (worth
+    # something) at the cost of leaving a failed U3 section connected
+    # straight to a power amplifier (worth much more).  See
+    # docs/design-review.md sections 3 and 7.
+    if cfg.get("output_buffers"):
+        bx = 2060
+        # 150 px between rows here, not the volume block's 110: each row
+        # carries a bleeder resistor hanging below its output, and the two
+        # blocks are joined by net labels rather than wires, so they have
+        # no reason to line up.
+        for k, (role, nm) in enumerate([("obufH", "HIGH"), ("obufM", "MID"),
+                                        ("obufL", "LOW")]):
+            oy = 1250 + 150 * k
+            netlabel(nm + "_VOL", bx - 80, oy - 20, anchor="end", dx=-4, dy=3)
+            w((bx - 80, oy - 20), (bx - 20, oy - 20))
+            amp(cfg, role, bx, oy)
+            # Unity-gain feedback, kept within 42 px of the centreline so it
+            # clears the next row's designator text at oy + 62.
+            w((bx + 90, oy), (bx + 110, oy))
+            w((bx + 110, oy), (bx + 110, oy + 42), (bx - 40, oy + 42),
+              (bx - 40, oy + 20), (bx - 20, oy + 20))
+            w((bx + 110, oy), (bx + 140, oy))
+            # Build-out for the BUFFER, isolating it from the interconnect
+            # capacitance.  R9/R19/R22 stay where they are, doing the same
+            # job for the filter op-amp that drives the pot.
+            resistor("R%d" % (25 + k), "100R", bx + 170, oy)
+            if cfg.get("output_caps"):
+                cap = "C%d" % (7 + 2 * n_pkg + k)
+                w((bx + 200, oy), (bx + 230, oy))
+                capacitor(cap, "10uF", bx + 260, oy, polar=True,
+                          package="CASE-D5xL5.4")
+                w((bx + 290, oy), (bx + 380, oy))
+                # Bleeder.  The coupling capacitor's outer plate has a DC
+                # path only through whatever is plugged into the terminal
+                # block, so on a board sitting with nothing connected it
+                # drifts on leakage - and then thumps into the amplifier
+                # the moment one is connected.  100k holds it at 0 V and
+                # costs 0.16 Hz of corner frequency against the 10 uF.
+                w((bx + 330, oy), (bx + 330, oy + 25))
+                resistor("R%d" % (28 + k), "100k", bx + 330, oy + 55,
+                         vertical=True)
+                w((bx + 330, oy + 85), (bx + 330, oy + 105))
+                gnd(bx + 330, oy + 105)
+            else:
+                w((bx + 200, oy), (bx + 380, oy))
+            netlabel(nm, bx + 380, oy, anchor="start", dx=4, dy=3)
+
+        # The fourth section.  An unused op-amp section left with its inputs
+        # floating is not "unused" - it is a comparator with a metre of
+        # stray capacitance, and it oscillates and couples that into the
+        # three sections sharing its supply pins and substrate.
+        sy = 1250 + 150 * 3
+        amp(cfg, "ospare", bx, sy)
+        w((bx - 20, sy - 20), (bx - 60, sy - 20))
+        gnd(bx - 60, sy - 20)
+        w((bx + 90, sy), (bx + 110, sy))
+        w((bx + 110, sy), (bx + 110, sy + 42), (bx - 40, sy + 42),
+          (bx - 40, sy + 20), (bx - 20, sy + 20))
+        note(bx - 90, 1215, "OUTPUT BUFFERS", weight="bold")
+        note(bx - 90, sy + 110, "U3D is the spare section: input grounded, "
+             "output tied back.", size="7pt")
 
     note(60, 1180, "SUPPLY BYPASSING - one 100nF ceramic per rail, at each IC",
          weight="bold")
@@ -718,6 +842,18 @@ def draw(cfg):
             "attenuators - per-output volume, not part of the filter."
             if cfg.get("volume_pots") else ""),
          size="8pt", color="#404040")
+    if cfg.get("output_buffers"):
+        note(60, 1580, "U3A/U3B/U3C buffer each volume pot's wiper, so the "
+             "output impedance is the op-amp's rather than up to 2.5k of pot "
+             "track, and the amplifier's input impedance no longer loads the "
+             "pot or bends its taper.  U3D is the unused section, terminated.  "
+             "R28-R30 hold each output at 0 V when nothing is plugged in.",
+             size="8pt", color="#404040")
+        note(60, 1600, "Input impedance is R1 = 47k, a line-level figure: a "
+             "master volume pot ahead of the board (one dual-gang for a "
+             "stereo pair, feeding both channels' J2) works properly into it.  "
+             "It is off-board because this board is one channel.",
+             size="8pt", color="#404040")
 
 
 # ==========================================================================
@@ -936,13 +1072,20 @@ def write_bom(filename="bom.csv"):
     rows.sort(key=lambda r: (r[2], sort_key(r[3].split(",")[0])))
     notes = {
         "NE5532": "4 x dual op-amp packages (U1-U4); each drawn as two sections",
-        "MC33079": "2 x quad op-amp packages (U1 = filter 1, U2 = filter 2); "
-                   "each drawn as four sections. Any standard quad pinout fits: "
-                   "OPA1644, OPA4134, LME49740, TL074",
+        "MC33079": "Quad op-amp packages, each drawn as four sections: "
+                   "U1 = filter 1, U2 = filter 2, U3 = output buffers (U3D "
+                   "spare, terminated). Any standard quad pinout fits: "
+                   "OPA1644, OPA4134, LME49740, TL074 - and a FET-input one "
+                   "removes the bias-current offset R1 develops",
         "20k": "2 x dual-gang 20k linear pots (VR1, VR2); wired as rheostats",
         "12k": "Sets filter Q (0.489); 11k2 = exact Q 0.5, 5k04 = Butterworth",
         "11k": "Sets filter Q (0.503); 11k2 = exact Q 0.5, 5k04 = Butterworth",
-        "100R": "Output series build-out resistors",
+        "100R": "Build-out resistors: R9/R19/R22 from each filter into its "
+                "volume pot, R25/R26/R27 from each output buffer into the "
+                "interconnect",
+        "47k": "Sets the board's input impedance - see docs/design-review.md",
+        "100k": "Output bleeders: hold each output at 0 V through its coupling "
+                "capacitor when nothing is plugged into the terminal block",
         "TP": "Test points - optional, omit with R10/R11 and R23/R24",
         "IN": "Signal input",
         "HIGH": "Output terminal block to the treble amplifier",
@@ -1104,13 +1247,24 @@ def signal_map(nets, cfg):
     # the one signal, which is what it is.
     outcap_refs = ({"C%d" % (7 + 2 * n_pkg + k) for k in range(3)}
                    if cfg.get("output_caps") else set())
+    # The output buffers are unity-gain followers in series, so they fold
+    # out exactly like the volume pots and the blocking caps: what goes in
+    # is what comes out.  Their build-out resistors go with them - they are
+    # in series in the same chain and, like VR3-VR5, simply do not exist in
+    # the other variants.  What survives the fold on each output is R9/R19/
+    # R22's far pin and the terminal block's pin, which is precisely what
+    # every other variant has, so the check still fails if the filter stops
+    # landing where it should.
+    buffer_refs = ({"U3A", "U3B", "U3C", "U3D",
+                    "R25", "R26", "R27", "R28", "R29", "R30"}
+                   if cfg.get("output_buffers") else set())
     out = {}
     for name, members in nets.items():
         if name.endswith("_PRE"):
             name = name[:-len("_PRE")]
         for m in members:
             ref, _, num = m.rpartition(".")
-            if ref in volume_refs or ref in outcap_refs:
+            if ref in volume_refs or ref in outcap_refs or ref in buffer_refs:
                 continue
             ref = fold.get(ref, ref)
             alias = PIN_ROLE.get((ref, num))
