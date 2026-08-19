@@ -332,17 +332,28 @@ background with a timeout; don't poll them in a tight loop.
 
 ## Current state / open threads
 
-The committed board is **97.5 × 82.8 mm** (`SEED=18 ROUTE_SEED=0`, 63
-footprints, 172 pads, 247 tracks, 141 vias). It verifies clean AND passes
-`validate_fab.py --online` (EasyEDA import structure, JLCPCB fab limits,
-hole-to-hole drill spacing, BOM/CPL, LCSC stock, ground pour on both
-layers). Utilisation 61%.
+The committed board is **114.3 × 102.9 mm** (`SEED=38 ROUTE_SEED=2`, 83
+footprints, 222 pads, 213 tracks, 130 vias). It verifies clean AND passes
+`validate_fab.py --online`. Utilisation 51%.
 
-It now carries, beyond the filter itself: per-band volume pots, output DC
-blocking (`C13`-`C15`), bulk supply decoupling (`C11`/`C12`), a 47 kΩ
-input impedance, and `U3` - a third quad giving each band a unity-gain
-output buffer with its own build-out resistor and an output bleeder. See
-docs/design-review.md.
+Beyond the filter it carries: a master volume, per-band volume, a 47 kΩ
+line input, buffered outputs with build-out resistors, DC blocking and
+bleeders, bulk and per-IC supply decoupling, and **per-output muting with
+power-up soft start** - a JFET shunting each buffer input, steering diodes
+so one button mutes one band, and an RC that holds everything muted until
+the rails settle then re-mutes fast when they collapse. The switches and
+LEDs are panel hardware on a loom to `J6`; no audio leaves the board.
+
+**Width is now set by the panel, not by routing.** Six controls at
+`PANEL_PITCH` come to 114.3 mm and every seed lands there. A knob costs
+20.3 mm of edge whatever the router does.
+
+**Route order does real work at this size.** A blind 24-seed sweep found
+nothing; sweeping ROUTE_SEED 1-3 over the five best of those seeds found
+two clean boards in 15 trials. A seed stuck at the same problem count
+across every route order has a structural pocket rerouting cannot open; a
+seed that moves has one the pour just needed the traces to fall differently
+around. Sweep route orders on near-misses before searching more seeds.
 
 **The router is no longer single-pass.** `route_with_ripup()` throws the
 whole route away and runs it again with whatever failed promoted to the

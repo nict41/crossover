@@ -18,8 +18,8 @@ The generator routes the board and then checks it with geometry that does not
 reuse the router's own bookkeeping. On the current output:
 
 ```
-board 97.5 x 82.8 mm | 63 footprints | 172 pads | 247 tracks | 141 vias
-board utilisation 61%; largest empty rectangle 8 x 50 mm at (0, 15)
+board 114.3 x 102.9 mm | 83 footprints | 222 pads | 213 tracks | 130 vias
+board utilisation 51%; largest empty rectangle 28 x 34 mm at (86, 11)
 verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
           pads match the schematic exactly
 ```
