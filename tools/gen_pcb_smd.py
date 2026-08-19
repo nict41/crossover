@@ -2392,6 +2392,7 @@ def route_with_ripup():
     on something that worked."""
     best_score, best = None, None
     tried_crowding = False
+    tried_orders = set()
     best_priority = load_route_order()
     ROUTE_PRIORITY[:] = best_priority
     if RIPUP_LOG and best_priority:
@@ -2447,7 +2448,20 @@ def route_with_ripup():
                    if n not in best_priority and n not in ("GND", "+15V", "-15V")]
         if not promote:
             break                     # nothing new to learn; stop burning time
-        ROUTE_PRIORITY[:] = promote + best_priority
+        order = promote + best_priority
+        # Stop if this order has already been tried.  Promoting the current
+        # attempt's failures on top of an unchanged best is a map from an
+        # order to the next one, and maps have cycles: with the best stuck
+        # at attempt 0, order A failed nets that produced order B, whose
+        # failures produced A again, and attempts 3-6 were two orders
+        # alternating.  Four full routes for nothing.
+        if tuple(order) in tried_orders:
+            if RIPUP_LOG:
+                print("  route order repeated - the promotion rule has "
+                      "cycled, stopping", flush=True)
+            break
+        tried_orders.add(tuple(order))
+        ROUTE_PRIORITY[:] = order
     ROUTED[:], VIAS[:], fails, occ_b, con_b = best
     OCC[:] = occ_b
     CONTESTED[:] = con_b
