@@ -18,8 +18,8 @@ The generator routes the board and then checks it with geometry that does not
 reuse the router's own bookkeeping. On the current output:
 
 ```
-board 97.5 x 82.3 mm | 54 footprints | 142 pads | 160 tracks | 107 vias
-board utilisation 57%; largest empty rectangle 6 x 60 mm at (90, 5)
+board 97.5 x 82.8 mm | 63 footprints | 172 pads | 247 tracks | 141 vias
+board utilisation 61%; largest empty rectangle 8 x 50 mm at (0, 15)
 verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
           pads match the schematic exactly
 ```
@@ -570,6 +570,83 @@ physical validity so the search can never produce an overlap (1437 → 1312 mm
 on the current layout - longer in absolute terms than before the volume
 pots were added, simply because there is more copper to route across a
 bigger board, not because the search got worse at its job).
+
+## Rip-up and reroute
+
+The router is no longer single-pass. `route_with_ripup()` routes the whole
+board, and if anything failed, throws the result away and routes it again
+with the failed nets promoted to the front of the order — keeping the best
+attempt, and hill-climbing from the best order found rather than the last
+one tried.
+
+The measurement that says why it had to exist: an SOIC-14's pads are
+**2.5 units apart edge to edge**, and a 12 mil trace needs
+1.2 + 2 × 0.8 = **2.8 units** to pass between two of them. It does not
+fit. Every pin on every IC has to escape *outward* along a channel it
+shares with its neighbours, so whichever net routes first takes the
+channel and the rest are locked out — regardless of board area, and
+regardless of how good the placement is. That is why `route_order()` grew
+three separate hand-reasoned special cases, and why adding parts kept
+costing whole search campaigns.
+
+It deliberately does **not** unpick one net at a time. That is where the
+negotiated-congestion attempt deadlocked: the net that has to move is
+usually not either of the two in conflict.
+
+Two things it needs to be honest about:
+
+* **Score with the checker's measure, not the router's.** The router
+  works on a 0.25-unit grid and will call a net finished that exact
+  geometry says is in two pieces. `split_nets()` is shared with
+  `verify()`, so the loop optimises what the checker measures.
+* **Supply rails are never promoted.** They are already first by
+  `route_order()`'s tiering, so promoting one only shoves every learned
+  signal net down the list — measured, an attempt at 0 unrouted / 0 split
+  went to 7 and 8 the round after `-15V` was promoted.
+
+The learned order is cached beside the placement it belongs to, so
+regenerating the committed board routes clean on attempt 0 instead of
+rediscovering the order over several full routes.
+
+### Known: the frequency-pot range label crosses a boss hole
+
+`VR1` and `VR2` carry their sweep range on the silkscreen, and on the
+committed board that line runs across one of the pot's two locating-boss
+holes — a 2.3 mm hole through a 3.6-unit text line, which swallows two or
+three characters. Measured, not eyeballed: two overlaps on the board, both
+this label, and the designators are clear.
+
+It cannot be fixed for free. The bosses sit at `(x ± 14, y − 22)`, and the
+clear band between the pot body and the boss is 9.5 units — enough for the
+function label alone, not for a second row under it. The two real options
+both have a cost:
+
+* **Move the label above the bosses.** Grows the pot footprint by ~13
+  units. Footprint boxes are probed from emitted shapes, so this changes
+  the placement and invalidates the board — it needs a fresh seed search.
+* **Move the bosses inside the body outline**, where a 9 mm pot's
+  locating bosses actually are. Better engineering, but the current
+  positions are already a documented guess (no verified dual-gang
+  drawing), and swapping one guess for another is what this repo has been
+  bitten by before.
+
+Either way the boss positions **must be checked against your actual pots
+before ordering** — that was already true and is the thing that decides
+this.
+
+### Drill spacing is not a copper rule
+
+`via_ok()` is net-aware, so it will put a GND via on top of another GND
+via: perfectly good copper, impossible to manufacture. The guard for this
+lived only on the ground-stitching pass, and the **C router picks its own
+layer changes without calling `via_ok()` at all** — so once rip-up started
+producing 200+ vias a board, the result was 203 vias at 152 distinct
+positions, eleven of them stacked on one cell.
+
+`drill_filter()` now runs on the way into `commit_path()`, where nothing
+can route around it: a via exactly on an existing same-net via is dropped
+(the layers are already tied there), and anything else that breaks the
+drill-to-drill minimum rejects the whole path so the caller reroutes.
 
 ## Ground is a plane, not a net
 
