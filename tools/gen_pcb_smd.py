@@ -1014,9 +1014,11 @@ WEIGHTS = dict(
     # Honest caveat: this does NOT change the PRE-ROUTING pour verdict.
     # Screening 40 seeds passes 40 with the term on and 40 with
     # PLANE_GAP=0, because plane_stubs() running before the signal nets
-    # already vias its way out of those pockets.  Whatever this buys is
-    # room for the pour to SURVIVE routing, which has not been isolated
-    # from seed-to-seed noise.  See docs/pcb-notes-smd.md.
+    # already vias its way out of those pockets.  What it buys is room for
+    # the pour to SURVIVE routing, and that is measured but noisy: over six
+    # seeds, 60 DRC problems against 75, four seeds better and two worse.
+    # A better average placement, not a guarantee for any one seed.  See
+    # docs/pcb-notes-smd.md.
     pesc=60.0,
     cong=5.0,        # RUDY overflow
     hpwl=0.15,       # wirelength, as a proxy for everything not modelled

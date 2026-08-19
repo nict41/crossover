@@ -423,6 +423,19 @@ at a weight above escape's — escape starvation makes a pin slow to route,
 this makes it impossible. It shares `escape_of()`'s neighbour scan, so it
 costs four extra multiplications rather than a second pass over every part.
 
+**Measured, on routed boards.** Six seeds, same capped router, DRC
+problems with the term against without:
+
+| seed | 1 | 2 | 3 | 4 | 5 | 6 | total |
+|---|---|---|---|---|---|---|---|
+| `PLANE_GAP=4.4` | **2** | **11** | 13 | **3** | 15 | **16** | **60** |
+| `PLANE_GAP=0` | 6 | 18 | **12** | 6 | **9** | 24 | 75 |
+
+Four seeds better, two worse, 20% fewer problems overall. That is a real
+effect and a noisy one - seed 5 is worse by six - so it is worth knowing
+that this term buys a better *average* placement, not a guarantee about
+any particular seed. Seed choice still has to be searched.
+
 **What it is not, measured:** the term is *not* what makes the pre-routing
 pour reach every pad. Screening 40 seeds with `PLANE_GAP=0` (the term
 disabled) passes every one of them, exactly as screening with it on does.

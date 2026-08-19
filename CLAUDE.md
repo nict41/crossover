@@ -200,8 +200,8 @@ was caught by measuring the ARTIFACT rather than reading the change.
   pockets, and the note describing them had gone stale without anyone
   noticing. *Measure the metric a change targets, in both arms, before
   believing the change did anything.* Cost: one full search round. The term
-  was kept - an A/B on routed boards showed it does help - but for a
-  different reason than the one it was built for.
+  was kept - an A/B on routed boards showed 60 problems against 75 over six
+  seeds - but for a different reason than the one it was built for.
 
 ## Hard-won learnings (each of these cost real debugging time)
 
@@ -493,12 +493,13 @@ numpy with plain Python in the placer (numpy is still ~3x faster at n=49).
   the shortfall per plane pad per side, sharing `escape_of()`'s neighbour
   scan so it costs four multiplications rather than a second pass. Mirrored
   in `anneal.c`; `canneal.Cfg` must stay field-for-field identical.
-  **Its benefit is not measured.** It does not change the pre-routing pour
-  verdict (see the pre-filter below), so whatever it buys is room for the
-  pour to survive signal routing, and that has not been isolated from
-  seed-to-seed noise. What IS measured is that it moves every placement:
-  `SEED=38`, which routed clean, does not any more. Treat it as an
-  unsettled term, not a fix.
+  **Measured, weakly positive.** It does NOT change the pre-routing pour
+  verdict (see the pre-filter below), so what it buys is room for the pour
+  to survive signal routing. Six seeds, same capped router, problems with
+  against without: 2/11/13/3/15/16 = 60 against 6/18/12/6/9/24 = 75. Four
+  seeds better, two worse, 20% fewer problems overall - a better average
+  placement, not a guarantee for any one seed. It also moves every
+  placement, so `SEED=38`, which routed clean, does not any more.
 * **The structural pre-filter.** `PLANE_PREFILTER` pours the board with
   only pads on it and asks whether every ground pad can reach the plane. A
   pad unreached there can never be reached later - signal traces are
