@@ -110,6 +110,23 @@ _OBUF = os.environ.get("OUTPUT_BUFFERS", "1") != "0"
 # separate circuit, it is the resting state of the parts already fitted.
 _MUTE = os.environ.get("MUTE", "1") != "0"
 
+# Master volume, ahead of everything.
+#
+# It goes at the INPUT, before the buffer, for two reasons.  It then sets
+# the board's input impedance itself, so R1 stops having to and the 47k
+# figure is replaced by the pot's own track; and attenuating before any
+# gain stage is what keeps a hot source from clipping the filter rather
+# than merely turning down something already clipped.
+#
+# The cost is a couple of dB of insertion loss at mid-rotation, where the
+# wiper's source impedance is highest and works against R1 - about -2 dB
+# worst case at 50k into 47k, on a control that is ridden by ear.  Putting
+# it after the buffer instead would avoid that, but the pot would then
+# drive R2 directly and its wiper impedance would land in series with the
+# summing resistor, which changes the FILTER's gain with the volume
+# setting.  That is not a trade worth making.
+_MVOL = os.environ.get("MASTER_VOL", "1") != "0"
+
 VARIANTS = [
     dict(slug="esp-p148-3way-state-variable-crossover",
          title="3-Way State Variable Electronic Crossover  -  ESP Project 148",
@@ -143,6 +160,7 @@ VARIANTS = [
          volume_pots=True,
          output_buffers=_OBUF,
          mute=_MUTE and _OBUF,
+         master_vol=_MVOL,
          # SMD variant only.  The through-hole variants are reference
          # builds with hand-placed boards; adding parts to them would
          # disturb those layouts for no benefit to the board actually being
@@ -741,7 +759,12 @@ def draw(cfg):
     # ---------------- signal connectors and test points -------------------
     header("J2", "IN", 1050, 1250, ["IN", "GND"], package="TB-2P-5.08")
     w((1070, 1260), (1130, 1260))
-    netlabel("INPUT", 1130, 1260, anchor="start", dx=4, dy=3)
+    # With a master volume fitted the socket feeds the pot rather than the
+    # buffer, and the pot's wiper becomes INPUT.  Same _PRE convention the
+    # band volume pots use, so signal_map() folds it out and every variant
+    # still has to agree about where the filter's input actually lands.
+    netlabel("INPUT_PRE" if cfg.get("master_vol") else "INPUT",
+             1130, 1260, anchor="start", dx=4, dy=3)
     w((1070, 1290), (1130, 1290))
     gnd(1130, 1290)
 
@@ -921,6 +944,18 @@ def draw(cfg):
         note(bx - 90, 1215, "OUTPUT BUFFERS", weight="bold")
         note(bx - 90, sy + 110, "U3D is the spare section: input grounded, "
              "output tied back.", size="7pt")
+
+    # ---------------- master volume -------------------------------------
+    if cfg.get("master_vol"):
+        mx = 880
+        pot("VR6", "50k log", mx, 1260, package="RK097-AUDIO-10K")
+        w((mx - 30, 1260), (mx - 70, 1260))
+        netlabel("INPUT_PRE", mx - 70, 1260, anchor="end", dx=-4, dy=3)
+        w((mx + 30, 1260), (mx + 70, 1260))
+        gnd(mx + 70, 1260)
+        w((mx, 1290), (mx, 1320))
+        netlabel("INPUT", mx, 1320, anchor="middle", dy=16)
+        note(mx - 70, 1215, "MASTER VOLUME", weight="bold")
 
     # ---------------- muting and soft start -----------------------------
     # One gate line per band, and one RC that holds all three muted while
@@ -1410,6 +1445,8 @@ def signal_map(nets, cfg):
     # between - normalise that back before comparing, since the filter
     # itself still lands on the exact same net every other variant does.
     volume_refs = {"VR3", "VR4", "VR5"} if cfg.get("volume_pots") else set()
+    if cfg.get("master_vol"):
+        volume_refs = volume_refs | {"VR6"}
     # Supply caps are excluded from the signal comparison; SIGNAL caps must
     # not be.  These used to be told apart by a regex on the designator
     # ("C5 and up"), which happened to work only because every cap above C4

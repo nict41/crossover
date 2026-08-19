@@ -161,6 +161,16 @@ LCSC = {                              # verified live against the JLCPCB API
     # direction that UNDER-states the assembly cost.
     "47k":     ("C17713", "0805", "extended", 1661600),
     "100k":    ("C17407", "0805", "extended", 248500),
+    # The mute chain.  Same UNI-ROYAL family and the same MPN decoding as
+    # above: 1004 = 1M, 2201 = 2.2k.
+    "1M":      ("C17514", "0805", "extended", 2205500),
+    "2.2k":    ("C17520", "0805", "extended", 3197400),
+    # 1N4148W: the usual ST part (C81598) reads ZERO stock, so this is a
+    # second-source one that is actually orderable.  Only 6k on the reel
+    # against 4 per board - fine for a personal build, worth re-checking
+    # before a batch, and validate_fab --online prints the live figure.
+    "1N4148W": ("C22374707", "SOD-123", "extended", 6100),
+    "MMBFJ111": ("C274688", "SOT-23", "extended", 8900),
     "11k":     ("C17429", "0805", "extended", 78383),
     "13k":     ("C2933304", "0805", "extended", 213066),
     "33nF":    ("C569866", "1210", "extended", 2001),
@@ -459,7 +469,12 @@ def fp_hdr(ref, n, x, y, net_of, labels=()):
         px = x - span / 2 + i * pitch
         pad_tht(ref, i + 1, px, y, net_of(ref, i + 1), dia=7.1, hole=3.9)
         if i < len(labels):
-            silk(px - 4, y + 7.5, labels[i], DESIG_SIZE - 1.2)
+            # 3.4 units = 0.86 mm.  It was DESIG_SIZE - 1.2, which is
+            # 0.71 mm, and validate_fab rejected all eight of them: below
+            # 0.8 mm the fab will print it but nobody can read it, and a
+            # connector whose pin names are unreadable is a connector you
+            # will mis-wire.
+            silk(px - 4, y + 8.5, labels[i], 3.4)
     silk_rect(x - span / 2 - 5, y - 5.5, x + span / 2 + 5, y + 5.5)
     silk_ref_beside((x - span / 2 - 5, y - 5.5, x + span / 2 + 5, y + 5.5),
                     ref, DESIG_SIZE, (0, -1))
@@ -781,7 +796,10 @@ TERMS = {
 # being one uniformly-pitched line along one edge is a mechanical
 # requirement (it is the panel), so these five are a rigid group as far as
 # the search is concerned and only move together.
-PANEL = ["VR5", "VR2", "VR4", "VR1", "VR3"]
+# Master volume on the left-hand end, then LOW -> HIGH as before.  It is a
+# different KIND of control - it sets listening level, where the other five
+# set the crossover - so it sits at one end rather than in among them.
+PANEL = ["VR6", "VR5", "VR2", "VR4", "VR1", "VR3"]
 # The three output terminals are a row of their own, in the same LOW -> HIGH
 # order as the panel, so each output block sits above the volume pot that
 # feeds it.  Left free, they scattered to three different board edges -
@@ -789,7 +807,8 @@ PANEL = ["VR5", "VR2", "VR4", "VR1", "VR3"]
 OUTPUTS = ["J5", "J4", "J3"]
 OUTPUT_PITCH = 56.0
 POT_GANGS = {"VR1": ("VR1A", "VR1B"), "VR2": ("VR2A", "VR2B")}
-POT_LABEL = {"VR3": "HIGH VOL", "VR4": "MID VOL", "VR5": "LOW VOL"}
+POT_LABEL = {"VR3": "HIGH VOL", "VR4": "MID VOL", "VR5": "LOW VOL",
+             "VR6": "MASTER"}
 # 80 units = 20.3 mm between knob centres.  This is a human-factors number,
 # not a routing one: a knob for a 6 mm shaft is typically 15-20 mm across,
 # so anything much under 20 mm pitch has adjacent knobs touching and the
