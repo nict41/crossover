@@ -1833,12 +1833,38 @@ def _pad_span(name):
                max(p[1] for p in pts) - min(p[1] for p in pts))
 
 
-# The four widest-reaching signal nets on THIS board, measured.  Four
-# because that is how many the old hardcoded list promoted (LP1 plus the
-# three *_PRE nets), and promoting more was tried and made things worse.
+# The widest-reaching signal nets on THIS board, measured.
+#
+# The count is a knob because it is a CONSTANT TUNED AGAINST A BOARD THAT
+# HAS SINCE CHANGED SHAPE, which is a failure this repo has had before.
+# Four was how many the old hardcoded list promoted - LP1 plus the three
+# *_PRE nets - on a 49-footprint board with two front-panel controls, and
+# promoting more was measured to be worse THERE.
+#
+# At 83 footprints and six controls the four widest are no longer those
+# four.  On SEED=4 they are LOW, N1100_900, HIGH_VOL and N680_300, spanning
+# 236/234/213/206 units, while INPUT_PRE (179), N530_700 (178) and the
+# *_PRE nets sit just under the cut - and LOW_PRE and HIGH_PRE are exactly
+# the nets that came back unrouted or split. The span distribution is a
+# smooth ramp with no gap at four, so where the line falls is arbitrary and
+# has to be measured again rather than inherited.  ORDER_LOG=1 prints it.
+LONG_HAUL_N = int(os.environ.get("LONG_HAUL_N", 4))
 LONG_HAUL = set(sorted(
     (n for n in netdoc["nets"] if n not in POWER_NETS),
-    key=_pad_span, reverse=True)[:4])
+    key=_pad_span, reverse=True)[:LONG_HAUL_N])
+
+if os.environ.get("ORDER_LOG"):
+    # Which nets are actually promoted, and what is just below the cut.
+    # LONG_HAUL is a fixed-size list over a board whose net count has grown
+    # (the mute loom alone added six board-spanning two-pad nets), so "the
+    # four widest" is not necessarily still the four this mechanism was
+    # written to protect.  Cheap to look rather than assume.
+    _sp = sorted(((_pad_span(n), n) for n in netdoc["nets"]
+                  if n not in POWER_NETS), reverse=True)
+    print("  route order: promoting %s" % ", ".join(sorted(LONG_HAUL)))
+    for _v, _n in _sp[:10]:
+        print("    %-12s span %6.1f units%s"
+              % (_n, _v, "  <- promoted" if _n in LONG_HAUL else ""))
 
 
 # Nets promoted to the front of the route order because a previous attempt
