@@ -589,11 +589,30 @@ improvements unfittable for months (see `docs/design-review.md` §3 and §5:
 added parts to a third of their area changed nothing).
 
 What made it safe to drop the routed copy is that the pour is now
-**checked**. `pour_connectivity()` models the pour from the router's own
-occupancy grid — a cell can hold pour copper where nothing else has
-claimed it or where GND already has, which is conservative, since `occ`
-reserves clearance plus the widest trace's half-width where the real pour
-only needs clearance. It then:
+**checked**. `pour_connectivity()` models the pour from the **real
+copper** on the board — pad rectangles, committed traces at their own
+width, via pads, mounting holes and pot bosses — each grown by
+`POUR_CLEAR`, the clearance the emitted `COPPERAREA` shape actually
+declares (1 unit, 0.254 mm).
+
+It was first modelled from the router's occupancy grid instead, which was
+easier and wrong by a factor of two: `occ` reserves `CLEAR + MAX_W/2`
+around foreign copper because a *trace* routed there needs room for its
+own half-width, and a pour does not. At the values in use that is 1.6
+units of reserved gap against a true 1.0, so every gap on the board read
+1.2 units narrower than it really is, and most of the "ground pour does
+not reach N pads" failures were an artefact of the model rather than the
+layout. Working from copper is accuracy, not optimism, and it stays
+bounded on the safe side because `dilate()` grows by a box, which is a
+superset of the disc.
+
+Silkscreen falls out correctly as a consequence rather than a special
+case: it is not copper, so it is not in the mask. A label is a reason to
+keep a *trace* out — that is what makes "no silk over a trace" hold by
+construction — and no reason to keep the pour out, since silkscreen over a
+ground plane is what every board in the world does.
+
+On top of that the model:
 
 * **erodes by `POUR_MIN_W`/2**, so a one-cell neck (0.06 mm) cannot count
   as a connection when the fab will not make it;
@@ -615,6 +634,15 @@ solid ground, so the natural move is a via straight down, which the router
 inserts itself once it is simply allowed to finish on the other layer.
 That is the whole of GND's routing now — a few millimetres of stub instead
 of a tree spanning the board.
+
+This runs **twice**, and the first time is the important one. Which pads
+sit in a structural pocket is a fact about the footprints, knowable with
+only pads on the board and no signal nets routed, and those stubs are
+worth cutting while the channels are still free. Running the pass only at
+the end simply swapped one problem for its mirror image: GND used to route
+first and take the best channels from everything else, and running it last
+left the op-amp ground pins with nothing but corridors the signal nets had
+already spent.
 
 **On import, rebuild copper areas.** This used to be optional insurance;
 it is now the thing that connects ground. `tools/validate_fab.py` checks

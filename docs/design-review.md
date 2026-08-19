@@ -180,10 +180,22 @@ trim you nudge around 0 to −12 dB, where linear gives you far more useful
 rotation. If you adopt a master volume, the band pots would be better as
 linear.
 
-**Watch the loading if you do add a master volume:** the board's input
-impedance is 10 kΩ (`R1`), so a 10 kΩ master pot feeding it would be
-loaded hard enough to distort its taper badly. Use 10 kΩ into a buffer, or
-raise `R1`.
+**The loading objection is gone.** This used to end with a warning: the
+board's input impedance was 10 kΩ (`R1`), so a 10 kΩ master pot feeding it
+would be loaded hard enough to distort its taper badly, and you had to put
+a buffer in between or raise `R1`. `R1` is now **47 kΩ**, the ordinary
+line-level figure, so a 10 kΩ dual-gang master pot straight into both
+channels' `J2` is fine — the worst-case wiper impedance of 2.5 kΩ into
+47 kΩ is about 0.45 dB of error at one point on the travel.
+
+10 kΩ was never a line input; it was a power-amp input, and it also loaded
+a passive source or a valve output stage hard enough to lose level and
+bass. Raising it costs bias-current offset — 300 nA of MC33079 input
+current through 47 kΩ is 14 mV at the buffer output — and that is only
+acceptable because §3's blocking capacitors now stop it reaching an
+amplifier. At DC the high-pass outputs have no gain, so it only actually
+appears at `LOW`. A FET-input op-amp (`OPA1644`, `OPA4134`, `TL074`)
+removes it entirely.
 
 ---
 
@@ -237,19 +249,48 @@ part (LCSC `C55127344`), one in each rail, cathode toward the board on
 
 ## 7. Output impedance is set by the volume pot, not the op-amp
 
-**Severity: low. Status: by design, worth knowing.**
+**Severity: low. Status: FIXED.**
 
-The op-amp drives through a 100 Ω build-out resistor into the top of a
-10 kΩ pot, and the **wiper** feeds the terminal block. Source impedance
-therefore peaks around 2.5 kΩ at mid-rotation rather than the few ohms an
-op-amp output would give.
+The op-amp used to drive through a 100 Ω build-out resistor into the top of
+a 10 kΩ pot, with the **wiper** feeding the terminal block, so the source
+impedance peaked around 2.5 kΩ at mid-rotation rather than the few
+milliohms an op-amp output gives.
 
-Consequences, none fatal: cable capacitance rolls off the top end (about
-200 kHz with 3 m of typical cable — fine; keep runs short and it stays
-fine); a low-impedance amplifier input loads the pot and shifts its taper
-and maximum level (10 kΩ input costs about 1.9 dB); and 2.5 kΩ is high
-enough to pick up hum over a long unshielded run. **Use screened cable to
-the amplifiers**, and keep it short.
+Two things followed from that, and the second is the one that actually
+mattered. Cable capacitance rolled off the top end — about 200 kHz with 3 m
+of typical cable, which is fine. But a low-impedance amplifier input sat
+across the lower half of the pot track, so it both lost level (about 1.9 dB
+into 10 kΩ) and **changed the taper by an amount that depended on which
+amplifier was plugged in**. Tolerable for a crossover fed from a preamp;
+wrong for something used *as* one.
+
+`U3` is a third quad op-amp: one unity-gain follower per band, between the
+wiper and the terminal block. The output impedance is now the op-amp's, the
+pot is unloaded so its taper is the taper it was bought with, and 2.5 kΩ of
+source impedance is no longer sitting on a cable run picking up hum.
+`R25`–`R27` are the buffers' build-out resistors; `R9`/`R19`/`R22` stay
+where they were, doing the same job for the filter op-amp that drives the
+pot. `U3D` is the spare section, input grounded and output tied back —
+an unused op-amp section left floating oscillates and couples that into
+the three sharing its supply pins.
+
+Order along the chain is deliberate: pot, buffer, build-out, **blocking
+capacitor**, terminal. The capacitor stays last so it still blocks a
+failure of the last active device in the path. Ahead of the buffer it
+would keep DC off the pot track — worth something, since DC through a
+wiper is what makes a volume control crackle as it wears — at the cost of
+leaving a failed `U3` section wired straight to a power amplifier, which is
+worth much more.
+
+`R28`–`R30` (100 kΩ, output to ground, after the capacitor) are the other
+half of this. The coupling capacitor's outer plate otherwise has a DC path
+only through whatever is plugged into the terminal block, so a board left
+with nothing connected drifts on leakage and thumps into the amplifier the
+moment one is connected.
+
+**Use screened cable to the amplifiers** anyway. It is no longer needed to
+keep hum out of a 2.5 kΩ source, but it is still an unbalanced line-level
+interconnect.
 
 ---
 

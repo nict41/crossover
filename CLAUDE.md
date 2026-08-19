@@ -97,13 +97,32 @@ already spending its routing resources on, not the size of the thing you
 are adding.**
 
 Dropping the routed copy is only safe because the pour is now *checked*.
-`pour_connectivity()` models it conservatively from the router's own
-occupancy, erodes by `POUR_MIN_W`/2 so a hairline neck cannot count,
-stamps committed GND traces back in **after** the erosion at full trace
-width, ties the layers at every plated GND hole and via, and floods
-(`flood()` in `router.c`) from one ground pad. Any ground pad the flood
-misses is a DRC problem, exactly like an unrouted net. Three bugs in this
-model each looked like a routing failure and were not:
+`pour_connectivity()` models the pour from the **real copper** — pad
+rectangles, committed traces at their own width, via pads, mounting holes
+and pot bosses — each grown by `POUR_CLEAR`, the clearance the emitted
+`COPPERAREA` actually declares. It erodes by `POUR_MIN_W`/2 so a hairline
+neck cannot count, stamps committed GND traces back in **after** the
+erosion at full trace width, ties the layers at every plated GND hole and
+via, and floods (`flood()` in `router.c`) from one ground pad. Any ground
+pad the flood misses is a DRC problem, exactly like an unrouted net.
+
+**Do not model the pour from `occ`.** It was, and it was wrong by a
+factor of two: `occ` reserves `CLEAR + MAX_W/2` around foreign copper
+because a *trace* routed there needs room for its own half-width, and a
+pour needs clearance and nothing else — 1.6 units reserved against a true
+1.0, so every gap on the board read 1.2 units narrower than it is. That
+was mostly what produced "the ground pour does not reach N pads". The
+copper-based model is *accuracy*, not optimism, and it is still bounded
+on the safe side: `dilate()` grows by a box, a superset of the disc.
+
+It also gets silkscreen right for free. A label keeps a *trace* out, so
+that "no silk over a trace" holds by construction; it has no business
+keeping the pour out, because silkscreen over a ground plane is what every
+board does. The `occ` version had to be taught that as a special case, and
+until it was, `U1C.10` and `U2B.5` were sealed into pockets whose only
+exit ran under a designator.
+
+Four bugs in this model each looked like a routing failure and were not:
 
 * **Eroding the router's own stubs away.** A stub threading a 0.5 mm
   channel between two SOIC pads is precisely the geometry the min-width
@@ -118,6 +137,17 @@ model each looked like a routing failure and were not:
   top pour around a SOIC pin is chopped up by its neighbours while the
   bottom layer under it is nearly solid ground, so the move a person makes
   without thinking is a via straight down.
+* **Modelling the pour with the router's keepout instead of its own
+  clearance** — the factor-of-two above.
+
+`plane_stubs()` runs **twice**: once before any signal net is routed and
+again afterwards. Which pads sit in a structural pocket is a fact about
+the footprints, knowable with only pads on the board, and those stubs are
+worth cutting while the channels are still free. Running it only at the
+end swapped GND-takes-the-best-channels for GND-gets-whatever-is-left.
+`_foreign_static()` caches the half of the mask that cannot move once the
+parts are placed, because the whole thing runs about a dozen times a
+board.
 
 The placement search is told as well (`plane_nets`): a plane net has no
 wirelength and makes no wire demand, so pricing GND's half-perimeter and
@@ -297,6 +327,14 @@ the same weights. The RNGs differ, so a given `SEED` does *not* give the
 same layout in both - measured head to head on three seeds, the C one gave
 5/14/13 DRC problems where Python gave 19/25/15, so it is not a quality
 regression.
+
+**The search cap has a footprint-count limit.** `MAX_EXPAND=400000` was a
+fair filter at 54 footprints. At 63 it is not: it reported **0 clean out
+of 96** where the best candidate in that same set verifies with a single
+problem when re-run uncapped. More nets means more *failing* A* calls per
+board, and the cap turns "hard" into "impossible" for all of them at once.
+A run is ~46 s uncapped, so at this size just pass `--env MAX_EXPAND=0`
+and skip the filter. Re-check the cap whenever the part count moves.
 
 **Search uses a capped router** (`MAX_EXPAND`, set by `find_board.py`, never
 in production). A *failing* A* is far more expensive than a passing one -

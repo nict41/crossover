@@ -92,6 +92,11 @@ VIA_PAD, VIA_DRILL = 2.8, 1.2         # 0.20mm annular ring (was 0.15mm - no mar
 # stops a hairline neck in the model standing in for a connection the fab
 # would never make.
 POUR_MIN_W = 1.0
+# The clearance the emitted COPPERAREA declares (its clearanceWidth field),
+# and therefore the gap the importer holds between the pour and everything
+# else.  1 unit = 0.254 mm = 10 mil, comfortably above the 8 mil the rest of
+# the board is checked to.
+POUR_CLEAR = 1.0
 
 # The seed that produced the committed board.  One constant, read once:
 # the placement cache key used to read SEED with its own default ("8")
@@ -1120,21 +1125,6 @@ for _p in pads:
         CORE_PROTECT[_L][_b2:_d + 1, _a:_c + 1] = True
 
 
-# Cells that silk claimed which were genuinely EMPTY beforehand.  A
-# silkscreen label is a reason to keep a TRACE out - "no silk over a trace"
-# holds by construction that way - but it is not a reason to keep the
-# ground POUR out: silkscreen printed over a ground plane is what every
-# board in the world does.  Treating the label boxes as solid for the pour
-# as well is what sealed the op-amp ground pins into pockets: U1C.10 and
-# U2B.5 had a reached plane cell 0.1 units away on the other layer and
-# still reported no path, because the only way out on their own layer ran
-# under a designator.
-#
-# Only cells that were EMPTY before the label claimed them count.  Silk
-# deliberately overwrites pad keepout RINGS, and letting the pour back into
-# one of those would put copper inside a foreign pad's clearance - the one
-# direction this model must never be optimistic in.
-SILK_FREE = np.zeros((2, NY, NX), dtype=bool)
 
 
 def stamp_rect_for_silk(layer, x0, y0, x1, y1, netid):
@@ -1148,7 +1138,6 @@ def stamp_rect_for_silk(layer, x0, y0, x1, y1, netid):
     for L in ([0, 1] if layer == MULTI else [layer - 1]):
         sub = occ[L][b:d + 1, a:c + 1]
         protect = CORE_PROTECT[L][b:d + 1, a:c + 1]
-        SILK_FREE[L][b:d + 1, a:c + 1] |= (sub == 0) & ~protect
         sub[~protect] = netid
 
 
@@ -1656,6 +1645,51 @@ PAD_POS = {"%s.%s" % (p["ref"], p["num"]): (p["x"], p["y"]) for p in pads}
 # actually reaches every ground pad, which nothing checked before.  If that
 # check fails, the board is wrong - do not paper over it by routing GND
 # again.
+_FOREIGN_STATIC = None
+
+
+def _foreign_static():
+    """Copper that cannot move once the parts are placed: pads, mounting
+    holes, pot bosses.  Built once and copied.
+
+    pour_connectivity() runs up to a dozen times in a board - six stub
+    passes before routing and six after, plus the final check - and
+    rebuilding the whole mask each time meant re-rasterising every pad on
+    the board to find out something that had not changed since placement.
+
+    Note what is NOT here: silkscreen.  A label is a reason to keep a
+    TRACE out, so that "no silk over a trace" holds by construction, and
+    no reason at all to keep the pour out - silkscreen printed over a
+    ground plane is what every board in the world does.  Building the mask
+    from copper rather than from the router's occupancy grid gets that
+    right with no special case; the grid version had to be taught it, and
+    until it was, U1C.10 and U2B.5 were sealed into pockets whose only
+    exit ran under a designator."""
+    global _FOREIGN_STATIC
+    if _FOREIGN_STATIC is not None:
+        return _FOREIGN_STATIC
+    m = np.zeros((2, NY, NX), dtype=bool)
+
+    def blk(layers, x0, y0, x1, y1):
+        a, b, c, d = cells_in_rect(x0, y0, x1, y1)
+        for L in layers:
+            m[L, b:d + 1, a:c + 1] = True
+
+    for p in pads:
+        if p["net"] == "GND":
+            continue                      # the pour joins these, not avoids them
+        blk([0, 1] if p["layer"] == MULTI else [p["layer"] - 1],
+            p["x"] - p["w"] / 2, p["y"] - p["h"] / 2,
+            p["x"] + p["w"] / 2, p["y"] + p["h"] / 2)
+    # Holes take copper on both layers whatever net they belong to.
+    for hx, hy in MOUNT_HOLES:
+        blk([0, 1], hx - MOUNT_R, hy - MOUNT_R, hx + MOUNT_R, hy + MOUNT_R)
+    for hx, hy in POT_BOSSES:
+        blk([0, 1], hx - BOSS_R, hy - BOSS_R, hx + BOSS_R, hy + BOSS_R)
+    _FOREIGN_STATIC = m
+    return m
+
+
 def pour_connectivity():
     """Is the ground pour one piece of copper that reaches every GND pad?
 
@@ -1665,18 +1699,55 @@ def pour_connectivity():
     be relied on, so ground was paid for twice, and the routed copy went
     first and took the best channels.
 
-    The pour is modelled from the router's own occupancy: a cell can hold
-    pour copper where nothing else has claimed it, or where GND already
-    has.  That is CONSERVATIVE - occ reserves clearance plus the widest
-    trace's half-width, where the real pour only needs clearance - so a
-    pour that connects under this model certainly connects in the fab's.
+    The pour is modelled from the REAL copper on the board - pad
+    rectangles, committed traces at their own width, via pads, and the
+    holes - each grown by the clearance the emitted COPPERAREA actually
+    declares.  It used to be modelled from the router's occupancy grid
+    instead, which was easy but wrong by a factor of two: `occ` reserves
+    CLEAR + MAX_W/2 around every piece of foreign copper because a TRACE
+    routed there needs room for its own half-width, and a pour does not -
+    it needs clearance and nothing else.  At the values in use that is
+    1.6 units of reserved gap against a true 1.0, so every gap on the
+    board read 1.2 units narrower than it is, and the pockets that
+    produced "the ground pour does not reach N pads" were mostly an
+    artefact of that.
+
+    This is accuracy, not optimism, and it is still bounded on the safe
+    side: dilate() grows by a BOX, which is a superset of the disc, so
+    the blocked region is if anything slightly too large, and the
+    POUR_MIN_W erosion below is unchanged.
 
     Returns (reached-everything, unreached pads, the reached-cell mask).
     Callers need that last one: to connect a pad the plane missed you have
     to route to copper that is genuinely PART of the plane, not merely to
     the nearest cell that happens to be ground - the pad's own keepout is
     ground, and routing to it connects nothing."""
-    free = (OCC == 0) | (OCC == NETID["GND"]) | SILK_FREE
+    foreign = _foreign_static().copy()
+
+    def _block(layers, x0, y0, x1, y1):
+        a, b, c, d = cells_in_rect(x0, y0, x1, y1)
+        for L in layers:
+            foreign[L, b:d + 1, a:c + 1] = True
+
+    for layer, pts, net in ROUTED:
+        if net == "GND":
+            continue
+        hw = net_width(net) / 2
+        for (ax, ay), (bx, by) in zip(pts, pts[1:]):
+            n = max(1, int(math.dist((ax, ay), (bx, by)) / (GRID / 2)))
+            for i in range(n + 1):
+                cx = ax + (bx - ax) * i / n
+                cy = ay + (by - ay) * i / n
+                _block([layer - 1], cx - hw, cy - hw, cx + hw, cy + hw)
+    for vx, vy, vnet in VIAS:
+        if vnet != "GND":
+            _block([0, 1], vx - VIA_PAD / 2, vy - VIA_PAD / 2,
+                   vx + VIA_PAD / 2, vy + VIA_PAD / 2)
+
+    # POUR_CLEAR is the clearanceWidth written into the COPPERAREA shape
+    # itself, so this is the gap the importer will actually hold.
+    _cc = int(math.ceil(POUR_CLEAR / GRID))
+    free = ~np.stack([dilate(foreign[L], _cc) for L in (0, 1)])
     # A pour is only connected where it is WIDE enough to exist.  Without
     # this, a one-cell neck - 0.06 mm - counts as a connection and the fab
     # simply will not make it.  Eroding by POUR_MIN_W/2 means only necks at
