@@ -1845,9 +1845,17 @@ def _pad_span(name):
 # four.  On SEED=4 they are LOW, N1100_900, HIGH_VOL and N680_300, spanning
 # 236/234/213/206 units, while INPUT_PRE (179), N530_700 (178) and the
 # *_PRE nets sit just under the cut - and LOW_PRE and HIGH_PRE are exactly
-# the nets that came back unrouted or split. The span distribution is a
-# smooth ramp with no gap at four, so where the line falls is arbitrary and
-# has to be measured again rather than inherited.  ORDER_LOG=1 prints it.
+# the nets that came back unrouted or split.  The span distribution is a
+# smooth ramp with no gap at four.  ORDER_LOG=1 prints it.
+#
+# That observation is true and the obvious inference from it is FALSE, so
+# it was measured: SEED=4 ROUTE_SEED=3 gives 1 unreached ground pad at
+# N=4, 2 at N=8, and at N=12 that plus an unrouted MID_MUTE.  Promoting
+# more is worse here exactly as it was on the smaller board.  Promotion is
+# zero-sum - every net moved to the front pushes every other net back - so
+# "these nets also travel a long way" is not an argument for promoting
+# them unless they travel further than what they displace.  Four stands,
+# now on this board's evidence rather than the old board's.
 LONG_HAUL_N = int(os.environ.get("LONG_HAUL_N", 4))
 LONG_HAUL = set(sorted(
     (n for n in netdoc["nets"] if n not in POWER_NETS),
