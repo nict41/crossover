@@ -982,6 +982,16 @@ for _try in range(0 if _HIT else RESTARTS):
     print("  placement %d/%d: cost %.0f, %.1f x %.1f mm"
           % (_try + 1, RESTARTS, _cost, (_x1 - _x0 + 2 * EDGE) * 0.254,
              (_y1 - _y0 + 2 * EDGE) * 0.254), flush=True)
+    # Which term the cost is actually made of.  The anneal's own report
+    # line prints six of the eight and, being inside _anneal_py, prints
+    # nothing at all when the compiled placer is in use - which is always.
+    # A total is not a diagnosis: this board's cost went from ~2e4 to ~5e7
+    # when nine parts were added, and no amount of staring at the total
+    # says which term did it.
+    _t = PLACER.terms(WEIGHTS, PLACER.total_overlap())
+    print("    " + "  ".join("%s %.0f" % (k, v)
+                             for k, v in sorted(_t.items(), key=lambda kv: -kv[1])),
+          flush=True)
     if _cost < _best[0]:
         _best = (_cost, PLACER.snapshot(), float(PLACER.net_hpwl.sum()))
 if _HIT:
@@ -2296,6 +2306,44 @@ RIPUP_ROUNDS = int(os.environ.get("RIPUP_ROUNDS", 6))
 RIPUP_LOG = bool(os.environ.get("RIPUP_LOG"))
 
 
+def _order_cache_file():
+    return os.path.join(PLACE_CACHE, "%s-order%d.json"
+                        % (_place_key(), _ROUTE_SEED))
+
+
+def load_route_order():
+    """The winning order from a previous run of this exact placement.
+
+    Placement is already cached, so re-running a committed board re-routes
+    inputs that have not changed - and the rip-up loop would rediscover the
+    same order from scratch, at four to seven full routes a time.  The
+    order is a pure function of the placement and the route seed, so it
+    caches on the same key.  A cached order that turns out not to work is
+    harmless: it is only a starting point, and the loop carries on from
+    there."""
+    if os.environ.get("NO_PLACE_CACHE"):
+        return []
+    try:
+        with open(_order_cache_file()) as f:
+            names = json.load(f)
+    except (OSError, ValueError):
+        return []
+    # Nets that no longer exist mean the netlist moved on; drop them rather
+    # than letting route_order() raise on a stale name.
+    return [n for n in names if n in netdoc["nets"]]
+
+
+def save_route_order(order):
+    if os.environ.get("NO_PLACE_CACHE"):
+        return
+    try:
+        os.makedirs(PLACE_CACHE, exist_ok=True)
+        with open(_order_cache_file(), "w") as f:
+            json.dump(order, f)
+    except OSError:
+        pass
+
+
 def _crowding_nets(missed):
     """Which nets are sitting on top of a ground pad the plane cannot
     reach.  A pour miss names no net of its own - GND is not routed - so
@@ -2330,7 +2378,12 @@ def route_with_ripup():
     priority list that had grown to fifteen nets and no longer meant
     anything.  Hill-climbing from the best keeps every round a variation
     on something that worked."""
-    best_score, best, best_priority = None, None, []
+    best_score, best = None, None
+    best_priority = load_route_order()
+    ROUTE_PRIORITY[:] = best_priority
+    if RIPUP_LOG and best_priority:
+        print("  route order: starting from the cached one (%d nets)"
+              % len(best_priority), flush=True)
     for attempt in range(RIPUP_ROUNDS + 1):
         reset_routing()
         fails = route_pass()
@@ -2360,13 +2413,21 @@ def route_with_ripup():
             [f.split(":")[0] for f in fails] + list(split)))
         if not promote:
             promote = _crowding_nets(missed)
-        promote = [n for n in promote if n not in best_priority]
+        # Never promote a supply rail.  They are already first by
+        # route_order()'s own tiering, so "promoting" one only reorders it
+        # against the other rails while shoving every learned signal net
+        # down the list - measured: an attempt sitting at 0 unrouted, 0
+        # split went to 7 unrouted, 8 split the round after -15V was
+        # promoted off the back of a pour miss.
+        promote = [n for n in promote
+                   if n not in best_priority and n not in ("GND", "+15V", "-15V")]
         if not promote:
             break                     # nothing new to learn; stop burning time
         ROUTE_PRIORITY[:] = promote + best_priority
     ROUTED[:], VIAS[:], fails, occ_b, con_b = best
     OCC[:] = occ_b
     CONTESTED[:] = con_b
+    save_route_order(best_priority)
     return fails
 
 
