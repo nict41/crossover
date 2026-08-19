@@ -1,6 +1,6 @@
 {
  "head": "1~1.7.5~~",
- "canvas": "CA~2560~1860~#FFFFFF~yes~#CCCCCC~10~2560~1860~line~10~pixel~5~0~0",
+ "canvas": "CA~2560~2060~#FFFFFF~yes~#CCCCCC~10~2560~2060~line~10~pixel~5~0~0",
  "shape": [
   "N~60~280~0~#0000FF~INPUT~gge2~end~56~283~Verdana~7pt",
   "LIB~130~280~package`C_AXIAL-0.2`nameAlias`Value`Value`10uF`spicePre`C`spiceSymbolName`Capacitor`~~0~gge10#@$PL~126 268 126 292~#000080~2~0~none~gge3#@$PL~134 268 134 292~#000080~2~0~none~gge4#@$P~show~0~1~100~280~180~gge5^^100~280^^M 100 280 h 26~#880000^^0~100~280~0~~start~~^^0~100~280~0~1~start~~^^0~100~280^^0~#@$P~show~0~2~160~280~0~gge6^^160~280^^M 160 280 h -26~#880000^^0~160~280~0~~start~~^^0~160~280~0~2~start~~^^0~160~280^^0~#@$T~P~130~260~0~#000080~Verdana~7pt~~~~comment~C0~1~middle~gge7#@$T~N~130~310~0~#000080~Verdana~7pt~~~~comment~10uF~1~middle~gge8#@$T~L~110~270~0~#000080~Verdana~7pt~~~~comment~+~1~middle~gge9",
@@ -120,9 +120,9 @@
   "T~L~1050~1215~0~#0000A0~Verdana~9pt~bold~~~comment~SIGNAL CONNECTORS AND TEST POINTS~1~start~gge535",
   "T~L~60~1180~0~#0000A0~Verdana~9pt~bold~~~comment~SUPPLY BYPASSING - one 100nF ceramic per rail, at each IC~1~start~gge536",
   "T~L~60~30~0~#000000~Verdana~14pt~bold~~~comment~3-Way State Variable Electronic Crossover  -  ESP P148, retuned (195 Hz - 1.03 kHz / 71 Hz - 180 Hz)~1~start~gge537",
-  "T~L~60~1520~0~#404040~Verdana~8pt~~~~comment~After Rod Elliott, Elliott Sound Products, Project 148 (https://sound-au.com/project148.htm).  Redrawn for EasyEDA.~1~start~gge538",
-  "T~L~60~1540~0~#404040~Verdana~8pt~~~~comment~All op-amps NE5532 - 4 x DIP-8 packages.  Q = 0.5 Linkwitz-Riley with R3 / R13 = 11k; use 11k2 for exact Q = 0.5, or 5k04 for Butterworth (Q = 0.707).~1~start~gge539",
-  "T~L~60~1560~0~#404040~Verdana~8pt~~~~comment~VR1 and VR2 are dual-gang 20k linear pots wired as rheostats. TP1 / TP2 null at the crossover frequency and may be omitted.~1~start~gge540",
+  "T~L~60~1900~0~#404040~Verdana~8pt~~~~comment~After Rod Elliott, Elliott Sound Products, Project 148 (https://sound-au.com/project148.htm).  Redrawn for EasyEDA.~1~start~gge538",
+  "T~L~60~1920~0~#404040~Verdana~8pt~~~~comment~All op-amps NE5532 - 4 x DIP-8 packages.  Q = 0.5 Linkwitz-Riley with R3 / R13 = 11k; use 11k2 for exact Q = 0.5, or 5k04 for Butterworth (Q = 0.707).~1~start~gge539",
+  "T~L~60~1940~0~#404040~Verdana~8pt~~~~comment~VR1 and VR2 are dual-gang 20k linear pots wired as rheostats. TP1 / TP2 null at the crossover frequency and may be omitted.~1~start~gge540",
   "J~200~280~2.5~#CC0000~gge541",
   "J~350~1350~2.5~#CC0000~gge542",
   "J~390~300~2.5~#CC0000~gge543",
@@ -293,7 +293,7 @@
   "x": 0,
   "y": 0,
   "width": 2560,
-  "height": 1860
+  "height": 2060
  },
  "colors": {}
 }

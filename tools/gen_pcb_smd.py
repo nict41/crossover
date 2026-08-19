@@ -399,6 +399,61 @@ def fp_chip(ref, x, y, net_of, value, kind="0805"):
     part_record(ref, value, x, y, True, kind)
 
 
+# Land patterns for the mute chain.  Drawn from IPC-7351 nominal density
+# for each body, in units of 0.254 mm.  Both are among the most standard
+# packages there are, which is the only reason they are hand-drawn here at
+# all - CHECK THEM against the parts you actually order, exactly as the
+# pot and SOIC footprints have to be checked.
+#
+#   SOD-123   body 2.68 x 1.60, lead 0.60      -> pad 1.20 x 1.40 @ 3.40 ctr
+#   SOT-23    body 2.90 x 1.30, lead 0.45      -> pad 1.00 x 1.40 @ 2.60 row,
+#                                                 1.90 between pins 1 and 2
+def fp_sod123(ref, x, y, net_of, value):
+    """Two-terminal diode.  Pin 1 is the ANODE, pin 2 the cathode, and the
+    silk bar marks the cathode end the way the part is printed."""
+    _m = fp_begin()
+    pw, ph, off = 4.7, 5.5, 6.7
+    for i, dx in enumerate((-off, off)):
+        pad_rect(ref, i + 1, x + dx, y, net_of(ref, i + 1), pw, ph)
+    silk_rect(x - 5.3, y - 3.1, x + 5.3, y + 3.1)
+    track([(x + 3.0, y - 3.1), (x + 3.0, y + 3.1)], TOPSILK, SILK_W)
+    silk_ref(x - 4, y - ph / 2 - 1.5, ref)
+    fp_end(ref, _m, x, y)
+    part_record(ref, value, x, y, True, "SOD-123")
+
+
+def fp_sot23(ref, x, y, net_of, value):
+    """Three-terminal small-signal transistor.  Pins 1 and 2 share one
+    side, pin 3 sits alone opposite - the JFET symbol's drain, source and
+    gate in that order."""
+    _m = fp_begin()
+    pw, ph, row, sep = 3.9, 5.5, 5.1, 3.7
+    pad_rect(ref, 1, x - sep, y - row, net_of(ref, 1), pw, ph)
+    pad_rect(ref, 2, x + sep, y - row, net_of(ref, 2), pw, ph)
+    pad_rect(ref, 3, x, y + row, net_of(ref, 3), pw, ph)
+    silk_rect(x - 5.7, y - 2.6, x + 5.7, y + 2.6)
+    silk_ref(x - 4, y - row - ph / 2 - 1.5, ref)
+    fp_end(ref, _m, x, y)
+    part_record(ref, value, x, y, True, "SOT-23")
+
+
+def fp_hdr(ref, n, x, y, net_of, labels=()):
+    """A 0.1 inch pin header, n ways in a line.  Through-hole, so every pin
+    also ties the two ground pours together wherever it lands on GND."""
+    _m = fp_begin()
+    pitch = 10.0                       # 2.54 mm
+    span = pitch * (n - 1)
+    for i in range(n):
+        px = x - span / 2 + i * pitch
+        pad_tht(ref, i + 1, px, y, net_of(ref, i + 1), dia=7.1, hole=3.9)
+        if i < len(labels):
+            silk(px - 4, y + 7.5, labels[i], DESIG_SIZE - 1.2)
+    silk_rect(x - span / 2 - 5, y - 5.5, x + span / 2 + 5, y + 5.5)
+    silk_ref(x - span / 2 - 5, y - 5.5 - 6, ref)
+    fp_end(ref, _m, x, y)
+    part_record(ref, "MUTE", x, y, False, "HDR-1X%d" % n)
+
+
 def fp_soic14(pkg_ref, sections, x, y, net_of):
     """SOIC-14, pins down both sides, drawn ONCE and centred on its own
     anchor.  Which way the pins escape is now the placement transform's
@@ -692,6 +747,14 @@ U3S = {1: "U3A", 2: "U3A", 3: "U3A", 4: "U3D", 5: "U3B", 6: "U3B", 7: "U3B",
        14: "U3D"}
 SOIC_SECTIONS = {"U1": U1S, "U2": U2S, "U3": U3S}
 
+# Mute chain part classes.  Kept as explicit sets rather than inferred
+# from the value, because a JFET and a diode are both "not a resistor" and
+# guessing between them by designator prefix is how C0 nearly became an
+# 0805 (see ELECTRO).
+JFETS = sorted(r for r in VALUE if VALUE[r] == "MMBFJ111")
+DIODES = sorted(r for r in VALUE if VALUE[r] == "1N4148W")
+HEADERS = {"J6": 8}
+
 TERMS = {
     "J2": dict(n=2, names=["IN", "GND"]),
     "J1": dict(n=3, names=["+15", "GND", "-15"]),
@@ -743,8 +806,9 @@ TITLE_LINES = ["ESP P148 3-WAY VARIABLE CROSSOVER",
 # in three.  A search is worthless if its results do not reproduce.
 ELECTRO = sorted(r for r in VALUE if VALUE[r] == "10uF")
 CHIPS = {r: ("1210" if VALUE[r] == "33nF" else "0805")
-         for r in VALUE if r.startswith("R") or
-         (r.startswith("C") and r not in ELECTRO)}
+         for r in VALUE if (r.startswith("R") or
+                            (r.startswith("C") and r not in ELECTRO))
+         and r not in JFETS and r not in DIODES}
 
 # Board-edge clearance for parts, and how far in from the corner each
 # mounting hole sits.
@@ -772,6 +836,14 @@ def drawer(ref):
         return lambda: fp_soic14(ref, SOIC_SECTIONS[ref], 0, 0, N)
     if ref in TERMS:
         return lambda: fp_term(ref, 0, 0, N, **TERMS[ref])
+    if ref in HEADERS:
+        return lambda: fp_hdr(ref, HEADERS[ref], 0, 0, N,
+                              ["MG1", "MG2", "MG3", "GND",
+                               "LD1", "LD2", "LD3", "GND"])
+    if ref in JFETS:
+        return lambda: fp_sot23(ref, 0, 0, N, VALUE[ref])
+    if ref in DIODES:
+        return lambda: fp_sod123(ref, 0, 0, N, VALUE[ref])
     if ref in ELECTRO:
         return lambda: fp_elec(ref, 0, 0, N, VALUE[ref])
     if ref in ("TP1", "TP2"):
@@ -799,6 +871,10 @@ for _r in TERMS:
     ROTS[_r] = (0, 90, 180, 270)      # which board edge the wires enter from
 for _r in ELECTRO:
     ROTS[_r] = (0, 90)
+for _r in JFETS + DIODES:
+    ROTS[_r] = (0, 90, 180, 270)
+for _r in HEADERS:
+    ROTS[_r] = (0, 90, 180, 270)     # panel loom, so any edge will do
 ROTS["TP1"] = ROTS["TP2"] = (0,)      # single round pad - rotation is a no-op
 ROTS[TITLE_REF] = (0,)
 for _r in PANEL:

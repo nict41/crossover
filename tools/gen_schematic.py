@@ -98,6 +98,18 @@ PIN_ROLE = {}      # (refdes, pin) -> "role.function", for cross-variant checks
 # makes the output impedance the op-amp's, which is milliohms.
 _OBUF = os.environ.get("OUTPUT_BUFFERS", "1") != "0"
 
+# Per-output muting, and the power-up mute that comes with it.
+#
+# The switch carries no audio.  A JFET shunts each buffer's input to
+# ground through a series resistor, and the front-panel button only pulls
+# that JFET's gate - so there is nothing to click, and no signal wiring
+# running out to the panel and back.  The JFET is a DEPLETION device: it
+# conducts at Vgs = 0, which means every output is muted from the moment
+# the board has power, and stays muted until the soft-start RC has pulled
+# the gates to the negative rail.  Turn-on muting is therefore not a
+# separate circuit, it is the resting state of the parts already fitted.
+_MUTE = os.environ.get("MUTE", "1") != "0"
+
 VARIANTS = [
     dict(slug="esp-p148-3way-state-variable-crossover",
          title="3-Way State Variable Electronic Crossover  -  ESP Project 148",
@@ -130,6 +142,7 @@ VARIANTS = [
                "C3": ["C3A", "C3B"], "C4": ["C4A", "C4B"]},
          volume_pots=True,
          output_buffers=_OBUF,
+         mute=_MUTE and _OBUF,
          # SMD variant only.  The through-hole variants are reference
          # builds with hand-placed boards; adding parts to them would
          # disturb those layouts for no benefit to the board actually being
@@ -156,7 +169,7 @@ VARIANTS = [
 
 # Wide enough for the output-buffer column at x = 1980-2490 and tall
 # enough for the spare section's supply labels at y = 1776.
-W_CANVAS, H_CANVAS = 2560, 1860
+W_CANVAS, H_CANVAS = 2560, 2060
 
 
 # --------------------------------------------------------------------------
@@ -327,6 +340,60 @@ def opamp(ref, x0, cy, top_pin, bot_pin, out_pin, power=None, model="NE5532",
     sub.append(T("P", x0 + 32, cy - 48, ref, anchor="start"))
     sub.append(T("N", x0 + 14, cy + 6, model, anchor="start"))
     LIB(x0 + 35, cy, a, sub)
+
+
+def jfet(ref, model, x, y, package="SOT-23"):
+    """N-channel JFET: 1 = drain (up), 2 = source (down), 3 = gate (left).
+
+    Depletion mode, and that is the whole reason it is here rather than a
+    MOSFET: it CONDUCTS at Vgs = 0, so the outputs are muted the instant
+    the board has power and stay muted until something deliberately pulls
+    the gate to the negative rail.  Power-up muting costs no extra circuit
+    - it is the device's resting state."""
+    a = attrs_of([("package", package), ("nameAlias", "Model"),
+                  ("Model", model), ("spicePre", "J"),
+                  ("spiceSymbolName", "JFET")])
+    sub = [PL([(x, y - 18), (x, y + 18)], width=2),
+           PL([(x - 18, y), (x, y)]),
+           PG([(x - 10, y - 5), (x - 10, y + 5), (x - 2, y)], fill=SYM_COLOR),
+           PL([(x, y - 14), (x + 18, y - 14), (x + 18, y - 30)]),
+           PL([(x, y + 14), (x + 18, y + 14), (x + 18, y + 30)]),
+           PIN(1, x + 18, y - 40, "M %d %d v 10" % (x + 18, y - 40), 270),
+           PIN(2, x + 18, y + 40, "M %d %d v -10" % (x + 18, y + 40), 90),
+           PIN(3, x - 40, y, "M %d %d h 22" % (x - 40, y), 180),
+           T("P", x + 30, y - 6, ref, anchor="start"),
+           T("N", x + 30, y + 6, model, anchor="start")]
+    add_pin(ref, 1, x + 18, y - 40)
+    add_pin(ref, 2, x + 18, y + 40)
+    add_pin(ref, 3, x - 40, y)
+    LIB(x, y, a, sub)
+
+
+def diode(ref, value, x, y, vertical=False, package="SOD-123"):
+    """1 = anode, 2 = cathode.  Horizontal points right, vertical points
+    down, in both cases anode to cathode."""
+    a = attrs_of([("package", package), ("nameAlias", "Value"),
+                  ("Value", value), ("spicePre", "D"),
+                  ("spiceSymbolName", "Diode")])
+    if not vertical:
+        sub = [PG([(x - 8, y - 9), (x - 8, y + 9), (x + 6, y)], fill=SYM_COLOR),
+               PL([(x + 6, y - 9), (x + 6, y + 9)], width=2),
+               PIN(1, x - 30, y, "M %d %d h 22" % (x - 30, y), 180),
+               PIN(2, x + 30, y, "M %d %d h -24" % (x + 30, y), 0),
+               T("P", x, y - 16, ref, anchor="middle"),
+               T("N", x, y + 24, value, anchor="middle")]
+        add_pin(ref, 1, x - 30, y)
+        add_pin(ref, 2, x + 30, y)
+    else:
+        sub = [PG([(x - 9, y - 8), (x + 9, y - 8), (x, y + 6)], fill=SYM_COLOR),
+               PL([(x - 9, y + 6), (x + 9, y + 6)], width=2),
+               PIN(1, x, y - 30, "M %d %d v 22" % (x, y - 30), 270),
+               PIN(2, x, y + 30, "M %d %d v -24" % (x, y + 30), 90),
+               T("P", x + 14, y - 6, ref, anchor="start"),
+               T("N", x + 14, y + 6, value, anchor="start")]
+        add_pin(ref, 1, x, y - 30)
+        add_pin(ref, 2, x, y + 30)
+    LIB(x, y, a, sub)
 
 
 def header(ref, value, x, y, labels, package="HDR-1X3"):
@@ -773,8 +840,30 @@ def draw(cfg):
         for k, (role, nm) in enumerate([("obufH", "HIGH"), ("obufM", "MID"),
                                         ("obufL", "LOW")]):
             oy = 1250 + 150 * k
-            netlabel(nm + "_VOL", bx - 80, oy - 20, anchor="end", dx=-4, dy=3)
-            w((bx - 80, oy - 20), (bx - 20, oy - 20))
+            if cfg.get("mute"):
+                # Series resistance for the shunt to work against.  Without
+                # it the mute would be shorting the pot wiper, which at full
+                # volume is the filter's own low-impedance output - almost
+                # no attenuation.  10k against the JFET's ~30 ohm on-state
+                # is about 50 dB.
+                netlabel(nm + "_VOL", bx - 250, oy - 20, anchor="end",
+                         dx=-4, dy=3)
+                w((bx - 250, oy - 20), (bx - 220, oy - 20))
+                resistor("R%d" % (31 + k), "10k", bx - 190, oy - 20)
+                w((bx - 160, oy - 20), (bx - 20, oy - 20))
+                # The shunt itself, drain on the buffer input, source to
+                # ground, gate on this band's mute line.
+                jfet("Q%d" % (1 + k), "MMBFJ111", bx - 110, oy + 40)
+                w((bx - 92, oy), (bx - 92, oy - 20))
+                w((bx - 92, oy + 80), (bx - 92, oy + 100))
+                gnd(bx - 92, oy + 100)
+                w((bx - 150, oy + 40), (bx - 190, oy + 40))
+                netlabel("MG%d" % (1 + k), bx - 190, oy + 40,
+                         anchor="end", dx=-4, dy=3)
+            else:
+                netlabel(nm + "_VOL", bx - 80, oy - 20, anchor="end",
+                         dx=-4, dy=3)
+                w((bx - 80, oy - 20), (bx - 20, oy - 20))
             amp(cfg, role, bx, oy)
             # Unity-gain feedback, kept within 42 px of the centreline so it
             # clears the next row's designator text at oy + 62.
@@ -822,34 +911,108 @@ def draw(cfg):
         note(bx - 90, sy + 110, "U3D is the spare section: input grounded, "
              "output tied back.", size="7pt")
 
+    # ---------------- muting and soft start -----------------------------
+    # One gate line per band, and one RC that holds all three muted while
+    # the rails come up.
+    if cfg.get("mute"):
+        my = 1700
+        for k in range(3):
+            cx = 170 + 250 * k
+            # Gate pulldown.  This is what UNMUTES: with the soft-start line
+            # out of the way and the button open, the gate sits at -15 V and
+            # the JFET is pinched off.
+            netlabel("MG%d" % (1 + k), cx, my - 90, anchor="middle", dy=-10)
+            w((cx, my - 90), (cx, my - 30))
+            resistor("R%d" % (34 + k), "1M", cx, my, vertical=True)
+            w((cx, my + 30), (cx, my + 60))
+            netlabel("-15V", cx, my + 60, anchor="middle", dy=16)
+            # ... and this is what MUTES, from the shared soft-start line.
+            # One diode per band so that pressing one button pulls only its
+            # own gate: without it the three gates would be one node and any
+            # button would mute everything.
+            diode("D%d" % (1 + k), "1N4148W", cx - 70, my - 90)
+            w((cx - 40, my - 90), (cx, my - 90))
+            w((cx - 100, my - 90), (cx - 140, my - 90))
+            netlabel("MUTE_SS", cx - 140, my - 90, anchor="end", dx=-4, dy=3)
+            # Panel LED feed.  The LED and its switch are off-board; only
+            # the resistor that sets its current lives here.
+            resistor("R%d" % (37 + k), "2.2k", cx, my + 150, vertical=True)
+            w((cx, my + 120), (cx, my + 100))
+            netlabel("+15V", cx, my + 100, anchor="middle", dy=-10)
+            w((cx, my + 180), (cx, my + 210))
+            netlabel("LD%d" % (1 + k), cx, my + 210, anchor="middle", dy=16)
+
+        # The soft start.  MUTE_SS rests at 0 V, which holds every gate up
+        # through its diode, and creeps to -15 V through R40 over roughly
+        # two seconds - by which time the rails have settled and the filter
+        # has stopped lurching.
+        sx = 1000
+        netlabel("-15V", sx, my - 190, anchor="middle", dy=-10)
+        w((sx, my - 190), (sx, my - 160))
+        resistor("R40", "1M", sx, my - 130, vertical=True)
+        w((sx, my - 100), (sx, my - 90))
+        w((sx, my - 90), (sx + 60, my - 90))
+        netlabel("MUTE_SS", sx + 60, my - 90, anchor="start", dx=4, dy=3)
+        w((sx, my - 90), (sx, my - 60))
+        capacitor("C16", "10uF", sx, my - 30, vertical=True, polar=True,
+                  label_side=-1, package="CASE-D5xL5.4")
+        w((sx, my), (sx, my + 30))
+        gnd(sx, my + 30)
+        # Re-mute FAST on the way down.  On power-up the rail is below the
+        # capacitor so this does nothing and the RC delay stands; on
+        # power-down the rail rises above it and drags MUTE_SS up with it,
+        # muting the outputs while the rails are still collapsing - which
+        # is the messier of the two transients.
+        diode("D4", "1N4148W", sx + 150, my - 130, vertical=True)
+        w((sx + 150, my - 160), (sx + 150, my - 190), (sx, my - 190))
+        w((sx + 150, my - 100), (sx + 150, my - 90), (sx, my - 90))
+
+        # One loom to the front panel.
+        header("J6", "MUTE", 1400, my - 190,
+               ["MG1", "MG2", "MG3", "GND", "LD1", "LD2", "LD3", "GND"],
+               package="HDR-1X8")
+        for _i, _nm in enumerate(["MG1", "MG2", "MG3", "GND",
+                                  "LD1", "LD2", "LD3", "GND"]):
+            _py = my - 180 + 30 * _i
+            w((1420, _py), (1480, _py))
+            if _nm == "GND":
+                gnd(1480, _py)
+            else:
+                netlabel(_nm, 1480, _py, anchor="start", dx=4, dy=3)
+        note(60, my - 250, "MUTING AND SOFT START", weight="bold")
+        note(60, my - 228, "Q1-Q3 shunt each buffer input through R31-R33. "
+             "A JFET conducts at Vgs=0, so the board powers up MUTED and "
+             "R40/C16 release it after ~2 s.  The panel switches and LEDs "
+             "wire to J6 - no audio leaves the board.", size="7pt")
+
     note(60, 1180, "SUPPLY BYPASSING - one 100nF ceramic per rail, at each IC",
          weight="bold")
 
     # ---------------- title block --------------------------------------------
     note(60, 30, cfg["title"], size="14pt", weight="bold", color="#000000")
-    note(60, 1520, "After Rod Elliott, Elliott Sound Products, Project 148 "
+    note(60, 1900, "After Rod Elliott, Elliott Sound Products, Project 148 "
          "(https://sound-au.com/project148.htm).  Redrawn for EasyEDA.",
          size="8pt", color="#404040")
-    note(60, 1540, "All op-amps %s - %d x %s package%s.  Q = 0.5 Linkwitz-Riley "
+    note(60, 1920, "All op-amps %s - %d x %s package%s.  Q = 0.5 Linkwitz-Riley "
          "with R3 / R13 = %s; use 11k2 for exact Q = 0.5, or 5k04 for "
          "Butterworth (Q = 0.707)."
          % (cfg["model"], len(cfg["packages"]), cfg["pkg"],
             "" if len(cfg["packages"]) == 1 else "s", cfg["rq"]),
          size="8pt", color="#404040")
-    note(60, 1560, "VR1 and VR2 are dual-gang 20k linear pots wired as rheostats. "
+    note(60, 1940, "VR1 and VR2 are dual-gang 20k linear pots wired as rheostats. "
          "TP1 / TP2 null at the crossover frequency and may be omitted."
          + (" VR3/VR4/VR5 are single-gang 10k audio-taper pots wired as "
             "attenuators - per-output volume, not part of the filter."
             if cfg.get("volume_pots") else ""),
          size="8pt", color="#404040")
     if cfg.get("output_buffers"):
-        note(60, 1580, "U3A/U3B/U3C buffer each volume pot's wiper, so the "
+        note(60, 1960, "U3A/U3B/U3C buffer each volume pot's wiper, so the "
              "output impedance is the op-amp's rather than up to 2.5k of pot "
              "track, and the amplifier's input impedance no longer loads the "
              "pot or bends its taper.  U3D is the unused section, terminated.  "
              "R28-R30 hold each output at 0 V when nothing is plugged in.",
              size="8pt", color="#404040")
-        note(60, 1600, "Input impedance is R1 = 47k, a line-level figure: a "
+        note(60, 1980, "Input impedance is R1 = 47k, a line-level figure: a "
              "master volume pot ahead of the board (one dual-gang for a "
              "stereo pair, feeding both channels' J2) works properly into it.  "
              "It is off-board because this board is one channel.",
@@ -1263,13 +1426,23 @@ def signal_map(nets, cfg):
     buffer_refs = ({"U3A", "U3B", "U3C", "U3D",
                     "R25", "R26", "R27", "R28", "R29", "R30"}
                    if cfg.get("output_buffers") else set())
+    # The mute chain.  R31-R33 are IN SERIES in the signal path, so they
+    # fold out the same way the pots and the buffers do - what goes in is
+    # what comes out.  Everything else (the JFETs, their gate pulldowns and
+    # steering diodes, the soft-start RC, the LED feed resistors and the
+    # panel connector) hangs off to the side and simply does not exist in
+    # the other variants, which is absence rather than divergence.
+    mute_refs = ({"Q1", "Q2", "Q3", "D1", "D2", "D3", "D4", "C16", "J6"}
+                 | {"R%d" % r for r in range(31, 41)}
+                 if cfg.get("mute") else set())
     out = {}
     for name, members in nets.items():
         if name.endswith("_PRE"):
             name = name[:-len("_PRE")]
         for m in members:
             ref, _, num = m.rpartition(".")
-            if ref in volume_refs or ref in outcap_refs or ref in buffer_refs:
+            if (ref in volume_refs or ref in outcap_refs
+                    or ref in buffer_refs or ref in mute_refs):
                 continue
             ref = fold.get(ref, ref)
             alias = PIN_ROLE.get((ref, num))
