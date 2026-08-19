@@ -926,9 +926,28 @@ BYPASS_NEAR = [("C5", "U1", "+15V", 40.0), ("C6", "U1", "-15V", 40.0),
 # JFET's drain is the node it mutes, so left free the search will happily
 # put it across the board, where the shunt picks up everything the trace
 # runs past and the gate line has to be dragged back to the panel header.
-MUTE_NEAR = [("Q1", "U3", "HIGH_MUTE", 40.0),
-             ("Q2", "U3", "MID_MUTE", 40.0),
-             ("Q3", "U3", "LOW_MUTE", 40.0)]
+# The mute chain is a SUBSYSTEM, and it has to be placed as one.  Pinning
+# only the JFETs left the rest of it scattered, and the panel header then
+# pulled SIX nets across the board on its own - three gate lines and three
+# LED lines - which is the long-haul problem that *_PRE already causes,
+# multiplied by six.  0 clean boards in 24 seeds, best 6 problems.
+#
+# So each band's gate parts sit on its own JFET, the header sits with them,
+# and the LED resistors sit on the header.  Nothing here is a routing
+# convenience: a gate pulldown belongs next to the gate it holds down, and
+# the soft-start RC belongs next to the diodes it feeds.
+MUTE_NEAR = ([("Q%d" % (k + 1), "U3", "%s_MUTE" % nm, 40.0)
+              for k, nm in enumerate(("HIGH", "MID", "LOW"))]
+             + [("D%d" % (k + 1), "Q%d" % (k + 1), "MG%d" % (k + 1), 30.0)
+                for k in range(3)]
+             + [("R%d" % (34 + k), "Q%d" % (k + 1), "MG%d" % (k + 1), 30.0)
+                for k in range(3)]
+             + [("R%d" % (37 + k), "J6", "LD%d" % (k + 1), 40.0)
+                for k in range(3)]
+             + [("J6", "Q2", "MG2", 100.0),
+                ("R40", "D2", "MUTE_SS", 60.0),
+                ("C16", "D2", "MUTE_SS", 60.0),
+                ("D4", "R40", "MUTE_SS", 40.0)])
 
 PLACER = place.Placer(_parts, seed=SEED,
                       track_pitch=MAX_W + CLEAR, near=BYPASS_NEAR + MUTE_NEAR,
