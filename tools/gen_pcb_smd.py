@@ -3181,7 +3181,39 @@ def width_report(ncol=10):
         counts[min(ncol - 1, int((p["x"] - x0) / wcol))] += 1
     mean = sum(counts) / float(ncol)
     cv = (sum((c - mean) ** 2 for c in counts) / ncol) ** 0.5 / mean
-    print("WIDTH cv=%.3f counts=%s" % (cv, ",".join(str(c) for c in counts)))
+
+    # Occupancy, measured on the PLACEMENT alone - part courtyards against
+    # board area - plus the largest rectangle with no part in it.  This is
+    # the number that answers "is there a big empty patch", which is what
+    # the layout is actually being judged on; verify() reports the same two
+    # figures at the end of a full run, counting copper as well.
+    area = sum((bx1 - bx0) * (by1 - by0) for bx0, by0, bx1, by1 in placed)
+    CELL = 5.0
+    gx, gy = int(BW / CELL), int(BH / CELL)
+    used = np.zeros((gy, gx), dtype=bool)
+    for bx0, by0, bx1, by1 in placed:
+        used[max(0, int(by0 / CELL)):min(gy, int(by1 / CELL) + 1),
+             max(0, int(bx0 / CELL)):min(gx, int(bx1 / CELL) + 1)] = True
+    best = 0
+    heights = np.zeros(gx, dtype=int)
+    for r in range(gy):
+        heights = np.where(used[r], 0, heights + 1)
+        stack = []
+        for col in range(gx + 1):
+            h = heights[col] if col < gx else 0
+            start = col
+            while stack and stack[-1][1] >= h:
+                sc, sh = stack.pop()
+                if sh * (col - sc) > best:
+                    best = sh * (col - sc)
+                    bestwh = (col - sc, sh)
+                start = sc
+            stack.append((start, h))
+    ew, eh = (bestwh if best else (0, 0))
+    print("WIDTH cv=%.3f counts=%s util=%.0f%% empty=%.0fx%.0fmm"
+          % (cv, ",".join(str(c) for c in counts),
+             100.0 * area / (BW * BH),
+             ew * CELL * 0.254, eh * CELL * 0.254))
 
 
 if os.environ.get("WIDTH_LOG"):
