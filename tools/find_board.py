@@ -309,6 +309,8 @@ def main():
                 raise
         return out
 
+    confirmed_ran = False
+    confirm_env = {}
     results = sweep(jobs, rank_env, a.trial_timeout,
                     "ranking" if a.cheap_rank else "routing")
 
@@ -339,6 +341,7 @@ def main():
                   "%d confirmed at production settings)"
                   % (len(results), len(confirmed)), flush=True)
             results = confirmed
+            confirmed_ran = True
 
     clean = sorted((r for r in results if r["ok"]), key=lambda r: r["area"])
     sound = sorted((r for r in results
@@ -360,8 +363,14 @@ def main():
     # have.  Reading the parent's environment printed "MAX_EXPAND=400000"
     # under `--env MAX_EXPAND=0`, i.e. the exact opposite of the truth,
     # on the run that found the first clean 63-footprint board.
-    cap = extra.get("MAX_EXPAND", os.environ.get("MAX_EXPAND",
-                                                 SEARCH_MAX_EXPAND))
+    # The cap the REPORTED trials ran with.  When stage three ran, those
+    # are the confirmed ones and they were uncapped regardless of what the
+    # ranking pass used - printing the ranking cap next to confirmed
+    # verdicts says the exact opposite of the truth, which is the same
+    # mistake the comment below already records once.
+    cap = (confirm_env.get("MAX_EXPAND") if confirmed_ran
+           else rank_env.get("MAX_EXPAND",
+                             os.environ.get("MAX_EXPAND", SEARCH_MAX_EXPAND)))
     note = ("uncapped" if str(cap) == "0"
             else "MAX_EXPAND=%s - confirm the winner with an uncapped run"
                  % cap)
