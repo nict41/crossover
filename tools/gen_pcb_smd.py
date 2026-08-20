@@ -1314,10 +1314,43 @@ def stamp_rect(layer, x0, y0, x1, y1, netid, dil):
         sub[sub == 0] = netid
 
 
+# A disc stamped on a GRID-ALIGNED centre is the same array every time, so
+# there are only ever a couple of distinct ones on a board - one per trace
+# width, plus the mounting-hole and boss keepouts.  commit_path() stamps one
+# per CELL of every finished trace, which came to ~94000 calls a run, each
+# allocating two integer coordinate grids through np.mgrid purely to throw
+# them away.  Building each radius once and translating it is exact: the
+# offsets are identical, only the clip against the board edge differs.
+_DISC_CACHE = {}
+
+
+def _disc_mask(r):
+    """The boolean disc of radius r, and its half-extent in cells."""
+    hit = _DISC_CACHE.get(r)
+    if hit is None:
+        k = int(math.ceil(r / GRID))
+        ys, xs = np.mgrid[-k:k + 1, -k:k + 1]
+        hit = (k, ((xs * GRID) ** 2 + (ys * GRID) ** 2) <= r * r)
+        _DISC_CACHE[r] = hit
+    return hit
+
+
 def stamp_disc(layer, x, y, r, netid):
-    a, b, c, d = cells_in_rect(x - r, y - r, x + r, y + r)
-    ys, xs = np.mgrid[b:d + 1, a:c + 1]
-    m = ((xs * GRID - x) ** 2 + (ys * GRID - y) ** 2) <= r * r
+    xi, yi = x / GRID, y / GRID
+    if abs(xi - round(xi)) < 1e-9 and abs(yi - round(yi)) < 1e-9:
+        k, disc = _disc_mask(r)
+        cx, cy = int(round(xi)), int(round(yi))
+        a, b, c, d = cx - k, cy - k, cx + k, cy + k
+        ca, cb = max(0, a), max(0, b)
+        cc, cd = min(NX - 1, c), min(NY - 1, d)
+        if ca > cc or cb > cd:
+            return
+        m = disc[cb - b:cd - b + 1, ca - a:cc - a + 1]
+        a, b, c, d = ca, cb, cc, cd
+    else:
+        a, b, c, d = cells_in_rect(x - r, y - r, x + r, y + r)
+        ys, xs = np.mgrid[b:d + 1, a:c + 1]
+        m = ((xs * GRID - x) ** 2 + (ys * GRID - y) ** 2) <= r * r
     for L in ([0, 1] if layer == MULTI else [layer - 1]):
         sub = occ[L][b:d + 1, a:c + 1]
         csub = contested[L][b:d + 1, a:c + 1]
