@@ -81,36 +81,43 @@ def problem_count(out):
 # still has to be confirmed by an uncapped production run.  Same bargain as
 # GRID=0.5, and the same rule - never in production, where capping was
 # tried twice and silently broke routable nets.
-# 150000, not 400000, and it is worth saying why the SMALLER cap is the
-# better ranker as well as the faster one.
+# 400000.  A smaller cap was tried and REVERTED, and the way it fooled a
+# validation harness is the useful part.
 #
-# Measured against the same six seeds whose rip-up-6 ordering is known
-# (1->2 4->3 2->11 3->13 5->15 6->16), Spearman rank correlation against
-# that ground truth:
+# Against the six seeds whose rip-up-6 ordering is known, cap 150k looked
+# strictly better than 400k - faster AND a closer ranking:
 #
 #   rip-up 1, cap 150k    4 1 2 3 5 6    rho 0.94    ~21 s
 #   rip-up 1, cap 400k    1 4 5 2 6 3    rho 0.71    ~34 s
-#   rip-up 0, cap 400k    1 5 4 3 6 2    rho 0.43    ~35 s
-#   GRID=0.5, cap 400k    4 1 6 5 3 2    rho 0.37    ~25 s
 #
-# At 150k only the top two swap, and they are 9 against 12 problems - both
-# clearly the leaders either way, and both get confirmed regardless.  Below
-# the top two it is right where 400k is wrong: it puts seed 2 third, where
-# it belongs, while 400k puts it fourth and drops seed 3 to last.
+# Then it was run over the whole 40-seed field and checked against the
+# thing a search actually has to get right: keeping the seeds that verify
+# well UNCAPPED inside the handful that get confirmed.
 #
-# The likely reason - a hypothesis, not a measurement - is that a tight cap
-# fails every hard net consistently, so the count reads as "how many nets
-# are hard on this placement".  A looser cap lets some marginal nets
-# through and some not, which is closer to noise.
+#   seed   uncapped   cap 400k   cap 150k
+#     16    1 defect      3         16     <- 14th of 40
+#     37       3          3         12
+#     28       3          3         15
+#     34       5          5          9
 #
-# GRID=0.5 was tried here too and rejected: it ranks seed 2, genuinely
-# third, DEAD LAST - the same failure that disqualified rip-up 0 - and it
-# only buys 1.4x, because verify() and the exact-geometry checks do not
-# scale with the routing grid.
+# SEED=16 is the best board this project has found since the plane-escape
+# term went in.  At 400k it ties for top of the field and gets confirmed;
+# at 150k it lands 14th and `--confirm 3` never looks at it.  The six-seed
+# rho harness simply contained no seed like 16, so it blessed a config that
+# loses the winner - the same failure that disqualified rip-up 0 and
+# GRID=0.5, hiding behind a better-looking correlation.
 #
-# Still a pessimistic FILTER, and the same rule applies: never in
-# production, and a winner is confirmed uncapped.
-SEARCH_MAX_EXPAND = "150000"
+# **Rank correlation over a handful of seeds is not enough to change this
+# knob.** The test that matters is whether the seeds with known good
+# uncapped verdicts stay in the confirm set.
+#
+# GRID=0.5 was tried for the same job and rejected too: it puts seed 2,
+# genuinely third best, dead last, and buys only 1.4x because verify() and
+# the exact-geometry checks do not scale with the routing grid.
+#
+# Still a pessimistic FILTER: never in production, and confirm any winner
+# with an uncapped run.
+SEARCH_MAX_EXPAND = "400000"
 
 # Rip-up rounds for the RANKING pass.  ONE, and the difference between one
 # and none is the whole reason ranking cheaply works at all.

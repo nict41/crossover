@@ -49,9 +49,9 @@ so. Per-trial cost, measured:
 
 | config | per trial |
 |---|---|
-| **ranking config (cap 150k, rip-up 1)** | **~21 s** |
+| **ranking config (cap 400k, rip-up 1)** | **~34 s** |
 | capped 400k, rip-up 0 | 28 s |
-| capped 400k, rip-up 1 | 34 s |
+| capped 150k, rip-up 1 (rejected - see below) | 21 s |
 | capped 400k, rip-up 6 | 201 s |
 | **uncapped, rip-up 6** | **707 s** |
 
@@ -246,6 +246,18 @@ was caught by measuring the ARTIFACT rather than reading the change.
   `verify()` then found `TP1` in two pieces - the router thinks in
   0.25-unit cells. It now scores with `split_nets()`, the same exact
   geometry `verify()` uses.
+* **A validation harness that did not contain the case that matters.** Six
+  seeds with a known expensive ordering were the harness that (correctly)
+  rejected rip-up 0, so it was reused to test a tighter router cap. The
+  cap scored `rho` 0.94 against 0.71 for the incumbent - faster *and*
+  apparently a better ranker - and was committed. Run over the full
+  40-seed field it puts `SEED=16`, the best board this project has, at
+  14th of 40, where `--confirm 3` never sees it. The six seeds contained
+  nothing like 16. *A harness that has passed before is not thereby the
+  right harness for the next question; check that it contains the case the
+  change could break.* Cost: one search round, and the revert is
+  documented in find_board.py so the next person does not re-derive the
+  0.94 and believe it.
 * **The problem had already been fixed by something else.** The plane-escape
   placer term was built against "every failing board has a ground pad sealed
   in a pocket before any signal net is routed", which this file asserted and
@@ -508,32 +520,49 @@ The advice here used to be "pass `--env MAX_EXPAND=0` and skip the
 filter". That is no longer right, and the reason is worth keeping: the cap
 is bad at saying whether a board is clean and *good* at saying which board
 is cleanest, and those are different jobs. `find_board.py` now does both -
-rank every seed capped at 150k, then re-run the best few uncapped - so the
-cap never produces a verdict anybody acts on.
+rank every seed capped, then re-run the best few uncapped - so the cap
+never produces a verdict anybody acts on.
 
 **Search uses a capped router** (`MAX_EXPAND`, set by `find_board.py`, never
 in production). A *failing* A* is far more expensive than a passing one -
 it drains the queue over the whole reachable grid - and a search spends
 most of its time on boards that fail.
 
-The cap is **150000**, and it is worth knowing that the smaller cap is the
-better RANKER as well as the faster one - the opposite of what a cheaper
-filter is supposed to do. Spearman rank correlation against the known
-rip-up-6 ordering of six seeds (`1->2 4->3 2->11 3->13 5->15 6->16`):
+The cap is **400000**. A tighter 150k was tried and reverted, and *how it
+fooled the validation harness* is the part worth keeping.
+
+Against the six seeds whose rip-up-6 ordering is known, 150k looked
+strictly better - faster AND a closer ranking (Spearman rho against that
+ground truth):
 
 | config | ordering | rho | per trial |
 |---|---|---|---|
-| **rip-up 1, cap 150k** | `4 1 2 3 5 6` | **0.94** | **~21 s** |
+| rip-up 1, cap 150k | `4 1 2 3 5 6` | 0.94 | ~21 s |
 | rip-up 1, cap 400k | `1 4 5 2 6 3` | 0.71 | ~34 s |
 | rip-up 0, cap 400k | `1 5 4 3 6 2` | 0.43 | ~35 s |
 | GRID=0.5, cap 400k | `4 1 6 5 3 2` | 0.37 | ~25 s |
 
-At 150k only the top two swap, at 9 problems against 12 - both clearly the
-leaders, and both get confirmed anyway. Below the top two it is right
-where 400k is wrong. The likely reason, a hypothesis rather than a
-measurement: a tight cap fails every hard net consistently, so the count
-reads as "how many nets are hard on this placement", where a looser cap
-lets some marginal nets through and some not, which is closer to noise.
+Then it was run over the whole 40-seed field and checked against what a
+search actually has to get right - keeping the seeds that verify well
+UNCAPPED inside the handful that get confirmed:
+
+| seed | uncapped | cap 400k | cap 150k |
+|---|---|---|---|
+| **16** | **1 defect** | **3** | **16** (14th of 40) |
+| 37 | 3 | 3 | 12 |
+| 28 | 3 | 3 | 15 |
+| 34 | 5 | 5 | 9 |
+
+`SEED=16` is the best board found since the plane-escape term went in. At
+400k it ties for top of the field and gets confirmed; at 150k it lands
+14th and `--confirm 3` never looks at it. **The six-seed rho harness
+contained no seed like 16, so it blessed a config that loses the winner** -
+the same failure that disqualified rip-up 0 and `GRID=0.5`, but hiding
+behind a *better* correlation instead of an obviously worse one.
+
+So: rank correlation over a handful of seeds is not sufficient evidence to
+move this knob. The test that decides it is whether the seeds with known
+good uncapped verdicts stay in the confirm set.
 
 It is still a pessimistic filter, so confirm any winner with an uncapped
 run. Capping in *production* was tried twice and reverted twice: it
