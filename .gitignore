@@ -4,3 +4,4 @@ __pycache__/
 tools/_router.so
 scratchpad/
 tools/_anneal.so
+tools/_geom.so

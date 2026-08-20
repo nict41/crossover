@@ -26,6 +26,7 @@ from heapq import heappush, heappop
 
 import numpy as np
 
+import cgeom
 import croute
 import place
 
@@ -1026,7 +1027,26 @@ WEIGHTS = dict(
     # re-tuning: the others price routability, which now gets CHECKED by
     # actually routing, so this is the only one still trading against a
     # thing the search cannot see for itself.
-    h=float(os.environ.get("W_H", 60)),
+    # 400, not 60.  The panel row fixes the width at six controls x
+    # PANEL_PITCH whatever else happens, and `w` below only charges for
+    # width PAST that floor - so the width up to it is free and height is
+    # the only thing left to trade against.  At 60 the anneal did not
+    # spend that free width: the right-hand fifth of the board carried 10
+    # of 222 pads while the middle ran at 1.7x the average density, and the
+    # board was correspondingly tall.
+    #
+    # The reason is structural rather than a bad weight: height is a
+    # BOUNDING BOX, so only the topmost and bottommost parts get any credit
+    # for moving, while every other part sees pure wirelength cost for
+    # spreading sideways.  Raising the price of height is what makes that
+    # trade worth taking for the parts in between.
+    #
+    # Measured, four seeds routed at each setting: 60/150/300/400 is not
+    # monotonic - 150 is worse than either side on both axes - but 400
+    # produced the first board this project has verified CLEAN since the
+    # plane-escape term went in, at 114.3 x 77.5 mm against 114.3 x 102.9
+    # for the board it replaced.  A quarter less board.
+    h=float(os.environ.get("W_H", 400)),
     w=120.0,         # width past the panel floor is pure waste - push hard
     wfloor=PANEL_SPAN,
     edge=40.0,       # terminals/panel must have a clear path to their edge
@@ -1847,6 +1867,8 @@ def path_clearance_ok(net, via_pts, polys):
     # more than the compiled router.
     if not cand or not others:
         return True
+    if CGEOM:
+        return not cgeom.cross_any(cand, others, CLEAR)
     ox0, oy0, ox1, oy1, olay = _expanded_boxes(others)
     for c in cand:
         gx0, gy0, gx1, gy1 = _feature_bbox(c)
@@ -2056,6 +2078,18 @@ def gap(f, g):
     else:
         d = math.dist(f["g"], g["g"])
     return d - f["hw"] - g["hw"]
+
+
+# The exact-geometry pair scans are compiled (geom.c).  The Python below
+# stays the reference implementation - it is what the C was transcribed
+# from, and GEOM_CHECK=1 runs both and asserts they agree, which is how the
+# port was validated on the committed board.
+# NOT named GEOM: that is already the probed footprint geometry above, and
+# _place_key() hashes it from inside the routing section - so shadowing it
+# here would have silently replaced the cache key's footprint dictionary
+# with a boolean.
+CGEOM = os.environ.get("CGEOM", "c") != "py" and cgeom.available()
+CGEOM_CHECK = bool(os.environ.get("CGEOM_CHECK"))
 
 
 def _feature_bbox(f):
@@ -2484,11 +2518,109 @@ def build_features():
                              g=(x, y), tag="via"))
 
 
+def _silk_over_copper(silks):
+    """{silk index: problem text} for labels sitting on top-layer copper.
+
+    One problem per label, and it must be the FIRST offender in scan order
+    - tracks in ROUTED order (segment by segment) before vias in VIAS order
+    - because that is what the Python reported and verify()'s output is
+    compared line for line across changes.
+
+    This was the last un-prefiltered pairwise loop in verify(): every silk
+    box against every top-layer track segment, ~175000 exact rect-to-segment
+    distances a run, which is why porting only the clearance and
+    connectivity scans bought so much less than the profile suggested.
+    """
+    others, tags = [], []
+    for layer, pts, name in ROUTED:
+        if layer != TOP:
+            continue
+        hw = net_width(name) / 2
+        for a, b in zip(pts, pts[1:]):
+            others.append(dict(k="seg", hw=hw, L={TOP}, g=(a, b), net=name))
+            tags.append(("silk '%s' crosses a %s track", name))
+    for x, y, name in VIAS:
+        others.append(dict(k="pt", hw=VIA_PAD / 2, L={TOP}, g=(x, y),
+                           net=name))
+        tags.append(("silk '%s' sits over a via (%s)", name))
+    boxes = [dict(k="rect", hw=0.0, L={TOP}, g=(b[0], b[1], b[2], b[3]),
+                  net=None) for b in silks]
+    if CGEOM and not CGEOM_CHECK:
+        first = cgeom.cross_first(boxes, others, 0.0, 0.0)
+    else:
+        first = []
+        for box in boxes:
+            hit = -1
+            for j, o in enumerate(others):
+                if gap(box, o) < 0:
+                    hit = j
+                    break
+            first.append(hit)
+        if CGEOM_CHECK and CGEOM:
+            c = list(cgeom.cross_first(boxes, others, 0.0, 0.0))
+            assert c == list(first), (
+                "geom.c and the Python silk scan disagree: %r vs %r"
+                % (c, first))
+    out = {}
+    for i, j in enumerate(first):
+        if j >= 0:
+            fmt, name = tags[j]
+            out[i] = fmt % (silks[i][4], name)
+    return out
+
+
+def _clearance_pairs():
+    """Feature pairs that break CLEAR: shared layer, different nets.
+
+    The compiled scan and the Python below are the same algorithm; the
+    Python is the reference and CGEOM_CHECK=1 asserts they return the same
+    set.  Do NOT let them drift - the whole value of this checker is that
+    it does not reuse the router's bookkeeping, so it has to be the exact
+    geometry in both paths."""
+    if CGEOM and not CGEOM_CHECK:
+        return [tuple(p) for p in cgeom.pair_scan(FEATURES, CLEAR, 1e-9,
+                                                  False)]
+    arr = _feature_arrays()
+    netid = arr[4]
+    out = []
+    for i, f in enumerate(FEATURES):
+        for j in _near_pairs(i, arr, CLEAR):
+            if netid[j] == netid[i]:
+                continue
+            if gap(f, FEATURES[j]) < CLEAR - 1e-9:
+                out.append((i, j))
+    if CGEOM_CHECK and CGEOM:
+        c = sorted(tuple(p) for p in
+                   cgeom.pair_scan(FEATURES, CLEAR, 1e-9, False))
+        assert c == sorted(out), (
+            "geom.c and the Python clearance scan disagree: "
+            "%d vs %d pairs" % (len(c), len(out)))
+    return out
+
+
+def _touching_pairs():
+    """Same-net feature pairs whose copper actually touches."""
+    if CGEOM and not CGEOM_CHECK:
+        return [tuple(p) for p in cgeom.pair_scan(FEATURES, 1e-6, 1e-9, True)]
+    arr = _feature_arrays()
+    fnet = arr[4]
+    out = []
+    for i, f in enumerate(FEATURES):
+        for j in _near_pairs(i, arr, 1e-6):
+            if fnet[j] == fnet[i] and gap(f, FEATURES[j]) <= 1e-9:
+                out.append((i, j))
+    if CGEOM_CHECK and CGEOM:
+        c = sorted(tuple(p) for p in
+                   cgeom.pair_scan(FEATURES, 1e-6, 1e-9, True))
+        assert c == sorted(out), (
+            "geom.c and the Python connectivity scan disagree: "
+            "%d vs %d pairs" % (len(c), len(out)))
+    return out
+
+
 def split_nets():
     """Nets whose pads are not all one piece of touching copper, by exact
     geometry.  Returns {net: [[tag, ...], ...]}."""
-    arr = _feature_arrays()
-    fnet = arr[4]
     parent = list(range(len(FEATURES)))
 
     def find(a):
@@ -2497,10 +2629,8 @@ def split_nets():
             a = parent[a]
         return a
 
-    for i, f in enumerate(FEATURES):
-        for j in _near_pairs(i, arr, 1e-6):
-            if fnet[j] == fnet[i] and gap(f, FEATURES[j]) <= 1e-9:
-                parent[find(i)] = find(j)
+    for i, j in _touching_pairs():
+        parent[find(i)] = find(j)
     bypad = {}
     for i, f in enumerate(FEATURES):
         if f in PAD_FEATURES and f["net"] and f["net"] not in PLANE_NETS:
@@ -2906,8 +3036,15 @@ def route_with_ripup():
 # gradient towards an empty column.
 #
 # `WIDTH_LOG=1` prints the pads-per-column histogram and its coefficient of
-# variation (0 = perfectly even), which is the number to watch when tuning
-# anything that is supposed to spread the layout out.
+# variation.  Read the HISTOGRAM, not the cv: the cv is normalised on the
+# occupied extent, so it answers "are the parts evenly spread" rather than
+# "is the board short", and those come apart.  Raising W_H from 60 to 400
+# took the board from 114.3 x 102.9 to 114.3 x 77.5 mm and utilisation from
+# 51% to 60% while the cv got WORSE, 0.464 to 0.606 - the mass moved right
+# (the two right-hand columns went from 26 pads to 43) and the left thinned
+# out, which is a shorter board and a less even one.  Height and
+# utilisation are the objective; this is a diagnostic for where the parts
+# went.
 def width_report(ncol=10):
     xs = [p["x"] for p in pads]
     if not xs:
@@ -2989,19 +3126,13 @@ REPORT = []
 
 def verify():
     problems = []
-    arr = _feature_arrays()
-    netid = arr[4]
     # -- clearance: every pair of features on a shared layer, different nets
-    for i, f in enumerate(FEATURES):
-        for j in _near_pairs(i, arr, CLEAR):
-            if netid[j] == netid[i]:
-                continue
-            g = FEATURES[j]
-            d = gap(f, g)
-            if d < CLEAR - 1e-9:
-                problems.append("clearance %.2f mil between %s (%s) and %s (%s)"
-                                % (d * 10, f["tag"], f["net"],
-                                   g["tag"], g["net"]))
+    for i, j in _clearance_pairs():
+        f, g = FEATURES[i], FEATURES[j]
+        d = gap(f, g)
+        problems.append("clearance %.2f mil between %s (%s) and %s (%s)"
+                        % (d * 10, f["tag"], f["net"],
+                           g["tag"], g["net"]))
     # -- connectivity: union-find over touching same-net features.  Shared
     # with the rip-up loop, which has to score attempts by exactly this.
     # Plane nets are exempt - proven by the pour check below, not by traces.
@@ -3090,34 +3221,19 @@ def verify():
     #    means that keepout was bypassed somehow, not the first line of
     #    defence against it.
     silks = [b for b in (text_bbox(sh) for sh in shapes) if b is not None]
-    for sx0, sy0, sx1, sy1, txt in silks:
+    _silk_hits = _silk_over_copper(silks)
+    for si, (sx0, sy0, sx1, sy1, txt) in enumerate(silks):
         if sx0 < 1 or sy0 < 1 or sx1 > BW - 1 or sy1 > BH - 1:
             problems.append("silk '%s' runs off the board edge" % txt)
-        box = dict(k="rect", hw=0.0, g=(sx0, sy0, sx1, sy1))
         for pd in pads:
             if (sx0 < pd["x"] + pd["w"] / 2 and pd["x"] - pd["w"] / 2 < sx1 and
                     sy0 < pd["y"] + pd["h"] / 2 and pd["y"] - pd["h"] / 2 < sy1):
                 problems.append("silk '%s' sits over pad %s.%s"
                                 % (txt, pd["ref"], pd["num"]))
                 break
-        for layer, pts, name in ROUTED:
-            if layer != TOP:
-                continue
-            hit = False
-            for a, b in zip(pts, pts[1:]):
-                trk = dict(k="seg", hw=net_width(name) / 2, g=(a, b))
-                if gap(box, trk) < 0:
-                    problems.append("silk '%s' crosses a %s track" % (txt, name))
-                    hit = True
-                    break
-            if hit:
-                break
-        else:
-            for x, y, name in VIAS:
-                via = dict(k="pt", hw=VIA_PAD / 2, g=(x, y))
-                if gap(box, via) < 0:
-                    problems.append("silk '%s' sits over a via (%s)" % (txt, name))
-                    break
+        why = _silk_hits.get(si)
+        if why:
+            problems.append(why)
 
     # -- copper must not crowd the board edge
     for f in FEATURES:
