@@ -141,9 +141,72 @@ does multiple restarts and keeps the best: it is far cheaper to search
 placement properly and route once than to route a mediocre placement and then
 go hunting for a board size that rescues it.
 
+## Four layers, and what that changed in the code
+
+The board is **4-layer** as of the on-board-mute-button work:
+
+```
+L1  TopLayer     signal, every SMD pad, GND pour
+L2  Inner1 (21)  SOLID GND PLANE - not routable, no signal ever
+L3  Inner2 (22)  signal
+L4  BottomLayer  signal, GND pour
+```
+
+`LAYERS=2` still builds the two-layer board, which is what every
+measurement in this file dated before the stackup change was taken on.
+
+**Why.** Two layers ran out. With the three panel mute buttons in, ~115
+placement seeds could not produce a clean board - eight nets in pieces,
+both supply rails among them - on a board only 54% utilised. Out of
+CHANNELS, not out of area, and the lever for that is layers. Finer design
+rules were measured first and were *worse*: `CLEAR=0.6` scored 106 against
+54, because `CLEAR` feeds the placer's own model as well as the routing
+rule, so turning it down told the placer escapes were cheaper than they
+are and it packed tighter.
+
+**The first measurement, same seed, same router config: 10 DRC problems
+became 4.**
+
+Three things in the code carry the stackup, and all three used to be
+written as the literal `2`:
+
+* **`GRID_LAYER` / `LAYER_GRID`.** Grid index to EasyEDA layer id and back.
+  The old code converted with `index + 1` and `layer - 1`, which is right
+  for exactly two layers and silently wrong for any other number. It is a
+  table now, and `grid_layers(layer)` expands `MULTI` to every layer.
+* **`PLANE_L`.** The ground plane is a real copper layer that the router
+  may not put a track on. It is *excluded* rather than filled with an
+  occupying net id, because a through-hole via has to pass through it -
+  its antipad is cut by the pour, not by the router - and `via_ok()` would
+  otherwise refuse every via on the board. `router.c` takes it as a
+  parameter and `passable()` returns false there.
+* **Vias are through-hole, so every other layer is ONE via away.** The
+  neighbour step `nl = 1 - L` became `(L + 1 + (d - 4)) % NL` in both the
+  C router and `flood()`, and `via_ok()` now checks every routable layer.
+  At `NL = 2` that is exactly the old behaviour.
+
+**What the plane buys beyond capacity.** GND stops depending on a pour
+threading between pads on a SIGNAL layer. Every ground pad now reaches the
+plane straight down through a via, which is what used to produce "the
+ground pour does not reach N pad(s)" - the single most common reason a
+board in this project failed to verify.
+
+**`SUPPLY` scales with the stackup.** The placer's congestion gauge counts
+tracks per cell per ROUTING layer, and its calibrated 3.0 was measured on
+two layers, so `gen_pcb_smd` now sets the default from the routable layer
+count. It is `setdefault`, so an explicit `SUPPLY=` still wins, and
+`_place_key()` hashes it - changing the stackup invalidates the placement
+cache by itself.
+
+**Search costs more per trial now.** The grid is twice the cells, so a
+FAILING A* drains twice as many nodes. `find_board.py --trial-timeout`
+defaults to 420 s, which was tuned on two layers and abandons roughly a
+third of 4-layer trials mid-route; pass 1500 or more.
+
 ## Ground is a plane, and that is a load-bearing decision
 
-`GND` is **not routed**. It is poured on both layers and connected by a
+`GND` is **not routed**. It is a solid plane on Inner1, poured on the
+three signal layers, and connected by a
 handful of short stubs where the pour physically cannot squeeze in. For
 most of this project's life it was poured *and* routed, as insurance
 against an importer forgetting to rebuild copper areas, and that insurance
@@ -222,7 +285,21 @@ Consequence for the user: **rebuild copper areas on import.** That is now
 load-bearing, and `validate_fab.py` checks the pour is present on both
 layers.
 
-## Five ways a fix can look applied and not be
+## Six ways a fix can look applied and not be
+
+* **A hardcoded `2` that the compiler cannot see.** Going to four layers,
+  every `[0, 1]` and `for L in (0, 1)` in the Python had to become a range
+  over `NLAY` - and the one that was missed, `blocked_extra`, is handed
+  straight to `router.c`, which indexes it as `(NLAY, NY, NX)`. A
+  two-element list on a four-layer board is an out-of-bounds READ, and it
+  did not fail cleanly: three of four seeds segfaulted `_router.so` and
+  one completed normally, because an overrun of that size usually lands in
+  mapped memory and returns garbage instead of faulting. The verdict of
+  the run that "worked" was not trustworthy either. **`dmesg` is where a
+  ctypes crash says what happened** - the Python side just exits 0 with no
+  output, which reads exactly like a timeout. Two more of the same class
+  were found by grepping for `(0, 1)` afterwards, one of them silently
+  narrowing the plane stubs' target scan to the wrong layers.
 
 Every one of these shipped a commit message that was wrong, and every one
 was caught by measuring the ARTIFACT rather than reading the change.

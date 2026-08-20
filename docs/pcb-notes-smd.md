@@ -102,6 +102,53 @@ slots) instead of just widening the grid pitch for every part, which would
 have wasted area on every 0805 that didn't need it.
 Not one of those was visible in the preview image.
 
+## The stackup
+
+Four layers, JLCPCB's standard 1.6 mm 4-layer build:
+
+| | | |
+|---|---|---|
+| **L1** | TopLayer | signal, every SMD pad, GND pour |
+| **L2** | Inner1 | **solid GND plane** - nothing is ever routed here |
+| **L3** | Inner2 | signal |
+| **L4** | BottomLayer | signal, GND pour |
+
+Three signal layers and one uninterrupted ground: the standard analogue
+4-layer arrangement.
+
+**Why it is four and not two.** Two layers ran out. Once the three panel
+mute buttons went into the front row, ~115 placement seeds and
+route-order sweeps could not produce a board that verified - eight nets
+left in pieces, both supply rails among them - on a board only 54%
+utilised. Running out of copper at 54% is the signature of running out of
+CHANNELS rather than of area, and the lever for that is layers. Finer
+design rules were measured first and were worse (`CLEAR=0.6` scored 106
+DRC problems against 54), because `CLEAR` feeds the placer's own cost
+model as well as the router's rule: turn it down and the placer believes
+escapes are cheaper than they are and packs tighter.
+
+**What the plane buys, beyond capacity.** GND stops depending on a pour
+threading its way between pads on a signal layer. Every ground pad now
+reaches the plane straight down through a via, and a via ties all four
+layers because JLCPCB's standard process has no blind or buried ones.
+"The ground pour does not reach N pad(s)" - the single most common reason
+a board in this project failed to verify - largely stops being a category
+of failure.
+
+**Vias.** All through-hole, 0.6 mm drill / 0.71 mm pad as before. Each one
+punches an antipad in the plane, which the pour cuts automatically at
+`POUR_CLEAR`; the router does not model the plane at all, which is
+deliberate - see `PLANE_L` in `tools/gen_pcb_smd.py`.
+
+**Building the two-layer version.** `LAYERS=2 python3 tools/gen_pcb_smd.py`
+still works and is what every measurement in this file dated before the
+stackup change was taken on. It will not route this board clean.
+
+**Cost.** A 4-layer order is dearer than 2-layer at the same size - that
+is the trade, and it is the only thing 4 layers costs here. Every
+geometric limit `validate_fab.py` checks is the same or looser on the
+4-layer process.
+
 ## Trace widths
 
 Every trace used to be the same 8 mil regardless of what it carried. Widths are
@@ -206,7 +253,8 @@ fabricator. 0.20 mm is comfortably inside JLCPCB's process capability.
 
 ### Ground stitching
 
-Ground is poured on both layers, and every through-hole part - the five
+Ground is poured on all four layers - solid on Inner1 - and every
+through-hole part - the five
 pots and all five terminal blocks - ties those two pours together for free
 simply by being a plated hole. The SMD-only ground connections don't get
 that: `R1`, `R3` and `R13` (the input bias return and the two Q-setting
@@ -829,7 +877,8 @@ drill-to-drill minimum rejects the whole path so the caller reroutes.
 
 ## Ground is a plane, not a net
 
-Ground is poured on both layers and is **not routed as an ordinary net**.
+Ground is poured on all four layers, solid on Inner1, and is **not routed
+as an ordinary net**.
 For most of this project's life it was both, on the reasoning that the
 pour alone is only electrically enough if whoever imports the file
 remembers to rebuild copper areas. That belt-and-braces cost far more than
@@ -902,7 +951,8 @@ already spent.
 
 **On import, rebuild copper areas.** This used to be optional insurance;
 it is now the thing that connects ground. `tools/validate_fab.py` checks
-the pour is present on both layers for exactly this reason.
+the pour is present on every layer for exactly this reason - including the
+Inner1 plane, which is nothing BUT pour.
 
 The placement search is told about it too (`plane_nets`): a plane net has
 no wirelength and makes no wire demand, so pricing GND's half-perimeter

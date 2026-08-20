@@ -32,6 +32,62 @@ import place
 
 MM = 1.0 / 0.254
 TOP, BOT, TOPSILK, OUTLINE, MULTI = 1, 2, 3, 10, 11
+# EasyEDA Std numbers its inner copper layers from 21.
+INNER1, INNER2 = 21, 22
+
+# The stackup.
+#
+# Four layers, because two ran out.  The board that added the three panel
+# mute buttons could not be routed clean at two layers in ~115 placement
+# seeds - eight nets left in pieces, both supply rails among them - on a
+# board only 54% utilised.  That is the signature of running out of
+# CHANNELS rather than of area, and the fix for that is layers.  Finer
+# design rules were measured first and were worse (see CLAUDE.md).
+#
+#   L1  TopLayer     signal, all the SMD pads, GND pour
+#   L2  Inner1       SOLID GND PLANE - not routable, no signal ever
+#   L3  Inner2       signal
+#   L4  BottomLayer  signal, GND pour
+#
+# Three signal layers and one uninterrupted ground: the standard analogue
+# 4-layer arrangement, and it does two separate things for this board.
+# The obvious one is 50% more routing capacity. The other is that GND
+# stops depending on a pour threading between pads on the SIGNAL layers -
+# every ground pad now reaches the plane straight down through a via -
+# which is what used to produce "the ground pour does not reach N pad(s)".
+#
+# `LAYERS=2` builds the old two-layer board, which is what every
+# measurement in the docs before this change was taken on.
+FOURLAYER = os.environ.get("LAYERS", "4") != "2"
+# grid index -> EasyEDA layer id.  The old code used `index + 1` and
+# `layer - 1` to convert, which happened to be right for exactly two
+# layers and is why this is now a table.
+GRID_LAYER = [TOP, INNER1, INNER2, BOT] if FOURLAYER else [TOP, BOT]
+LAYER_GRID = {lid: i for i, lid in enumerate(GRID_LAYER)}
+NLAY = len(GRID_LAYER)
+# The plane layer is a real copper layer that the router may not put a
+# track on.  It is excluded from the routing grid rather than filled with
+# an occupying net, because a through-hole via has to pass through it -
+# the antipad is cut by the pour, not by the router.
+PLANE_L = LAYER_GRID[INNER1] if FOURLAYER else -1
+ROUTE_L = [i for i in range(NLAY) if i != PLANE_L]
+ALL_COPPER = set(GRID_LAYER)
+
+# The placer's congestion gauge counts how many tracks fit across one cell,
+# and that is per ROUTING layer.  Its calibrated value (3.0, "one layer's
+# worth" - see place.py, where the geometric two-layer figure is explained
+# and rejected) was measured on the two-layer board, so it scales with the
+# number of layers a track can actually use rather than being re-guessed.
+# setdefault, so SUPPLY=... on the command line still overrides it - and
+# _place_key() hashes SUPPLY, so changing the stackup invalidates the
+# placement cache by itself.
+os.environ.setdefault("SUPPLY", "%g" % (3.0 * len([i for i in range(NLAY)
+                                                   if i != PLANE_L]) / 2.0))
+
+
+def grid_layers(layer):
+    """Grid indices a pad/track on EasyEDA layer `layer` occupies."""
+    return list(range(NLAY)) if layer == MULTI else [LAYER_GRID[layer]]
 
 # 4.0 units = 1.016mm text height, comfortably over JLCPCB's stated
 # ~1.0mm legibility minimum (was 2.2-2.6 units = 0.56-0.66mm - about
@@ -81,7 +137,12 @@ SILK_W = 0.7
 # an 0805 pad) rather than the current-only minimum: a trace noticeably
 # thinner than about 1/3 of the pad it lands on reads as an error, not a
 # design choice, and is worth a few mm of board area to avoid.
-SIG_W = 1.2                           # 12 mil - default signal trace (1:3.3 vs an 0805 pad)
+# 12 mil default.  An env knob because the ONE geometry that decides
+# whether an SOIC pin can escape is this number against the 2.5 units of
+# gap between two SOIC pads: a 12 mil trace needs 1.2 + 2 x 0.8 = 2.8
+# units and does not fit, an 8 mil trace needs 0.8 + 1.6 = 2.4 and does.
+# Everything else on the board has room either way.
+SIG_W = float(os.environ.get("SIG_W", 1.2))   # (1:3.3 vs an 0805 pad)
 PWR_W = 1.6                           # 16 mil - +15V, -15V, GND      (1:2.5 vs an 0805 pad)
 POWER_NETS = {"+15V", "-15V", "GND"}
 
@@ -1377,18 +1438,23 @@ for _ref in sorted(POSE):
 #  routing
 # ==========================================================================
 NX, NY = int(BW / GRID), int(BH / GRID)
-# One contiguous (2, NY, NX) block with per-layer VIEWS into it, rather
-# than two independent arrays.  The views alias the same memory, so
+# One contiguous (NLAY, NY, NX) block with per-layer VIEWS into it, rather
+# than independent arrays.  The views alias the same memory, so
 # occ[L][y, x] = v still works exactly as before, but the compiled router
-# can be handed OCC directly instead of np.stack()-ing the two layers on
+# can be handed OCC directly instead of np.stack()-ing the layers on
 # every single net - which at this grid size was copying ~10 MB per search.
-OCC = np.zeros((2, NY, NX), dtype=np.int32)
-occ = [OCC[0], OCC[1]]
+#
+# The GND plane layer is in this grid even though nothing routes on it:
+# keeping ONE layer indexing for the router, the stamping and the pour is
+# worth a few megabytes of array that stays empty.  croute is told which
+# index it is and refuses to put a track there.
+OCC = np.zeros((NLAY, NY, NX), dtype=np.int32)
+occ = [OCC[i] for i in range(NLAY)]
 # A cell can fall inside the keep-out of more than one net.  Recording only the
 # first claimant would let the second net route there, so contested cells are
 # flagged separately and are passable to nobody.
-CONTESTED = np.zeros((2, NY, NX), dtype=np.uint8)
-contested = [CONTESTED[0], CONTESTED[1]]
+CONTESTED = np.zeros((NLAY, NY, NX), dtype=np.uint8)
+contested = [CONTESTED[i] for i in range(NLAY)]
 NETID = {n: i + 1 for i, n in enumerate(sorted(netdoc["nets"]))}
 ROUTED = []          # (layer, [(x, y), ...], net) track polylines
 VIAS = []            # (x, y, net)
@@ -1456,7 +1522,7 @@ def cells_in_rect(x0, y0, x1, y1):
 
 def stamp_rect(layer, x0, y0, x1, y1, netid, dil):
     a, b, c, d = cells_in_rect(x0 - dil, y0 - dil, x1 + dil, y1 + dil)
-    for L in ([0, 1] if layer == MULTI else [layer - 1]):
+    for L in grid_layers(layer):
         sub = occ[L][b:d + 1, a:c + 1]
         contested[L][b:d + 1, a:c + 1] |= (sub != 0) & (sub != netid)
         sub[sub == 0] = netid
@@ -1502,7 +1568,7 @@ def stamp_disc(layer, x, y, r, netid):
         xs = (np.arange(a, c + 1) * GRID) - x
         ys = (np.arange(b, d + 1) * GRID) - y
         m = (ys[:, None] ** 2 + xs[None, :] ** 2) <= r * r
-    for L in ([0, 1] if layer == MULTI else [layer - 1]):
+    for L in grid_layers(layer):
         sub = occ[L][b:d + 1, a:c + 1]
         csub = contested[L][b:d + 1, a:c + 1]
         csub |= m & (sub != 0) & (sub != netid)
@@ -1527,11 +1593,11 @@ for p in pads:
 # keepout is never allowed to overwrite, only the keepout RING around a pad
 # is fair game.  Nothing has been routed yet at this point in the program -
 # only keepout reservations exist - so overwriting a ring is free of risk.
-CORE_PROTECT = [np.zeros((NY, NX), dtype=bool), np.zeros((NY, NX), dtype=bool)]
+CORE_PROTECT = [np.zeros((NY, NX), dtype=bool) for _ in range(NLAY)]
 for _p in pads:
     _a, _b2, _c, _d = cells_in_rect(_p["x"] - _p["w"] / 2 + 0.4, _p["y"] - _p["h"] / 2 + 0.4,
                                     _p["x"] + _p["w"] / 2 - 0.4, _p["y"] + _p["h"] / 2 - 0.4)
-    for _L in ([0, 1] if _p["layer"] == MULTI else [_p["layer"] - 1]):
+    for _L in grid_layers(_p["layer"]):
         CORE_PROTECT[_L][_b2:_d + 1, _a:_c + 1] = True
 
 
@@ -1545,7 +1611,7 @@ def stamp_rect_for_silk(layer, x0, y0, x1, y1, netid):
     does, and forcing it out just makes it exit the pad in a slightly
     different direction."""
     a, b, c, d = cells_in_rect(x0, y0, x1, y1)
-    for L in ([0, 1] if layer == MULTI else [layer - 1]):
+    for L in grid_layers(layer):
         sub = occ[L][b:d + 1, a:c + 1]
         protect = CORE_PROTECT[L][b:d + 1, a:c + 1]
         sub[~protect] = netid
@@ -1568,7 +1634,7 @@ for _sh in shapes:
 def core_cells(p):
     a, b, c, d = cells_in_rect(p["x"] - p["w"] / 2 + 0.4, p["y"] - p["h"] / 2 + 0.4,
                                p["x"] + p["w"] / 2 - 0.4, p["y"] + p["h"] / 2 - 0.4)
-    layers = [0, 1] if p["layer"] == MULTI else [p["layer"] - 1]
+    layers = grid_layers(p["layer"])
     return {(L, xx, yy) for L in layers for yy in range(b, d + 1)
             for xx in range(a, c + 1)}
 
@@ -1615,7 +1681,10 @@ def via_ok(x, y, nid, extra=0.0):
         return False
     r = int(math.ceil((VIA_EXTRA + extra) / GRID))
     ok = True
-    for L in (0, 1):
+    # Every ROUTABLE layer: a through-hole via lands on all of them.  The
+    # ground plane is skipped, because its antipad is cut by the pour and
+    # checking it would refuse every via on the board.
+    for L in ROUTE_L:
         a, b = max(0, x - r), max(0, y - r)
         c, d = min(NX - 1, x + r), min(NY - 1, y + r)
         sub = occ[L][b:d + 1, a:c + 1]
@@ -1779,7 +1848,7 @@ def astar(sources, targets, nid, tgt_xy, extra=0.0, blocked_extra=None, relaxed=
             else np.ascontiguousarray(np.stack(blocked_extra), dtype=np.uint8),
             None, None, nid, relaxed,
             int(math.ceil((VIA_EXTRA + extra) / GRID)), 0.0, 24.0,
-            sources, targets, tgt_xy, NY, NX)
+            sources, targets, tgt_xy, NY, NX, PLANE_L)
     return astar_py(sources, targets, nid, tgt_xy, extra, blocked_extra, relaxed)
 
 
@@ -1813,8 +1882,13 @@ def astar_py(sources, targets, nid, tgt_xy, extra=0.0, blocked_extra=None,
             return path[::-1]
         L, x, y = cur
         g = seen[cur]
+        # A via here is a through-hole one, so every other layer is one
+        # via away rather than just the opposite one.  PLANE_L is skipped:
+        # it is copper, but it is the solid ground plane and nothing
+        # routes on it.
         nbrs = [(L, x + 1, y, 1), (L, x - 1, y, 1), (L, x, y + 1, 1),
-                (L, x, y - 1, 1), (1 - L, x, y, 24)]
+                (L, x, y - 1, 1)]
+        nbrs += [(nl, x, y, 24) for nl in ROUTE_L if nl != L]
         for nl, nx_, ny_, c in nbrs:
             if not passable(nl, nx_, ny_, nid, blocked_extra, relaxed):
                 continue
@@ -1900,7 +1974,7 @@ def path_geometry(path):
             if (dx1, dy1) != (dx2, dy2):
                 pts.append((run[i][1] * GRID, run[i][2] * GRID))
         pts.append((run[-1][1] * GRID, run[-1][2] * GRID))
-        polys.append((run[0][0] + 1, chamfer(pts)))
+        polys.append((GRID_LAYER[run[0][0]], chamfer(pts)))
     return runs, via_pts, polys
 
 
@@ -1966,7 +2040,7 @@ def commit_path(net, nid, runs, via_pts, polys):
         stamp_hole(vx, vy)
     for run in runs:
         for c in run:
-            stamp_disc(c[0] + 1, c[1] * GRID, c[2] * GRID, own_dil, nid)
+            stamp_disc(GRID_LAYER[c[0]], c[1] * GRID, c[2] * GRID, own_dil, nid)
     for layer, pts in polys:
         ROUTED.append((layer, pts, net))
     # path_clearance_ok() rebuilds its `others` list per call, so there is
@@ -1996,12 +2070,12 @@ def path_clearance_ok(net, via_pts, polys):
         for a, b in zip(pts, pts[1:]):
             cand.append(dict(k="seg", hw=hw, L={layer}, g=(a, b)))
     for vx, vy in via_pts:
-        cand.append(dict(k="pt", hw=VIA_PAD / 2, L={1, 2}, g=(vx, vy)))
+        cand.append(dict(k="pt", hw=VIA_PAD / 2, L=set(ALL_COPPER), g=(vx, vy)))
     others = []
     for p in pads:
         if p["net"] and p["net"] != net:
             others.append(dict(k="rect", hw=0.0,
-                               L={1, 2} if p["layer"] == MULTI else {p["layer"]},
+                               L=set(ALL_COPPER) if p["layer"] == MULTI else {p["layer"]},
                                g=(p["x"] - p["w"] / 2, p["y"] - p["h"] / 2,
                                   p["x"] + p["w"] / 2, p["y"] + p["h"] / 2)))
     for layer, pts, name in ROUTED:
@@ -2013,7 +2087,7 @@ def path_clearance_ok(net, via_pts, polys):
     for x, y, name in VIAS:
         if name == net:
             continue
-        others.append(dict(k="pt", hw=VIA_PAD / 2, L={1, 2}, g=(x, y)))
+        others.append(dict(k="pt", hw=VIA_PAD / 2, L=set(ALL_COPPER), g=(x, y)))
     # The pairs this must CONSIDER are cand x others - a few hundred
     # thousand on a routed board - but only a handful of them are anywhere
     # near each other, and exact segment-to-segment distance is far too
@@ -2340,7 +2414,7 @@ def _foreign_static():
     global _FOREIGN_STATIC
     if _FOREIGN_STATIC is not None:
         return _FOREIGN_STATIC
-    m = np.zeros((2, NY, NX), dtype=bool)
+    m = np.zeros((NLAY, NY, NX), dtype=bool)
 
     def blk(layers, x0, y0, x1, y1):
         a, b, c, d = cells_in_rect(x0, y0, x1, y1)
@@ -2350,14 +2424,15 @@ def _foreign_static():
     for p in pads:
         if p["net"] == "GND":
             continue                      # the pour joins these, not avoids them
-        blk([0, 1] if p["layer"] == MULTI else [p["layer"] - 1],
+        blk(grid_layers(p["layer"]),
             p["x"] - p["w"] / 2, p["y"] - p["h"] / 2,
             p["x"] + p["w"] / 2, p["y"] + p["h"] / 2)
-    # Holes take copper on both layers whatever net they belong to.
+    # Holes take copper on every layer whatever net they belong to.
+    _all = list(range(NLAY))
     for hx, hy in MOUNT_HOLES:
-        blk([0, 1], hx - MOUNT_R, hy - MOUNT_R, hx + MOUNT_R, hy + MOUNT_R)
+        blk(_all, hx - MOUNT_R, hy - MOUNT_R, hx + MOUNT_R, hy + MOUNT_R)
     for hx, hy in POT_BOSSES:
-        blk([0, 1], hx - BOSS_R, hy - BOSS_R, hx + BOSS_R, hy + BOSS_R)
+        blk(_all, hx - BOSS_R, hy - BOSS_R, hx + BOSS_R, hy + BOSS_R)
     _FOREIGN_STATIC = m
     return m
 
@@ -2412,7 +2487,7 @@ def pour_connectivity():
             continue
         hw = net_width(net) / 2
         for (ax, ay), (bx, by) in zip(pts, pts[1:]):
-            _segs.append((layer - 1, ax, ay, bx, by, hw))
+            _segs.append((LAYER_GRID[layer], ax, ay, bx, by, hw))
 
     def _stamp_segs_py(dst):
         for _L, _ax, _ay, _bx, _by, _hw in _segs:
@@ -2438,19 +2513,19 @@ def pour_connectivity():
 
     for vx, vy, vnet in VIAS:
         if vnet != "GND":
-            _block([0, 1], vx - VIA_PAD / 2, vy - VIA_PAD / 2,
+            _block(list(range(NLAY)), vx - VIA_PAD / 2, vy - VIA_PAD / 2,
                    vx + VIA_PAD / 2, vy + VIA_PAD / 2)
 
     # POUR_CLEAR is the clearanceWidth written into the COPPERAREA shape
     # itself, so this is the gap the importer will actually hold.
     _cc = int(math.ceil(POUR_CLEAR / GRID))
-    free = ~np.stack([dilate(foreign[L], _cc) for L in (0, 1)])
+    free = ~np.stack([dilate(foreign[L], _cc) for L in range(NLAY)])
     # A pour is only connected where it is WIDE enough to exist.  Without
     # this, a one-cell neck - 0.06 mm - counts as a connection and the fab
     # simply will not make it.  Eroding by POUR_MIN_W/2 means only necks at
     # least that wide survive to carry connectivity.
     narrow = np.stack([dilate(~free[L], int(math.ceil(POUR_MIN_W / 2 / GRID)))
-                       for L in (0, 1)])
+                       for L in range(NLAY)])
     poured = (free & ~narrow).astype(np.uint8)
     edge = int(math.ceil(2.0 / GRID))            # the pour inset from the outline
     poured[:, :edge, :] = 0
@@ -2458,9 +2533,11 @@ def pour_connectivity():
     poured[:, :, :edge] = 0
     poured[:, :, -edge:] = 0
 
-    # Where the two layers are tied together: any plated hole on GND, and
-    # every GND via.
-    joint = np.zeros((2, NY, NX), dtype=np.uint8)
+    # Where the layers are tied together: any plated hole on GND, and
+    # every GND via.  These are through-hole, so a joint ties ALL of them -
+    # which on the 4-layer stackup is what makes a single via next to an
+    # SMD ground pad connect it straight down to the Inner1 plane.
+    joint = np.zeros((NLAY, NY, NX), dtype=np.uint8)
     for p in pads:
         if p["net"] == "GND" and p["layer"] == MULTI:
             a, b, c, d = cells_in_rect(p["x"] - p["w"] / 2, p["y"] - p["h"] / 2,
@@ -2492,7 +2569,7 @@ def pour_connectivity():
     for layer, pts, net in ROUTED:
         if net != "GND":
             continue
-        L = layer - 1
+        L = LAYER_GRID[layer]
         for (ax, ay), (bx, by) in zip(pts, pts[1:]):
             n = max(1, int(math.dist((ax, ay), (bx, by)) / (GRID / 2)))
             for i in range(n + 1):
@@ -2598,7 +2675,12 @@ def plane_stubs():
             _x0, _x1 = max(0, int(_px - _r)), min(NX, int(_px + _r) + 1)
             _y0, _y1 = max(0, int(_py - _r)), min(NY, int(_py + _r) + 1)
             _tgt, _best = set(_anchored), None
-            for _L in (0, 1):
+            # ROUTABLE layers only.  This used to read `for _L in (0, 1)`,
+            # which was "both layers" on a two-layer board and is Top plus
+            # the GND PLANE on a four-layer one - so the target set filled
+            # up with plane cells A* can never enter (nothing routes on the
+            # plane) while Inner2 and Bottom were never looked at at all.
+            for _L in ROUTE_L:
                 _ys, _xs = np.nonzero(_seen[_L, _y0:_y1, _x0:_x1])
                 if not len(_xs):
                     continue
@@ -2608,6 +2690,44 @@ def plane_stubs():
                 _i = int(np.argmin(_d))
                 if _best is None or _d[_i] < _best[0]:
                     _best = (_d[_i], int(_xs[_i]), int(_ys[_i]))
+            # And with a plane in the stackup, ANY cell that has room for a
+            # via is a connection to it - the plane is directly below, and
+            # a through-hole via ties every layer.  That is the whole point
+            # of the plane, and without this the stubs cannot use it: they
+            # would still be hunting for a sliver of pour on a signal
+            # layer, which is the geometry that produced "the ground pour
+            # does not reach N pad(s)" in the first place.
+            #
+            # Computed as a mask rather than a via_ok() call per cell: the
+            # window is 320 x 320 and via_ok does a numpy window op each
+            # time.  Same rule, two dilations.
+            _via_cells = set()
+            if PLANE_L >= 0:
+                _r_v = int(math.ceil(VIA_EXTRA / GRID))
+                _room = None
+                for _L in ROUTE_L:
+                    _sub = OCC[_L, _y0:_y1, _x0:_x1]
+                    _bad = ((_sub != 0) & (_sub != _gnid)) | \
+                        CONTESTED[_L, _y0:_y1, _x0:_x1].astype(bool)
+                    _bad = dilate(_bad, _r_v)
+                    _room = _bad if _room is None else (_room | _bad)
+                _ok = (~_room) & (_seen[PLANE_L, _y0:_y1, _x0:_x1] != 0)
+                _ys, _xs = np.nonzero(_ok)
+                if len(_xs):
+                    _xs, _ys = _xs + _x0, _ys + _y0
+                    _d = (_xs - _px) ** 2 + (_ys - _py) ** 2
+                    # Only the nearest few hundred: A* wants a target SET,
+                    # not the whole board, and the far ones are never the
+                    # answer.
+                    _keep = np.argsort(_d)[:400]
+                    for _L in ROUTE_L:
+                        _via_cells |= set(zip([_L] * len(_keep),
+                                              _xs[_keep].tolist(),
+                                              _ys[_keep].tolist()))
+                    _i = int(_keep[0])
+                    if _best is None or _d[_i] < _best[0]:
+                        _best = (_d[_i], int(_xs[_i]), int(_ys[_i]))
+                    _tgt |= _via_cells
             if not _tgt:
                 continue
             _anchor = ((_best[1], _best[2]) if _best else
@@ -2640,6 +2760,15 @@ def plane_stubs():
                           flush=True)
                 continue
             _r, _v, _pl = path_geometry(_path)
+            # If the stub ended on a via site rather than on existing pour,
+            # the via is the connection - drill it.  commit_path only makes
+            # vias where the PATH changed layer, and a path to the plane
+            # cannot change layer onto it.
+            _end = _path[-1]
+            _drill = (_end in _via_cells and _end not in _anchored
+                      and not _seen[_end[0], _end[2], _end[1]])
+            if _drill:
+                _v = list(_v) + [(_end[1] * GRID, _end[2] * GRID)]
             if (path_clearance_ok("GND", _v, _pl)
                     and commit_path("GND", _gnid, _r, _v, _pl)):
                 _progress = True
@@ -2721,7 +2850,7 @@ def build_features():
     FEATURES.clear()
     for p in pads:
         FEATURES.append(dict(net=p["net"], k="rect", hw=0.0,
-                             L={1, 2} if p["layer"] == MULTI else {p["layer"]},
+                             L=set(ALL_COPPER) if p["layer"] == MULTI else {p["layer"]},
                              g=(p["x"] - p["w"] / 2, p["y"] - p["h"] / 2,
                                 p["x"] + p["w"] / 2, p["y"] + p["h"] / 2),
                              tag="%s.%s" % (p["ref"], p["num"])))
@@ -2731,7 +2860,7 @@ def build_features():
             FEATURES.append(dict(net=name, k="seg", hw=net_width(name) / 2,
                                  L={layer}, g=(a, b), tag="track"))
     for x, y, name in VIAS:
-        FEATURES.append(dict(net=name, k="pt", hw=VIA_PAD / 2, L={1, 2},
+        FEATURES.append(dict(net=name, k="pt", hw=VIA_PAD / 2, L=set(ALL_COPPER),
                              g=(x, y), tag="via"))
 
 
@@ -2915,8 +3044,13 @@ def route_pass():
         route_extra = max(0.0, (net_width(name) - SIG_W) / 2)
         if route_extra > 0:
             r_cells = int(math.ceil(route_extra / GRID))
+            # EVERY layer, not (0, 1).  This is handed straight to the C
+            # router, which indexes it as (NLAY, NY, NX); a two-element
+            # list on a four-layer board is an out-of-bounds read, and it
+            # segfaulted _router.so intermittently rather than reliably,
+            # because the overrun usually lands in mapped memory.
             blocked_extra = [dilate((occ[L] != 0) & (occ[L] != nid), r_cells)
-                             for L in (0, 1)]
+                             for L in range(NLAY)]
         else:
             blocked_extra = None
         mine = [p for p in pads if p["net"] == name]
@@ -3138,7 +3272,7 @@ def _crowding_nets(missed):
         if p is None:
             continue
         cx, cy = int(p["x"] / GRID), int(p["y"] / GRID)
-        for L in (0, 1):
+        for L in ROUTE_L:
             sub = occ[L][max(0, cy - r):cy + r + 1, max(0, cx - r):cx + r + 1]
             for v in np.unique(sub):
                 n = by_id.get(int(v))
@@ -3561,7 +3695,12 @@ for hx, hy in POT_BOSSES:
     shapes.append("HOLE~%g~%g~9.0~%s" % (hx, hy, gid()))
 track([(0, 0), (BW, 0), (BW, BH), (0, BH), (0, 0)], OUTLINE, 0.6)
 
-for L in (TOP, BOT):
+# A GND pour on every copper layer.  On TOP/BOTTOM (and Inner2) it fills
+# whatever the signals left; on Inner1 it is the plane, and there is
+# nothing else on that layer to fill around.  All four are emitted the
+# same way, so "rebuild copper areas on import" covers the plane too - see
+# the warning in README.md, which is load-bearing.
+for L in GRID_LAYER:
     shapes.append("COPPERAREA~%g~%d~GND~%s~1~solid~%s~spoke~none~[]~0~2~1~none"
                   % (PWR_W, L,
                      " ".join("%g %g" % p for p in
@@ -3596,7 +3735,7 @@ doc = {
     "canvas": "CA~%g~%g~#000000~yes~#FFFFFF~10~%g~%g~line~0.5~mil~0.5~45~visible~0.5~0~0"
               % (BW * 2, BH * 2, BW * 2, BH * 2),
     "shape": FINAL,
-    "layers": ["1~TopLayer~#FF0000~true~true~true",
+    "layers": (["1~TopLayer~#FF0000~true~true~true",
                "2~BottomLayer~#0000FF~true~false~true",
                "3~TopSilkLayer~#FFFF00~true~false~true",
                "4~BottomSilkLayer~#808000~true~false~true",
@@ -3607,7 +3746,9 @@ doc = {
                "9~Ratlines~#6464FF~true~false~true",
                "10~BoardOutline~#FF00FF~true~false~true",
                "11~Multi-Layer~#C0C0C0~true~false~true",
-               "12~Document~#FFFFFF~true~false~true"],
+               "12~Document~#FFFFFF~true~false~true"]
+              + (["21~Inner1~#008000~true~false~true",
+                  "22~Inner2~#00FF00~true~false~true"] if FOURLAYER else [])),
     "objects": ["Component", "Prefix", "Name", "BoardOutLine", "Pad", "Via",
                 "Track", "Hole", "Copper", "Text", "Dimension", "Solid"],
     "BBox": {"x": 0, "y": 0, "width": BW, "height": BH},
@@ -3661,6 +3802,12 @@ with open(os.path.join(bomdir, "jlcpcb-cpl-retuned-quad-smd.csv"), "w") as f:
 
 
 # ---- preview -------------------------------------------------------------
+# One colour per signal layer, so the preview stops being a lie the moment
+# there are more than two of them.  Inner1 is the ground plane and has no
+# tracks to draw.
+LAYER_COLOUR = {TOP: "#d94b3a", BOT: "#3a6fd9", INNER2: "#5fbf5f"}
+
+
 def preview():
     sc = 4
     o = ['<svg xmlns="http://www.w3.org/2000/svg" width="%g" height="%g" '
@@ -3670,7 +3817,7 @@ def preview():
         o.append('<polyline points="%s" fill="none" stroke="%s" stroke-width="%g" '
                  'stroke-opacity="0.95" stroke-linecap="round" stroke-linejoin="round"/>'
                  % (" ".join("%g,%g" % p for p in pts),
-                    "#d94b3a" if layer == TOP else "#3a6fd9", net_width(name)))
+                    LAYER_COLOUR.get(layer, "#3a6fd9"), net_width(name)))
     for p in pads:
         o.append('<rect x="%g" y="%g" width="%g" height="%g" fill="#e8c069" rx="0.3"/>'
                  % (p["x"] - p["w"] / 2, p["y"] - p["h"] / 2, p["w"], p["h"]))

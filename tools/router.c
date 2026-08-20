@@ -67,12 +67,19 @@ static int heap_pop(Heap *h, double *f) {
 }
 
 typedef struct {
-    int NX, NY;
-    const int *occ;              /* [2][NY][NX] */
-    const unsigned char *cont;   /* [2][NY][NX] */
-    const unsigned char *blk;    /* [2][NY][NX] or NULL */
-    const int *use;              /* [2][NY][NX] or NULL */
-    const float *hist;           /* [2][NY][NX] or NULL */
+    int NX, NY, NL;
+    /* plane_l: a copper layer that exists but is not ROUTABLE - the solid
+     * GND plane on a 4-layer board.  It is excluded from the grid rather
+     * than filled with an occupying net id, because a through-hole via
+     * has to be allowed to pass through it (the plane's antipad is cut by
+     * the pour, not by the router) and via_ok() would otherwise refuse
+     * every via on the board.  -1 for a board with no such layer. */
+    int plane_l;
+    const int *occ;              /* [NL][NY][NX] */
+    const unsigned char *cont;   /* [NL][NY][NX] */
+    const unsigned char *blk;    /* [NL][NY][NX] or NULL */
+    const int *use;              /* [NL][NY][NX] or NULL */
+    const float *hist;           /* [NL][NY][NX] or NULL */
     int nid, relaxed, via_r;
     double pres_fac;
 } Ctx;
@@ -80,6 +87,7 @@ typedef struct {
 #define IDX(c, L, x, y) (((L) * (c)->NY + (y)) * (c)->NX + (x))
 
 static int passable(const Ctx *c, int L, int x, int y) {
+    if (L == c->plane_l) return 0;
     if (x < 1 || x >= c->NX - 1 || y < 1 || y >= c->NY - 1) return 0;
     long i = IDX(c, L, x, y);
     if (!c->relaxed && c->cont[i]) return 0;
@@ -94,7 +102,8 @@ static int passable(const Ctx *c, int L, int x, int y) {
  * the cells around it as claimed. */
 static int via_ok(const Ctx *c, int x, int y) {
     int r = c->via_r;
-    for (int L = 0; L < 2; L++) {
+    for (int L = 0; L < c->NL; L++) {
+        if (L == c->plane_l) continue;
         int a = x - r < 0 ? 0 : x - r, b = y - r < 0 ? 0 : y - r;
         int d = x + r > c->NX - 1 ? c->NX - 1 : x + r;
         int e = y + r > c->NY - 1 ? c->NY - 1 : y + r;
@@ -157,15 +166,16 @@ static int ensure_buffers(long N) {
 
 /* Returns path length in nodes, writing (layer, x, y) triples into out.
  * -1 if no path.  `out` must have room for cap triples. */
-int route(int NX, int NY,
+int route(int NX, int NY, int NL, int plane_l,
           const int *occ, const unsigned char *cont,
           const unsigned char *blk, const int *use, const float *hist,
           int nid, int relaxed, int via_r, double pres_fac, double via_cost,
           const int *src, int nsrc, const int *tgt, int ntgt,
           int tgx, int tgy, int *out, int cap, long max_expand)
 {
-    Ctx c = { NX, NY, occ, cont, blk, use, hist, nid, relaxed, via_r, pres_fac };
-    long N = (long) 2 * NY * NX;
+    Ctx c = { NX, NY, NL, plane_l, occ, cont, blk, use, hist,
+              nid, relaxed, via_r, pres_fac };
+    long N = (long) NL * NY * NX;
     if (!ensure_buffers(N)) return -1;
 
     g_epoch++;
@@ -218,7 +228,12 @@ int route(int NX, int NY,
         int y = rem / NX, x = rem % NX;
         double gc = g[node];
 
-        for (int d = 0; d < 5; d++) {
+        /* Four planar steps, then one layer change per OTHER layer.  A
+         * via here is a through-hole one - JLCPCB's standard 4-layer
+         * process has no blind or buried vias - so it joins every layer
+         * at once and a step to any other layer costs the same single
+         * via.  With NL = 2 this is exactly the old `nl = 1 - L`. */
+        for (int d = 0; d < 4 + (NL - 1); d++) {
             int nl = L, nx = x, ny = y;
             double step;
             switch (d) {
@@ -226,7 +241,7 @@ int route(int NX, int NY,
                 case 1: nx = x - 1; step = 1.0; break;
                 case 2: ny = y + 1; step = 1.0; break;
                 case 3: ny = y - 1; step = 1.0; break;
-                default: nl = 1 - L; step = via_cost; break;
+                default: nl = (L + 1 + (d - 4)) % NL; step = via_cost; break;
             }
             if (!passable(&c, nl, nx, ny)) continue;
             if (nl != L && !via_ok(&c, x, y)) continue;
@@ -284,11 +299,11 @@ int route(int NX, int NY,
  * can ask the only question that matters: is every ground pad in the same
  * piece of copper?
  * ------------------------------------------------------------------ */
-int flood(int NX, int NY, const unsigned char *mask,
+int flood(int NX, int NY, int NL, const unsigned char *mask,
           const unsigned char *joint, const int *seeds, int nseed,
           unsigned char *seen)
 {
-    long N = (long) 2 * NY * NX;
+    long N = (long) NL * NY * NX;
     int *q = (int *) malloc(N * sizeof(int));
     if (!q) return -1;
     long head = 0, tail = 0;
@@ -306,18 +321,20 @@ int flood(int NX, int NY, const unsigned char *mask,
         int L = (int) (node / ((long) NY * NX));
         int rem = (int) (node % ((long) NY * NX));
         int y = rem / NX, x = rem % NX;
-        for (int d = 0; d < 5; d++) {
+        for (int d = 0; d < 4 + (NL - 1); d++) {
             int nl = L, nx = x, ny = y;
             switch (d) {
                 case 0: nx++; break;
                 case 1: nx--; break;
                 case 2: ny++; break;
                 case 3: ny--; break;
-                default: nl = 1 - L; break;      /* only where the layers meet */
+                /* only where the layers meet - a plated hole ties ALL of
+                 * them, so every other layer is one step away */
+                default: nl = (L + 1 + (d - 4)) % NL; break;
             }
             if (nx < 0 || ny < 0 || nx >= NX || ny >= NY) continue;
             long k = ((long) nl * NY + ny) * NX + nx;
-            if (d == 4 && !joint[((long) L * NY + y) * NX + x]) continue;
+            if (d >= 4 && !joint[((long) L * NY + y) * NX + x]) continue;
             if (!mask[k] || seen[k]) continue;
             seen[k] = 1;
             q[tail++] = (int) k;

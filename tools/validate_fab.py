@@ -16,7 +16,7 @@ Both are checked here by re-reading the written artifacts, not by asking
 the generator what it thinks it wrote - the same reason verify() does not
 reuse the router's bookkeeping.
 
-Limits are JLCPCB's published capabilities for a standard 2-layer 1 oz
+Limits are JLCPCB's published capabilities for a standard 1 oz
 process. They are conservative on purpose: where JLC quotes a value for
 their advanced process too, the standard one is used, because the whole
 point is that the board can be ordered without special handling.
@@ -43,7 +43,12 @@ NET = os.path.join(ROOT, "docs", "netlist-%s.json" % SLUG)
 
 MM = 0.254                      # 1 unit = 10 mil = 0.254 mm
 
-# --- JLCPCB standard 2-layer capability, in mm ---------------------------
+# --- JLCPCB standard capability, in mm -----------------------------------
+# These were written for the 2-layer process and are kept unchanged for the
+# 4-layer one: every limit below is the same or looser on 4 layers (same
+# 0.2 mm minimum drill, same 0.13 mm annular ring, and a finer minimum
+# trace/space, not a coarser one), so they stay valid and stay
+# conservative.  What 4 layers DOES change is the price, not the geometry.
 MIN_TRACE = 0.127               # 5 mil
 MIN_CLEAR = 0.127               # 5 mil
 MIN_DRILL = 0.20                # smallest via drill
@@ -55,8 +60,11 @@ MIN_EDGE_CU = 0.20              # copper to board outline
 MAX_BOARD = 500.0               # beyond this leaves the standard price tiers
 PRICE_TIER = 100.0              # the 100 x 100 mm cheap tier
 
-# EasyEDA layer ids that a 2-layer board may reference.
-LAYERS_OK = set("1 2 3 4 5 6 7 8 9 10 11 12 13 100 101".split())
+# EasyEDA layer ids the board may reference.  21/22 are Inner1/Inner2 -
+# the GND plane and the third signal layer of the 4-layer stackup.
+LAYERS_OK = set("1 2 3 4 5 6 7 8 9 10 11 12 13 21 22 100 101".split())
+# Copper layers, for the pour and clearance checks below.
+COPPER_LAYERS = ("1", "2", "21", "22")
 
 problems, notes = [], []
 
@@ -180,7 +188,7 @@ def check_fab(doc):
             w, layer = float(f[1]) * MM, f[2]
             if layer == "3":
                 silk_widths[round(w, 4)] += 1
-            elif layer in ("1", "2"):          # copper only
+            elif layer in COPPER_LAYERS:       # copper only
                 trace_widths[round(w, 4)] += 1
             elif layer == "10":                # board outline, not copper
                 outline_w[round(w, 4)] += 1
@@ -378,7 +386,10 @@ def check_netlist(doc):
     # decoration any more - it is the net.  A board that lost it would
     # still pass every other check here, because ground pads and stitching
     # vias keep the name present.
-    if pour_layers.get("GND", set()) >= {"1", "2"}:
+    if pour_layers.get("GND", set()) >= set(COPPER_LAYERS):
+        note("GND is a plane: copper pour present on all four layers, "
+             "Inner1 solid")
+    elif pour_layers.get("GND", set()) >= {"1", "2"}:
         note("GND is a plane: copper pour present on both layers")
     else:
         bad("GND has no copper pour on both layers - it is not routed as a "
@@ -445,7 +456,7 @@ def main():
             print("  - %s" % p)
         return 1
     print("OK: imports as an EasyEDA PCB, and every dimension is inside "
-          "JLCPCB's standard 2-layer capability")
+          "JLCPCB's standard capability")
     return 0
 
 

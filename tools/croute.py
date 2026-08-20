@@ -44,6 +44,7 @@ def _load():
         lib.route.restype = ctypes.c_int
         lib.route.argtypes = [
             ctypes.c_int, ctypes.c_int,                        # NX, NY
+            ctypes.c_int, ctypes.c_int,                        # NL, plane_l
             np.ctypeslib.ndpointer(np.int32, flags="C"),        # occ
             np.ctypeslib.ndpointer(np.uint8, flags="C"),        # contested
             ctypes.c_void_p,                                    # blocked or NULL
@@ -59,7 +60,7 @@ def _load():
         ]
         lib.flood.restype = ctypes.c_int
         lib.flood.argtypes = [
-            ctypes.c_int, ctypes.c_int,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int,          # NX, NY, NL
             np.ctypeslib.ndpointer(np.uint8, flags="C"),
             np.ctypeslib.ndpointer(np.uint8, flags="C"),
             np.ctypeslib.ndpointer(np.int32, flags="C"), ctypes.c_int,
@@ -73,13 +74,16 @@ def _load():
 
 
 def flood(mask, joint, seeds, ny, nx):
-    """Connected cells of a copper pour, across both layers.
+    """Connected cells of a copper pour, across every copper layer.
 
-    mask/joint are (2, NY, NX) uint8; seeds are (L, x, y).  Returns the
+    mask/joint are (NL, NY, NX) uint8; seeds are (L, x, y).  Returns the
     reached mask, so the caller can check every ground pad landed in the
-    same piece of copper."""
+    same piece of copper.  The layer count comes from the mask - a plated
+    hole ties ALL layers, so on a 4-layer board a joint cell reaches three
+    other layers rather than one."""
     _load()
-    seen = np.zeros((2, ny, nx), dtype=np.uint8)
+    nl = mask.shape[0]
+    seen = np.zeros((nl, ny, nx), dtype=np.uint8)
     sd = _sorted_cells(seeds)
     if sd.size == 0:
         return seen
@@ -105,13 +109,17 @@ def flood(mask, joint, seeds, ny, nx):
                 if 0 <= nxp < nx and 0 <= nyp < ny and not seen[L, nyp, nxp] and mask[L, nyp, nxp]:
                     seen[L, nyp, nxp] = 1
                     q.append((L, nxp, nyp))
-            # layer transition if joint ties layers here
-            other = 1 - L
-            if joint[other, y, x] and not seen[other, y, x] and mask[other, y, x]:
-                seen[other, y, x] = 1
-                q.append((other, x, y))
+            # layer transition if a plated hole ties the layers here -
+            # and it ties all of them, not just the opposite one
+            if joint[L, y, x]:
+                for other in range(nl):
+                    if other == L:
+                        continue
+                    if not seen[other, y, x] and mask[other, y, x]:
+                        seen[other, y, x] = 1
+                        q.append((other, x, y))
         return seen
-    _LIB.flood(nx, ny,
+    _LIB.flood(nx, ny, nl,
                np.ascontiguousarray(mask, dtype=np.uint8),
                np.ascontiguousarray(joint, dtype=np.uint8),
                sd, len(sd) // 3, seen)
@@ -150,8 +158,12 @@ def _sorted_cells(cells):
 
 
 def route(occ, contested, blocked, use, hist, nid, relaxed, via_r,
-          pres_fac, via_cost, sources, targets, tgt_xy, ny, nx):
-    """One net.  Arrays are (2, NY, NX); sources/targets are (L, x, y).
+          pres_fac, via_cost, sources, targets, tgt_xy, ny, nx, plane_l=-1):
+    """One net.  Arrays are (NL, NY, NX); sources/targets are (L, x, y).
+
+    `plane_l` names a copper layer that is present but not routable - the
+    solid GND plane on the 4-layer stackup.  Vias still pass through it;
+    the router simply never puts a track there.
 
     Returns the path as a list of (L, x, y), or None.  Semantics match
     astar() in gen_pcb_smd.py exactly - this exists to make that search
@@ -161,8 +173,9 @@ def route(occ, contested, blocked, use, hist, nid, relaxed, via_r,
     # connectivity bookkeeping; sort them so a run is reproducible.
     src = _sorted_cells(sources)
     tgt = _sorted_cells(targets)
+    nl = occ.shape[0]
     global _OUT
-    need = 3 * 2 * ny * nx
+    need = 3 * nl * ny * nx
     if _OUT is None or _OUT.size < need:
         _OUT = np.empty(need, dtype=np.int32)
     out = _OUT
@@ -170,14 +183,14 @@ def route(occ, contested, blocked, use, hist, nid, relaxed, via_r,
     def ptr(a):
         return a.ctypes.data_as(ctypes.c_void_p) if a is not None else None
 
-    n = _LIB.route(nx, ny,
+    n = _LIB.route(nx, ny, nl, plane_l,
                    np.ascontiguousarray(occ, dtype=np.int32),
                    np.ascontiguousarray(contested, dtype=np.uint8),
                    ptr(blocked), ptr(use), ptr(hist),
                    nid, 1 if relaxed else 0, via_r, pres_fac, via_cost,
                    src, len(src) // 3, tgt, len(tgt) // 3,
                    int(tgt_xy[0]), int(tgt_xy[1]),
-                   out, 2 * ny * nx, MAX_EXPAND)
+                   out, nl * ny * nx, MAX_EXPAND)
     if n < 0:
         return None
     return [tuple(int(v) for v in out[3 * i:3 * i + 3]) for i in range(n)]

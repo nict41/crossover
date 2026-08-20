@@ -65,7 +65,8 @@ only be confirmed by a real import:
 
 1. **Rebuild the copper areas** (right-click a pour → *Rebuild copper
    area*, or **Tools → Rebuild all copper areas**). Ground is a **plane**
-   on this board, not a routed net — it is poured on both layers and only
+   on this board, not a routed net — Inner1 is a solid ground plane, the
+   other three layers are poured, and only
    a handful of short stubs are drawn as traces. This used to be optional
    insurance; it is now the thing that connects ground, so do it before
    the DRC below or the DRC will tell you ground is unconnected.
