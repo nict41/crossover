@@ -83,6 +83,29 @@ def problem_count(out):
 # tried twice and silently broke routable nets.
 SEARCH_MAX_EXPAND = "400000"
 
+# Rip-up rounds for the RANKING pass.  ONE, and the difference between one
+# and none is the whole reason ranking cheaply works at all.
+#
+# Measured against six seeds whose expensive ordering was already known
+# (rip-up 6, same cap: seed 1->2, 4->3, 2->11, 3->13, 5->15, 6->16):
+#
+#   rip-up 0   1->13  4->15  2->22  3->20  5->14  6->20    ~35-63 s
+#   rip-up 1   1->2   4->5   2->15  3->20  5->14  6->17    ~73-104 s
+#   rip-up 6   the ground truth above                      ~201 s
+#
+# Rip-up 0 is not a blurred version of the answer, it is a different one:
+# it ranks seed 2 - genuinely the third best - DEAD LAST, and promotes
+# seed 5 into second.  Rip-up 1 reproduces the top two exactly and gets
+# close to their real problem counts.
+#
+# The reason is worth keeping, because it says where rip-up's value
+# actually lives: a good placement needs barely any rip-up (seed 1 is at
+# its final 2 problems after one round), while a marginal one is where the
+# loop grinds through six rounds trading one failure for another.  So the
+# first round buys nearly all of the ranking signal and rounds two to six
+# buy polish on candidates a search is about to discard anyway.
+RANK_RIPUP = "1"
+
 
 PREFILTER_OK = re.compile(r"^PREFILTER OK", re.M)
 
@@ -188,17 +211,12 @@ def main():
     ap.add_argument("--confirm", type=int, default=3,
                     help="how many of the best ranked seeds to re-run at "
                          "production settings (0 to skip)")
-    # OPT-IN until the ordering it assumes has been validated.  The cost
-    # case is measured and strong - 28 s a trial against 201 s at the same
-    # cap - but cheap ranking is only sound if it ORDERS seeds the way the
-    # expensive config does, and rip-up is exactly the mechanism that
-    # rescues a seed whose first route order goes badly (it is what made 63
-    # footprints routable at all: 0 clean in 96 without it).  So switching
-    # it off could plausibly re-rank the field rather than just blur it.
-    # Default flips to on once that is measured, not before.
-    ap.add_argument("--cheap-rank", action="store_true", default=False,
-                    help="rank seeds with one capped, rip-up-free route "
-                         "each, then confirm only the best")
+    ap.add_argument("--cheap-rank", action="store_true", default=True,
+                    help="rank seeds cheaply, then confirm only the best "
+                         "(the default)")
+    ap.add_argument("--no-cheap-rank", dest="cheap_rank",
+                    action="store_false",
+                    help="route every trial at production settings")
     ap.add_argument("--no-screen", action="store_true",
                     help="skip the cheap ground-plane pre-screen and route "
                          "every seed (for measuring the screen itself)")
@@ -243,17 +261,18 @@ def main():
     # and capping it is ~2x) and rip-up, which re-routes the entire board up
     # to seven times to polish a candidate that is about to be thrown away.
     #
-    # Measured on this board: one capped route with rip-up off is seconds,
-    # against minutes for the full treatment, for the same verdict about
-    # whether a seed is worth another look.  So stage two answers "which
-    # seeds are promising" as cheaply as possible and stage three pays the
-    # real price on the handful that survive.  Both filters are pessimistic
-    # in the same direction, which is what makes them safe to rank with and
-    # unsafe to judge with - the same bargain GRID=0.5 offers.
+    # Measured on this board: one capped route with a single rip-up round
+    # costs ~90 s against ~200 s for the full treatment and far more
+    # uncapped, and reproduces the expensive ordering at the top - see
+    # RANK_RIPUP for the numbers, including why zero rounds does NOT.  So
+    # stage two answers "which seeds are promising" cheaply and stage three
+    # pays the real price on the handful that survive.  Both filters are
+    # pessimistic in the same direction, which is what makes them safe to
+    # rank with and unsafe to judge with - the same bargain GRID=0.5 offers.
     rank_env = dict(extra)
     if a.cheap_rank:
         rank_env.setdefault("MAX_EXPAND", SEARCH_MAX_EXPAND)
-        rank_env.setdefault("RIPUP_ROUNDS", "0")
+        rank_env.setdefault("RIPUP_ROUNDS", RANK_RIPUP)
 
     def sweep(jobs, env, timeout, label):
         """Run these trials, printing each one THE MOMENT IT LANDS.

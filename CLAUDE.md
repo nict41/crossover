@@ -28,9 +28,41 @@ plane-escape distance (`0` disables that placement term),
 `PLANE_PREFILTER_ONLY=1` stops after it (that is the search's cheap screen).
 There is deliberately no `BOARD_W` or `BOARD_H` — see below.
 
-`find_board.py` screens every seed with the pre-filter before routing any of
-them, and stops at the first clean board (`--all` sweeps the whole field,
-`--no-screen` skips the screen).
+`find_board.py` screens every seed with the pre-filter, then **ranks
+cheaply and confirms expensively**: one capped route with a single rip-up
+round per seed (~90 s), then the best `--confirm` of them re-run at
+production settings. It streams each verdict as it lands and stops at the
+first clean board (`--all` sweeps the whole field, `--no-screen` skips the
+screen, `--no-cheap-rank` routes everything at full settings).
+
+**A search must never discard what it has already learned.** A 36-seed
+sweep once hit its outer timeout and printed nothing at all - ninety
+minutes, thirty-six boards genuinely routed, not one verdict recoverable,
+because results were collected and printed at the end. Being slow is a
+cost; being slow *and* losing the answers is a bug.
+
+**Rank with one rip-up round, not zero.** Measured against six seeds whose
+expensive ordering was known (rip-up 6: `1->2 4->3 2->11 3->13 5->15
+6->16`):
+
+| config | ordering it produces | cost |
+|---|---|---|
+| rip-up 0 | `1->13 4->15 2->22 3->20 5->14 6->20` | 35-63 s |
+| rip-up 1 | `1->2 4->5 2->15 3->20 5->14 6->17` | 73-104 s |
+| rip-up 6 | the ground truth | ~201 s |
+
+Rip-up 0 is not a blurred version of the answer, it is a *different* one -
+it ranks seed 2, genuinely third best, dead last. Rip-up 1 reproduces the
+top two exactly. The reason says where rip-up's value lives: a good
+placement needs barely any (seed 1 reaches its final 2 problems after one
+round), while a marginal one is where the loop grinds through six rounds
+trading one failure for another. Round one buys the ranking signal;
+rounds two to six buy polish on candidates a search is about to throw away.
+
+**A clean verdict from the cheap pass needs no confirming.** Capping
+expansions and limiting rip-up only make the ROUTER give up sooner;
+neither touches `verify()`, which measures finished copper. The cheap pass
+can miss a good board but cannot invent one.
 
 `gen_schematic.py` builds all four variants and asserts they share identical
 signal connectivity, so a retune that accidentally changed a connection fails
