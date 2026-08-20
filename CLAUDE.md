@@ -530,6 +530,29 @@ pin that cannot escape. `silk_ref_beside()` picks the side in the *local*
 frame and lays the text out in *board* space. `verify()` caught this as "silk
 U2 sits over pad U2A.1".
 
+**Only the DESIGNATOR was protected, and only verify() was asking.** The
+same bug was live in `fp_hdr()`'s pin names for as long as `silk_ref_beside()`
+has existed: `J6`'s `LD1`/`LD2`/`LD3`/`GND` sat at a fixed local offset that
+is clear of the pads at rot 0 and folds back over `J6.1`-`J6.3` at rot 90.
+`silk_beside()` now exists for plain labels and shares `_beside()` with the
+designator version, so there is one implementation of "outside the box on
+this local side, laid out in board space".
+
+**The interesting half is why it survived**, and it is a lesson about where
+a check lives, not about text. `verify()` looks at the board that was
+built, so it only ever saw the angles that board used - the defect was a
+lottery on the seed. It cost `SEED=1` four of its eight DRC problems,
+which is a placement being disqualified for something that has nothing to
+do with its layout. But "does this footprint put a label on its own pad"
+is a question about the FOOTPRINT at an angle, and `probe()` already draws
+every footprint at every allowed angle. Asked there it is deterministic,
+costs nothing, and names every offender at once - which is how the J6
+labels were found at rot 90 and confirmed absent everywhere else in a
+single 1.5 s run. `probe()` raises `SystemExit` on a hit, so a footprint
+edit that reintroduces one cannot be committed. **If a check is finding
+defects intermittently, ask whether the thing it is checking is really a
+property of the artifact or a property of an input the artifact sampled.**
+
 **The placement model is probed, never re-derived.** `probe()` draws each
 footprint into a scratch buffer at each allowed angle and reads its geometry
 back off the shapes it actually emitted. A second, hand-maintained copy of
@@ -723,10 +746,11 @@ background with a timeout; don't poll them in a tight loop.
 
 ## Current state / open threads
 
-### Current board: 4 layers, 147.3 x 84.8 mm, two pinned rows, verifies CLEAN
+### Current board: 4 layers, 151.6 x 68.1 mm, two pinned rows, verifies CLEAN
 
-`SEED=5 ROUTE_SEED=5`, 86 footprints, 242 pads, 223 tracks, 160 vias.
-`verify()` passes every check and `validate_fab.py` passes offline.
+`SEED=5 ROUTE_SEED=1`, 86 footprints, 242 pads, 227 tracks, 154 vias,
+60% utilised. `verify()` passes every check and `validate_fab.py` passes
+offline.
 
 **Ground is FANNED OUT, not repaired, and that is the load-bearing change.**
 Every SMD ground pad gets its own via to the plane before a single signal
@@ -766,9 +790,16 @@ route order touches it, while an unrouted net is exactly what route order
 fixes: the same twelve orders span 2 to 10 problems. It converts a
 stubborn failure into a tractable one.
 
-**The two pinned edge rows cost height**: 70.4 mm becomes 84.8. The board
-before them was smaller partly because it used the strip in FRONT of the
-pot row, where the front panel goes. That area was never really available.
+**The two pinned edge rows cost height - but 2 mm, not 14.** The first
+clean board with the rows in was 84.8 mm tall against 70.4 for the board
+before them, and this file said flatly that the rows cost 14 mm because
+the old board used the strip in FRONT of the pot row, where the front
+panel goes. A single seed is not a price. Re-searching 24 seeds after the
+J6 silk fix moved every placement produced `SEED=5 ROUTE_SEED=1` at
+**68.1 mm**, shorter than the free-terminal board ever was and 17% less
+area than the 84.8 mm one, with the rows still flush (`WIDTH_LOG=1`:
+nothing outside either row). The area the rows forbid IS real; what it
+costs is a search question, and one search result does not answer it.
 
 Beyond the filter the board carries: a master volume, per-band volume, a
 47 kΩ line input, buffered outputs with build-out resistors, DC blocking

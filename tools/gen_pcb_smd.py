@@ -405,6 +405,21 @@ def silk_ref_beside(box, s, size, local_dir):
     clear of the pin rows" once and have it stay true at every angle; where
     that lands on the board, and which way the text then has to be aligned
     to grow away from the part rather than over it, is worked out here."""
+    _beside(box, s, size, local_dir, silk_ref)
+
+
+def silk_beside(box, s, size, local_dir):
+    """silk_ref_beside() for a plain label rather than a designator.
+
+    A pin name has the same problem the designator has and for the same
+    reason - the anchor rotates with the part while the glyphs stay
+    upright - and until this existed only the designator was protected.
+    J6's four pin names sat over J6.1-J6.3 at rot 90, which cost SEED=1
+    four DRC problems that had nothing to do with its layout."""
+    _beside(box, s, size, local_dir, silk)
+
+
+def _beside(box, s, size, local_dir, emit):
     lx0, ly0, lx1, ly1 = box
     pts = [_xy(lx0, ly0), _xy(lx1, ly0), _xy(lx1, ly1), _xy(lx0, ly1)]
     bx0, bx1 = min(p[0] for p in pts), max(p[0] for p in pts)
@@ -421,7 +436,7 @@ def silk_ref_beside(box, s, size, local_dir):
         ax, ay = bx0, by1 + gap + size
     xf_push(0.0, 0.0, 0)
     try:
-        silk_ref(ax, ay, s, size)
+        emit(ax, ay, s, size)
     finally:
         xf_pop()
 
@@ -570,17 +585,24 @@ def fp_hdr(ref, n, x, y, net_of, labels=()):
     also ties the two ground pours together wherever it lands on GND."""
     _m = fp_begin()
     pitch = 10.0                       # 2.54 mm
+    dia = 7.1
     span = pitch * (n - 1)
     for i in range(n):
         px = x - span / 2 + i * pitch
-        pad_tht(ref, i + 1, px, y, net_of(ref, i + 1), dia=7.1, hole=3.9)
+        pad_tht(ref, i + 1, px, y, net_of(ref, i + 1), dia=dia, hole=3.9)
         if i < len(labels):
             # 3.4 units = 0.86 mm.  It was DESIG_SIZE - 1.2, which is
             # 0.71 mm, and validate_fab rejected all eight of them: below
             # 0.8 mm the fab will print it but nobody can read it, and a
             # connector whose pin names are unreadable is a connector you
             # will mis-wire.
-            silk(px - 4, y + 8.5, labels[i], 3.4)
+            #
+            # Placed BESIDE the pad rather than at a fixed local offset:
+            # the offset was clear of the pads in the local frame and
+            # folded back over them at rot 90, because the anchor turns
+            # with the part and the glyphs do not.
+            silk_beside((px - dia / 2, y - dia / 2, px + dia / 2, y + dia / 2),
+                        labels[i], 3.4, (0, 1))
     silk_rect(x - span / 2 - 5, y - 5.5, x + span / 2 + 5, y + 5.5)
     silk_ref_beside((x - span / 2 - 5, y - 5.5, x + span / 2 + 5, y + 5.5),
                     ref, DESIG_SIZE, (0, -1))
@@ -844,6 +866,9 @@ POT_BOSSES = []          # non-plated locating holes, filled in at placement
 # geometry is read back off the shapes it actually emitted, and the buffers
 # are wound back.  The model is therefore the drawing, by construction.
 # --------------------------------------------------------------------------
+SILK_ON_PAD = []
+
+
 def probe(draw, rot):
     """Run `draw` at the origin, rotated by `rot`, and return what it drew
     without leaving any of it behind."""
@@ -861,6 +886,27 @@ def probe(draw, rot):
     del FP_SPANS[m_sp:]
     for k in set(PARTS) - known:
         del PARTS[k]
+
+    # A label over one of its own pads is a defect, and it is a fact about
+    # the FOOTPRINT at that angle - not about where the placer happened to
+    # put the part.  verify() catches it, but only for the angles one board
+    # actually used, which made it a lottery: J6's pin names sat over J6.1
+    # -J6.3 at two of the four rotations and nothing said so until a seed
+    # picked one of them (SEED=1 lost four of its eight DRC problems to it).
+    # The probe already draws every footprint at every allowed angle, so
+    # this is where the question can be asked once and answered for all of
+    # them.
+    for _t in (text_bbox(sh) for sh in my_shapes):
+        if _t is None:
+            continue
+        _sx0, _sy0, _sx1, _sy1, _txt = _t
+        for _pd in my_pads:
+            if (_sx0 < _pd["x"] + _pd["w"] / 2 and _pd["x"] - _pd["w"] / 2 < _sx1
+                    and _sy0 < _pd["y"] + _pd["h"] / 2
+                    and _pd["y"] - _pd["h"] / 2 < _sy1):
+                SILK_ON_PAD.append("silk '%s' sits over pad %s.%s at rot %d"
+                                   % (_txt, _pd["ref"], _pd["num"], rot))
+                break
 
     body = [b[1:] for b in boxes if b[0] == "body"]
     x0 = min(b[1] for b in boxes) - CLEAR
@@ -1135,6 +1181,11 @@ for _r in CHIPS:
 
 GEOM = {ref: {rot: probe(drawer(ref), rot) for rot in rots}
         for ref, rots in ROTS.items()}
+# Every footprint has now been drawn at every angle the placer may pick, so
+# any label-over-own-pad is knowable here, before a single part is placed.
+if SILK_ON_PAD:
+    raise SystemExit("footprint silkscreen defects:\n  " +
+                     "\n  ".join(SILK_ON_PAD))
 
 POT_W = max(GEOM[r][0]["box"][2] - GEOM[r][0]["box"][0] for r in PANEL)
 PANEL_SPAN = PANEL_WIDTH + POT_W
@@ -2231,7 +2282,7 @@ def path_clearance_ok(net, via_pts, polys):
 # Worth having because the measured clean rate over placements alone is only
 # a couple of percent - the same layout often routes cleanly under one order
 # and not another, and searching that is far cheaper than searching seeds.
-_ROUTE_SEED = int(os.environ.get("ROUTE_SEED", 5))
+_ROUTE_SEED = int(os.environ.get("ROUTE_SEED", 1))
 _ORDER_JITTER = {}
 if _ROUTE_SEED:
     import random as _r
