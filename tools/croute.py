@@ -83,6 +83,34 @@ def flood(mask, joint, seeds, ny, nx):
     sd = np.array(sorted(seeds), dtype=np.int32).reshape(-1)
     if sd.size == 0:
         return seen
+    if _LIB is None:
+        # Pure-Python fallback flood fill when the compiled router is
+        # unavailable.  This mirrors the C behaviour: 4-connected flood on
+        # each layer, and layer transitions where `joint` ties the layers.
+        from collections import deque
+        q = deque()
+        for i in range(0, sd.size, 3):
+            L = int(sd[i])
+            x = int(sd[i + 1])
+            y = int(sd[i + 2])
+            if 0 <= x < nx and 0 <= y < ny and mask[L, y, x]:
+                seen[L, y, x] = 1
+                q.append((L, x, y))
+        while q:
+            L, x, y = q.popleft()
+            # 4-neighbour moves
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                nxp = x + dx
+                nyp = y + dy
+                if 0 <= nxp < nx and 0 <= nyp < ny and not seen[L, nyp, nxp] and mask[L, nyp, nxp]:
+                    seen[L, nyp, nxp] = 1
+                    q.append((L, nxp, nyp))
+            # layer transition if joint ties layers here
+            other = 1 - L
+            if joint[other, y, x] and not seen[other, y, x] and mask[other, y, x]:
+                seen[other, y, x] = 1
+                q.append((other, x, y))
+        return seen
     _LIB.flood(nx, ny,
                np.ascontiguousarray(mask, dtype=np.uint8),
                np.ascontiguousarray(joint, dtype=np.uint8),

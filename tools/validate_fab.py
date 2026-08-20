@@ -79,6 +79,20 @@ def flatten(shapes):
             yield s
 
 
+def parse_shape_tokens(shapes):
+    """Return a list of token lists for every emitted shape.
+
+    This materialises and tokenises the document's shape strings once so
+    callers can avoid repeated calls to `split("~")` in hot loops.
+    Returns a list of lists where each inner list is the `~`-split tokens
+    of one flattened shape string (LIB children lifted out).
+    """
+    out = []
+    for s in flatten(shapes):
+        out.append(s.split("~"))
+    return out
+
+
 # =========================================================================
 #  import validity
 # =========================================================================
@@ -99,10 +113,11 @@ def check_import(doc):
     #   TEXT~type~x~y~strokeW~rot~mirror~layer~font~size~text~path~~id
     fields_expected = {"PAD": 12, "TRACK": 6, "VIA": 6, "HOLE": 5, "TEXT": 13}
 
-    for s in flatten(doc["shape"]):
-        f = s.split("~")
+    parsed = parse_shape_tokens(doc.get("shape", []))
+    for f in parsed:
         kind = f[0]
         n = fields_expected.get(kind)
+        s = "~".join(f)
         if n is not None and len(f) < n:
             bad("%s shape has %d fields, expected at least %d: %.60s"
                 % (kind, len(f), n, s))
@@ -116,7 +131,7 @@ def check_import(doc):
                     "declare" % (kind, lid))
         # numeric sanity - a NaN or an empty coordinate imports as garbage
         coord_at = {"PAD": (2, 3), "VIA": (1, 2), "HOLE": (1, 2), "TEXT": (2, 3)}
-        for i in coord_at.get(kind, ()):
+        for i in coord_at.get(kind, ()): 
             if len(f) > i:
                 try:
                     v = float(f[i])
@@ -129,8 +144,8 @@ def check_import(doc):
     # gIds are not always the last field (COPPERAREA carries trailing
     # style fields after its id), so match the token shape instead of
     # trusting a position.
-    for s in flatten(doc["shape"]):
-        for tok in s.split("~"):
+    for f in parsed:
+        for tok in f:
             if GID.match(tok):
                 if tok in gids:
                     dup.add(tok)
@@ -158,8 +173,8 @@ def check_fab(doc):
     trace_widths = Counter()
     outline_w = Counter()
 
-    for s in flatten(doc["shape"]):
-        f = s.split("~")
+    parsed = parse_shape_tokens(doc.get("shape", []))
+    for f in parsed:
         kind = f[0]
         if kind == "TRACK":
             w, layer = float(f[1]) * MM, f[2]

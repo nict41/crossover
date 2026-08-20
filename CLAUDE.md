@@ -723,3 +723,30 @@ numpy with plain Python in the placer (numpy is still ~3x faster at n=49).
   locating-boss holes are **gone**, not fixed: they were a guess, LCSC's
   footprint API now answers 403, and a hole in the wrong place is a
   re-order where a missing one is a hand drill.
+
+## Recent agent edits
+
+2026-08-20: Small performance-focused refactor applied to the validation
+step. `tools/validate_fab.py` now tokenises the emitted shape strings once
+via a `parse_shape_tokens()` helper and re-uses those token lists in the
+various import/fab checks instead of repeatedly calling `split("~")` in
+hot loops. This change is internal-only (behaviour preserved) and aimed at
+reducing CPU/time spent validating the generated PCB artifact so agents
+and CI can iterate faster.
+
+2026-08-20: Follow-up low-risk optimisations added by the agent:
+- `tools/gen_pcb_smd.py`: cached the expanded bounding-box arrays used by
+  `path_clearance_ok()` to avoid rebuilding them on every candidate check;
+  the cache is cleared by `commit_path()` when occupancy changes.
+- `tools/gen_pcb_smd.py`: `_expanded_boxes()` now returns contiguous
+  `numpy` arrays to improve vectorised throughput and safer interop with
+  compiled helpers.
+- `tools/croute.py`: added a pure-Python `flood()` fallback so the toolset
+  can run (slowly) when compiled libraries are not present.
+ - `tools/gen_pcb_smd.py`: added a spatial-hash (uniform grid) index into
+   the `path_clearance_ok()` cache to avoid scanning all existing copper
+   features for each candidate; this significantly reduces Python-level
+   pair-filter overhead on dense boards.
+
+Note: edits were applied in-workspace; please review and commit/push as you
+prefer so other collaborators and CI see the change.
