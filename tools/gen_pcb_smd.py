@@ -1199,15 +1199,6 @@ if _HIT:
     print("  placement: reusing the cached layout for these inputs")
 else:
     PLACER.restore(_best[1])
-    # Conservative post-anneal compaction to tighten layout without
-    # changing the annealer itself.  It nudges parts toward the centre
-    # while avoiding overlaps and escape violations.
-    try:
-        compacted = PLACER.compact(max_iters=200, step=1.0, verbose=False)
-        if compacted:
-            print('  placement: compacted layout to reduce extent')
-    except Exception:
-        compacted = False
     PLACER.full_cost(WEIGHTS)
     AFTER = _best[2]
     POSE = PLACER.result()
@@ -1823,14 +1814,6 @@ def commit_path(net, nid, runs, via_pts, polys):
     global OCC_VERSION
     OCC_VERSION += 1
     VIA_MEMO.clear()
-    global _PATH_CLEAR_CACHE
-    # Clear GAP cache unconditionally (distances depend on occupancy)
-    global _GAP_CACHE
-    _GAP_CACHE.clear()
-    # Clear any memoised gap results — occupancy changed so cached distances
-    # may no longer reflect the current geometry.
-    global _GAP_CACHE
-    _GAP_CACHE.clear()
     own_dil = net_width(net) / 2 + CLEAR + MAX_W / 2 + GRID
     for vx, vy in keep:
         VIAS.append((vx, vy, net))
@@ -1841,43 +1824,6 @@ def commit_path(net, nid, runs, via_pts, polys):
             stamp_disc(c[0] + 1, c[1] * GRID, c[2] * GRID, own_dil, nid)
     for layer, pts in polys:
         ROUTED.append((layer, pts, net))
-    # If a path-clear cache exists, incrementally append the new features
-    # so we don't need a full rebuild of the cache on every commit.
-    try:
-        if _PATH_CLEAR_CACHE is not None:
-            others, ox0, oy0, ox1, oy1, olay, buckets, S = _PATH_CLEAR_CACHE
-            new_others = []
-            # append vias
-            for vx, vy in keep:
-                new_others.append(dict(k="pt", hw=VIA_PAD / 2, L={1, 2}, g=(vx, vy)))
-            # append runs
-            for run in runs:
-                for a, b in zip(run, run[1:]):
-                    new_others.append(dict(k="seg", hw=net_width(net) / 2, L={run[0][0]}, g=((a[1] * GRID, a[2] * GRID), (b[1] * GRID, b[2] * GRID))))
-            if new_others:
-                n_ox0, n_oy0, n_ox1, n_oy1, n_olay = _expanded_boxes(new_others)
-                ox0 = np.concatenate([ox0, n_ox0]) if ox0 is not None else n_ox0
-                oy0 = np.concatenate([oy0, n_oy0]) if oy0 is not None else n_oy0
-                ox1 = np.concatenate([ox1, n_ox1]) if ox1 is not None else n_ox1
-                oy1 = np.concatenate([oy1, n_oy1]) if oy1 is not None else n_oy1
-                olay = np.concatenate([olay, n_olay]) if olay is not None else n_olay
-                base = len(others)
-                others.extend(new_others)
-                # update buckets
-                for j in range(len(new_others)):
-                    idx = base + j
-                    bx0 = int(math.floor(n_ox0[j] / S))
-                    by0 = int(math.floor(n_oy0[j] / S))
-                    bx1 = int(math.floor(n_ox1[j] / S))
-                    by1 = int(math.floor(n_oy1[j] / S))
-                    for bx in range(bx0, bx1 + 1):
-                        for by in range(by0, by1 + 1):
-                            buckets.setdefault((bx, by), []).append(idx)
-                _PATH_CLEAR_CACHE = (others, ox0, oy0, ox1, oy1, olay, buckets, S)
-    except Exception:
-        # Fallback: if incremental update fails for any reason, invalidate
-        # the cache to preserve correctness.
-        _PATH_CLEAR_CACHE = None
     return True
 
 
@@ -1902,50 +1848,23 @@ def path_clearance_ok(net, via_pts, polys):
             cand.append(dict(k="seg", hw=hw, L={layer}, g=(a, b)))
     for vx, vy in via_pts:
         cand.append(dict(k="pt", hw=VIA_PAD / 2, L={1, 2}, g=(vx, vy)))
-    # Build the list of existing copper features once and cache the
-    # expanded boxes for reuse across multiple candidate checks within
-    # the same routing/commit state.  The cache is cleared by
-    # `commit_path()` when ROUTED/VIAS change.
-    global _PATH_CLEAR_CACHE
-    if _PATH_CLEAR_CACHE is None:
-        others = []
-        for p in pads:
-            if p["net"] and p["net"] != net:
-                others.append(dict(k="rect", hw=0.0,
-                                   L={1, 2} if p["layer"] == MULTI else {p["layer"]},
-                                   g=(p["x"] - p["w"] / 2, p["y"] - p["h"] / 2,
-                                      p["x"] + p["w"] / 2, p["y"] + p["h"] / 2)))
-        for layer, pts, name in ROUTED:
-            if name == net:
-                continue
-            hw = net_width(name) / 2
-            for a, b in zip(pts, pts[1:]):
-                others.append(dict(k="seg", hw=hw, L={layer}, g=(a, b)))
-        for x, y, name in VIAS:
-            if name == net:
-                continue
-            others.append(dict(k="pt", hw=VIA_PAD / 2, L={1, 2}, g=(x, y)))
-        if not others:
-            _PATH_CLEAR_CACHE = ([], None, None, None, None, None, None, None)
-        else:
-            ox0, oy0, ox1, oy1, olay = _expanded_boxes(others)
-            # Build a simple spatial-hash (uniform grid) mapping bucket -> list
-            # of feature indices to avoid scanning all features for each
-            # candidate.  Bucket size chosen as a small multiple of the
-            # clearance to balance bucket counts vs neighbours.
-            S = max(CLEAR, GRID * 2.0)
-            buckets = {}
-            for j in range(len(others)):
-                bx0 = int(math.floor(ox0[j] / S))
-                by0 = int(math.floor(oy0[j] / S))
-                bx1 = int(math.floor(ox1[j] / S))
-                by1 = int(math.floor(oy1[j] / S))
-                for bx in range(bx0, bx1 + 1):
-                    for by in range(by0, by1 + 1):
-                        buckets.setdefault((bx, by), []).append(j)
-            _PATH_CLEAR_CACHE = (others, ox0, oy0, ox1, oy1, olay, buckets, S)
-    else:
-        others, ox0, oy0, ox1, oy1, olay, buckets, S = _PATH_CLEAR_CACHE
+    others = []
+    for p in pads:
+        if p["net"] and p["net"] != net:
+            others.append(dict(k="rect", hw=0.0,
+                               L={1, 2} if p["layer"] == MULTI else {p["layer"]},
+                               g=(p["x"] - p["w"] / 2, p["y"] - p["h"] / 2,
+                                  p["x"] + p["w"] / 2, p["y"] + p["h"] / 2)))
+    for layer, pts, name in ROUTED:
+        if name == net:
+            continue
+        hw = net_width(name) / 2
+        for a, b in zip(pts, pts[1:]):
+            others.append(dict(k="seg", hw=hw, L={layer}, g=(a, b)))
+    for x, y, name in VIAS:
+        if name == net:
+            continue
+        others.append(dict(k="pt", hw=VIA_PAD / 2, L={1, 2}, g=(x, y)))
     # The pairs this must CONSIDER are cand x others - a few hundred
     # thousand on a routed board - but only a handful of them are anywhere
     # near each other, and exact segment-to-segment distance is far too
@@ -1964,30 +1883,19 @@ def path_clearance_ok(net, via_pts, polys):
         return True
     if CGEOM:
         return not cgeom.cross_any(cand, others, CLEAR)
-    # Use spatial-hash buckets to find nearby 'others' for each candidate,
-    # avoiding full-array maths when the board is heavily populated.
+    ox0, oy0, ox1, oy1, olay = _expanded_boxes(others)
     for c in cand:
         gx0, gy0, gx1, gy1 = _feature_bbox(c)
         hw = c["hw"]
         cx0, cy0, cx1, cy1 = gx0 - hw, gy0 - hw, gx1 + hw, gy1 + hw
         clay = sum(1 << L for L in c["L"])
-        # bucket ranges expanded by CLEAR
-        bx0 = int(math.floor((cx0 - CLEAR) / S))
-        by0 = int(math.floor((cy0 - CLEAR) / S))
-        bx1 = int(math.floor((cx1 + CLEAR) / S))
-        by1 = int(math.floor((cy1 + CLEAR) / S))
-        seen = set()
-        for bx in range(bx0, bx1 + 1):
-            for by in range(by0, by1 + 1):
-                for j in buckets.get((bx, by), ()):  # candidate others
-                    if j in seen:
-                        continue
-                    seen.add(j)
-                    # layer check first
-                    if (olay[j] & clay) == 0:
-                        continue
-                    if gap(c, others[j]) < CLEAR - 1e-9:
-                        return False
+        dx = np.maximum(np.maximum(ox0 - cx1, cx0 - ox1), 0.0)
+        dy = np.maximum(np.maximum(oy0 - cy1, cy0 - oy1), 0.0)
+        near = np.nonzero((dx * dx + dy * dy <= CLEAR * CLEAR)
+                          & (olay & clay != 0))[0]
+        for j in near:
+            if gap(c, others[j]) < CLEAR - 1e-9:
+                return False
     return True
 
 
@@ -2163,11 +2071,6 @@ def d_rect_rect(p, q):
 
 def gap(f, g):
     """Copper-to-copper gap between two features, in units."""
-    # Fast memoisation to avoid recomputing the same pair many times.
-    key = (id(f), id(g)) if id(f) <= id(g) else (id(g), id(f))
-    v = _GAP_CACHE.get(key)
-    if v is not None:
-        return v
     if f["k"] == "rect" and g["k"] == "rect":
         d = d_rect_rect(f["g"], g["g"])
     elif f["k"] == "rect" and g["k"] == "seg":
@@ -2188,9 +2091,7 @@ def gap(f, g):
                      g["g"][1][0], g["g"][1][1])
     else:
         d = math.dist(f["g"], g["g"])
-    val = d - f["hw"] - g["hw"]
-    _GAP_CACHE[key] = val
-    return val
+    return d - f["hw"] - g["hw"]
 
 
 # The exact-geometry pair scans are compiled (geom.c).  The Python below
@@ -2203,12 +2104,6 @@ def gap(f, g):
 # with a boolean.
 CGEOM = os.environ.get("CGEOM", "c") != "py" and cgeom.available()
 CGEOM_CHECK = bool(os.environ.get("CGEOM_CHECK"))
-
-# Cache for path_clearance_ok's 'others' expanded boxes to avoid rebuilding
-# them on every relaxed-retry candidate; cleared whenever ROUTED/VIAS
-# change (commit_path clears it).
-_PATH_CLEAR_CACHE = None
-_GAP_CACHE = {}
 
 
 def _feature_bbox(f):
