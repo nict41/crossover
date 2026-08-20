@@ -2730,8 +2730,18 @@ def _order_cache_file():
     # start each arm from the order the OTHER arm had learned and measure
     # nothing.  That is precisely how a _rudy fix once got credited to a
     # cached pose computed under the bug.
-    return os.path.join(PLACE_CACHE, "%s-order%d-lh%d.json"
-                        % (_place_key(), _ROUTE_SEED, LONG_HAUL_N))
+    #
+    # GRID belongs here for the same reason, and more sharply.  It does not
+    # affect PLACEMENT, so _place_key() rightly ignores it - but it changes
+    # routing completely, and a coarse-grid run is exactly what a search
+    # uses to rank cheaply.  Without GRID in this key, ranking at GRID=0.5
+    # would write its learned order into the slot the production GRID=0.25
+    # run reads, so regenerating the winner would build a DIFFERENT board
+    # from the one the search measured - and it would look like the seed
+    # simply failed to reproduce.
+    return os.path.join(PLACE_CACHE, "%s-order%d-lh%d-g%s.json"
+                        % (_place_key(), _ROUTE_SEED, LONG_HAUL_N,
+                           repr(GRID).replace(".", "_")))
 
 
 def load_route_order():
