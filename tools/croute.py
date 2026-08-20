@@ -80,7 +80,7 @@ def flood(mask, joint, seeds, ny, nx):
     same piece of copper."""
     _load()
     seen = np.zeros((2, ny, nx), dtype=np.uint8)
-    sd = np.array(sorted(seeds), dtype=np.int32).reshape(-1)
+    sd = _sorted_cells(seeds)
     if sd.size == 0:
         return seen
     if _LIB is None:
@@ -126,6 +126,29 @@ def available():
 MAX_EXPAND = int(os.environ.get("MAX_EXPAND", 0))     # 0 = uncapped
 
 
+def _sorted_cells(cells):
+    """(L, x, y) triples as a flat int32 array, in tuple-sorted order.
+
+    The sort is for reproducibility - these arrive as sets - but Python's
+    `sorted()` compares three-tuples, and plane_stubs() offers A* every
+    reached plane cell as a target: 1.04 MILLION target triples over a
+    production run, one call alone sorting 132492.  That made `sorted` the
+    largest single block of Python left outside the router itself.
+
+    np.lexsort with the keys reversed gives exactly the tuple ordering -
+    primary L, then x, then y - and is 2.4x faster on the big case.
+    Checked against `sorted()` over random sets; the orderings are
+    identical, so a run stays reproducible.
+    """
+    n = len(cells)
+    if n == 0:
+        return np.empty(0, dtype=np.int32)
+    a = np.fromiter((v for c in cells for v in c), dtype=np.int32,
+                    count=3 * n).reshape(n, 3)
+    idx = np.lexsort((a[:, 2], a[:, 1], a[:, 0]))
+    return a[idx].reshape(-1)
+
+
 def route(occ, contested, blocked, use, hist, nid, relaxed, via_r,
           pres_fac, via_cost, sources, targets, tgt_xy, ny, nx):
     """One net.  Arrays are (2, NY, NX); sources/targets are (L, x, y).
@@ -136,8 +159,8 @@ def route(occ, contested, blocked, use, hist, nid, relaxed, via_r,
     _load()
     # sources/targets arrive as sets of (L, x, y) from the caller's
     # connectivity bookkeeping; sort them so a run is reproducible.
-    src = np.array(sorted(sources), dtype=np.int32).reshape(-1)
-    tgt = np.array(sorted(targets), dtype=np.int32).reshape(-1)
+    src = _sorted_cells(sources)
+    tgt = _sorted_cells(targets)
     global _OUT
     need = 3 * 2 * ny * nx
     if _OUT is None or _OUT.size < need:

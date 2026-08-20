@@ -344,6 +344,49 @@ candidate gets an exact-geometry clearance check before being committed, after
 a bare relaxed retry once produced a real −5 mil via overlap. `via_ok()` stays
 strict even in relaxed mode.
 
+**Production runs: 5.95 s -> 5.11 s (14%), and how to measure that
+honestly.** Profiling a WARM production run (cached placement and learned
+route order, the thing you actually run to regenerate the board) put the
+Python cost here:
+
+| | tottime | calls |
+|---|---|---|
+| `croute.route` (real C time) | 1.70 s | 146 |
+| **`_block` + `cells_in_rect`** in the pour | ~1.2 s | **~280k** |
+| **`sorted`** in `croute` | 0.72 s | 608 |
+| `stamp_disc` | 0.62 s | 37k |
+
+Both were fixed, both bit-identical:
+
+* **The pour's segment stamping is compiled** (`geom.c: block_segments`).
+  `pour_connectivity()` walks every non-GND trace sampling it every
+  `GRID/2` and stamping a square - 280000 interpreter round trips. The C is
+  a transcription, same sample count and cell arithmetic, so the mask is
+  bit-identical; `CGEOM_CHECK=1` asserts it. Rasterising the capsule
+  analytically would be faster and NOT identical, which is not a trade
+  worth making in the checker that decides whether the board can be built.
+* **`croute` sorts its cell sets with `np.lexsort`, not `sorted()`.**
+  `plane_stubs()` offers A* every reached plane cell as a target: **1.04
+  million target triples** over a run, one call alone sorting 132492.
+  `np.lexsort` with the keys reversed gives exactly the tuple ordering, so
+  a run stays reproducible; checked against `sorted()` over 200 random
+  sets.
+
+**Two measurement lessons, both of which cost a wrong conclusion first:**
+
+* **cProfile overstates call-heavy Python by roughly its own per-call
+  overhead.** The pour loop profiled at ~1.2 s and was really ~0.34 s -
+  280k calls x ~2 us of profiler is most of the difference. Use the profile
+  to RANK candidates, never to predict the size of a win.
+* **Three runs cannot see a 10% effect here.** Run-to-run variance on this
+  box is +-11%, so the first A/B of the sort change read as "no change".
+  Interleave the two arms and compare MEDIANS over 6+ runs: base 5.75 /
+  5.95 / 6.00 (min/median/mean) against 4.70 / 5.11 / 5.12.
+
+What is left is mostly the compiled router (~1.7 s of ~5.1 s) and
+`stamp_disc`; the pure-Python A* (`astar_py`, `passable`) is **not** on the
+production path at all - see the note below about counting calls first.
+
 **Runtime is no longer dominated by the router — profile before optimising
 it.** That sentence used to read "Runtime is dominated by A* in pure
 Python", and it stayed in this file long after `router.c` made it false.

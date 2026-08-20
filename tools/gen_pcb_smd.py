@@ -2273,16 +2273,41 @@ def pour_connectivity():
         for L in layers:
             foreign[L, b:d + 1, a:c + 1] = True
 
+    # Every non-GND trace, at its own width.  This was 280000 interpreter
+    # round trips a run - the biggest block of Python left in a production
+    # run - so it is compiled (geom.c).  The Python below is the reference
+    # it was transcribed from, and CGEOM_CHECK=1 stamps both and asserts the
+    # masks come out bit-identical.
+    _segs = []
     for layer, pts, net in ROUTED:
         if net == "GND":
             continue
         hw = net_width(net) / 2
         for (ax, ay), (bx, by) in zip(pts, pts[1:]):
-            n = max(1, int(math.dist((ax, ay), (bx, by)) / (GRID / 2)))
+            _segs.append((layer - 1, ax, ay, bx, by, hw))
+
+    def _stamp_segs_py(dst):
+        for _L, _ax, _ay, _bx, _by, _hw in _segs:
+            n = max(1, int(math.dist((_ax, _ay), (_bx, _by)) / (GRID / 2)))
             for i in range(n + 1):
-                cx = ax + (bx - ax) * i / n
-                cy = ay + (by - ay) * i / n
-                _block([layer - 1], cx - hw, cy - hw, cx + hw, cy + hw)
+                cx = _ax + (_bx - _ax) * i / n
+                cy = _ay + (_by - _ay) * i / n
+                a, b, c, d = cells_in_rect(cx - _hw, cy - _hw,
+                                           cx + _hw, cy + _hw)
+                dst[_L, b:d + 1, a:c + 1] = True
+
+    if CGEOM and not CGEOM_CHECK:
+        cgeom.block_segments(foreign.view(np.uint8), _segs, GRID)
+    else:
+        _before = foreign.copy()
+        _stamp_segs_py(foreign)
+        if CGEOM:
+            _c = np.ascontiguousarray(_before)
+            cgeom.block_segments(_c.view(np.uint8), _segs, GRID)
+            assert np.array_equal(_c, foreign), (
+                "geom.c and the Python pour stamping disagree: %d cells"
+                % int((_c != foreign).sum()))
+
     for vx, vy, vnet in VIAS:
         if vnet != "GND":
             _block([0, 1], vx - VIA_PAD / 2, vy - VIA_PAD / 2,

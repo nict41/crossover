@@ -48,6 +48,12 @@ def _load():
             ctypes.c_double, ctypes.c_double, ctypes.c_int,
             _IP, ctypes.c_int,
         ]
+        lib.block_segments.restype = None
+        lib.block_segments.argtypes = [
+            ctypes.c_int, ctypes.c_int,
+            np.ctypeslib.ndpointer(np.uint8, flags="C"),
+            ctypes.c_int, _IP, _DP, _DP, _DP, _DP, _DP, ctypes.c_double,
+        ]
         lib.cross_first.restype = None
         lib.cross_first.argtypes = [
             ctypes.c_int, _IP, _DP, _DP, _LP,
@@ -155,3 +161,25 @@ def cross_any(cand, others, limit, eps=1e-9):
     return bool(_LIB.cross_any(len(cand), ka, ga, hwa, la,
                                len(others), kb, gb, hwb, lb,
                                float(limit), float(eps)))
+
+
+def block_segments(mask, segs, grid):
+    """Stamp routed-segment copper into a (2, ny, nx) uint8 mask, in place.
+
+    `segs` is a sequence of (layer, ax, ay, bx, by, half_width) with layer 0
+    or 1, or -1 for both.  Transcribed from the Python in
+    pour_connectivity(): same sample count, same cell arithmetic, so the
+    mask is bit-identical.
+    """
+    _load()
+    n = len(segs)
+    if n == 0:
+        return
+    lay = np.empty(n, dtype=np.int32)
+    ax = np.empty(n); ay = np.empty(n)
+    bx = np.empty(n); by = np.empty(n); hw = np.empty(n)
+    for i, (L, x0, y0, x1, y1, h) in enumerate(segs):
+        lay[i] = L
+        ax[i], ay[i], bx[i], by[i], hw[i] = x0, y0, x1, y1, h
+    ny, nx = mask.shape[1], mask.shape[2]
+    _LIB.block_segments(nx, ny, mask, n, lay, ax, ay, bx, by, hw, float(grid))

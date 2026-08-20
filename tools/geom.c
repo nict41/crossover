@@ -24,6 +24,7 @@
  */
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 static double d_pt_seg(double px, double py,
                        double ax, double ay, double bx, double by)
@@ -150,6 +151,61 @@ static void ebox(int k, const double *g, double hw, double *out)
     out[0] = x0 - hw; out[1] = y0 - hw;
     out[2] = x1 + hw; out[3] = y1 + hw;
 }
+
+/* Stamp the copper of routed segments into a per-layer boolean mask.
+ *
+ * pour_connectivity() models the pour from the REAL copper, which means
+ * walking every non-GND trace and marking the cells its width covers.  The
+ * Python did that by sampling each segment every GRID/2 and stamping a
+ * square at each sample - 280000 interpreter round trips on this board, the
+ * largest single block of Python left in a production run.
+ *
+ * This is a transcription, not an improvement: same sampling count, same
+ * floor/ceil cell arithmetic, same clamping, so the mask comes out
+ * bit-identical.  Rasterising the capsule analytically would be faster
+ * still and would NOT be identical, which is not a trade worth making for
+ * the checker that decides whether the board can be built.
+ *
+ * mask is (2, ny, nx) uint8.  layer[i] is 0 or 1, or -1 to stamp both.
+ */
+void block_segments(int nx, int ny, unsigned char *mask,
+                    int nseg, const int *layer,
+                    const double *ax, const double *ay,
+                    const double *bx, const double *by,
+                    const double *hw, double grid)
+{
+    int s, i, L, y, xa, xb;
+    long plane = (long)ny * nx;
+    for (s = 0; s < nseg; s++) {
+        double dx = bx[s] - ax[s], dy = by[s] - ay[s];
+        double len = sqrt(dx * dx + dy * dy);
+        int n = (int)(len / (grid / 2.0));
+        if (n < 1) n = 1;
+        for (i = 0; i <= n; i++) {
+            double t = (double)i / (double)n;
+            double cx = ax[s] + dx * t, cy = ay[s] + dy * t;
+            int a = (int)floor((cx - hw[s]) / grid);
+            int b = (int)floor((cy - hw[s]) / grid);
+            int c = (int)ceil((cx + hw[s]) / grid);
+            int d = (int)ceil((cy + hw[s]) / grid);
+            if (a < 0) a = 0;
+            if (b < 0) b = 0;
+            if (c > nx - 1) c = nx - 1;
+            if (d > ny - 1) d = ny - 1;
+            if (a > c || b > d) continue;
+            for (L = (layer[s] < 0 ? 0 : layer[s]);
+                 L <= (layer[s] < 0 ? 1 : layer[s]); L++) {
+                unsigned char *p = mask + (long)L * plane;
+                for (y = b; y <= d; y++) {
+                    xa = y * nx + a;
+                    xb = y * nx + c;
+                    memset(p + xa, 1, (size_t)(xb - xa + 1));
+                }
+            }
+        }
+    }
+}
+
 
 /* All pairs i<j that share a layer, pass the net filter, and whose exact
  * gap is below the threshold.
