@@ -164,15 +164,17 @@ static void escape_of(const Cfg *c, St *s, int i) {
     s->pesc[i] = ppen;
 }
 
+/* Nothing outside a pinned EDGE ROW, and nothing between a lone
+ * edge-facing part and its edge.  Mirrors place.edge_violation() - see the
+ * docstring there for why a ROW is checked as one wide part against its own
+ * outer face while a LONE part is checked per column. */
 static double edge_violation(const Cfg *c, const St *s) {
     double pen = 0.0;
     for (int i = 0; i < c->n; i++) {
         int side = c->outward[SLOT(c, s, i)];
-        if (side < 0) continue;
-        int gi = c->group[i];
+        if (side < 0 || c->group[i] >= 0) continue;
         for (int j = 0; j < c->n; j++) {
             if (j == i) continue;
-            if (gi >= 0 && c->group[j] == gi) continue;   /* a group can't block itself */
             double d;
             if (side == 0 || side == 1) {
                 if (!(s->BY0[j] < s->BY1[i] && s->BY1[j] > s->BY0[i])) continue;
@@ -184,6 +186,32 @@ static double edge_violation(const Cfg *c, const St *s) {
             if (d > 0) pen += d * d;
         }
     }
+    int ng = c->ngroups > 0 ? c->ngroups : 1;
+    for (int g = 0; g < c->ngroups; g++) {
+        int side = -1;
+        double face = 0.0;
+        int have = 0;
+        for (int i = 0; i < c->n; i++) {
+            if (c->group[i] != g) continue;
+            int sd = c->outward[SLOT(c, s, i)];
+            if (sd < 0) continue;
+            double f = (sd == 1) ? s->BX1[i] : (sd == 0) ? s->BX0[i]
+                     : (sd == 3) ? s->BY1[i] : s->BY0[i];
+            if (!have || ((sd == 1 || sd == 3) ? f > face : f < face)) face = f;
+            side = sd;
+            have = 1;
+        }
+        if (!have) continue;
+        for (int j = 0; j < c->n; j++) {
+            if (c->group[j] == g) continue;
+            double d = (side == 1) ? s->BX1[j] - face
+                     : (side == 0) ? face - s->BX0[j]
+                     : (side == 3) ? s->BY1[j] - face
+                     : face - s->BY0[j];
+            if (d > 0) pen += d * d;
+        }
+    }
+    (void) ng;
     return pen;
 }
 

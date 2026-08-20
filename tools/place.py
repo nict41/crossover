@@ -440,21 +440,34 @@ class Placer:
                 float(self.BX1.max()), float(self.BY1.max()))
 
     def edge_violation(self):
-        """Parts that have to reach a board edge - the screw terminals take
-        wire from off-board, the panel row IS the panel - are checked by
-        asking whether anything got BETWEEN each one and the edge it faces,
-        within its own column.
+        """Nothing may sit outside a pinned EDGE ROW, and nothing may get
+        between a lone edge-facing part and the edge it faces.
 
-        The obvious test, 'is this part the outermost thing on the board',
-        is wrong in a way that quietly wrecks the search: parts that face
-        the same edge but have different depths (the dual-gang pots reach
-        15 units further than the single-gang ones) can never all be
+        Two cases, and the difference matters.
+
+        A lone part (a terminal block on its own) is checked per COLUMN:
+        has anything got between it and its edge, within its own width.
+        The obvious alternative, 'is this part the outermost thing on the
+        board', is wrong in a way that quietly wrecks the search - parts
+        facing the same edge with different depths can never all be
         outermost, so the penalty never reaches zero and the anneal keeps
-        stretching the board trying to pay it off.  What matters is that
-        the path out is clear, not that every part ends flush."""
+        stretching the board trying to pay it off.
+
+        A rigid ROW - the front panel, the rear connector row - is checked
+        as ONE WIDE PART instead, against its own outer face, with no
+        column test.  That is the whole point of a row: it defines a plane
+        that the board edge sits just behind, and anything outside it is
+        board that has to be paid for and cannot be used.  Per-column was
+        not enough, and the board showed exactly how: `PANEL_PITCH` leaves
+        41 units of clear gap between one knob and the next, no part of
+        any column, so the anneal happily parked C5/C6/R2/R4 in FRONT of
+        the pot row where the panel has to go.  The outermost test is
+        legitimate here precisely because a row is aligned flush by
+        construction (see PANEL_Y), which is what made it illegitimate for
+        a lone part."""
         pen = 0.0
         for i, p in enumerate(self.parts):
-            if p.outward is None:
+            if p.outward is None or p.group:
                 continue
             ox, oy = self._outward(i)
             if ox:
@@ -464,9 +477,24 @@ class Placer:
                 across = (self.BX0 < self.BX1[i]) & (self.BX1 > self.BX0[i])
                 beyond = (self.BY1 - self.BY1[i]) if oy > 0 else (self.BY0[i] - self.BY0)
             across[i] = False
-            for j in self.groups.get(p.group, ()):
-                across[j] = False       # a rigid group cannot block itself
             d = np.where(across, beyond, 0.0)
+            pen += float(np.square(np.maximum(d, 0.0)).sum())
+        for members in self.groups.values():
+            k = next((i for i in members if self.parts[i].outward is not None), None)
+            if k is None:
+                continue
+            ox, oy = self._outward(k)
+            mine = np.zeros(self.n, dtype=bool)
+            mine[members] = True
+            if ox:
+                face = (self.BX1[members].max() if ox > 0
+                        else self.BX0[members].min())
+                beyond = (self.BX1 - face) if ox > 0 else (face - self.BX0)
+            else:
+                face = (self.BY1[members].max() if oy > 0
+                        else self.BY0[members].min())
+                beyond = (self.BY1 - face) if oy > 0 else (face - self.BY0)
+            d = np.where(mine, 0.0, beyond)
             pen += float(np.square(np.maximum(d, 0.0)).sum())
         return pen
 

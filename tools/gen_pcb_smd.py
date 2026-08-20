@@ -985,8 +985,23 @@ SWITCH_LABEL = {"SW1": "MUTE HI", "SW2": "MUTE MID", "SW3": "MUTE LO"}
 # order as the panel, so each output block sits above the volume pot that
 # feeds it.  Left free, they scattered to three different board edges -
 # which costs nothing the optimiser can measure and is horrible to wire.
-OUTPUTS = ["J5", "J4", "J3"]
-OUTPUT_PITCH = 56.0
+# The REAR row: everything that takes wire from off-board, in one line
+# along the opposite edge from the panel, pinned exactly like the panel is.
+#
+# Both rows are pinned because their positions are not really a search
+# problem - a pot has to be at the panel and a screw terminal has to be at
+# an edge - and because a pinned row is the only thing that can define the
+# PLANE the board edge sits behind.  Leaving the terminals free produced
+# exactly what you would expect: J2, the INPUT, ended up on the bottom-left
+# corner of the board facing across it, on the same edge as the panel.
+#
+# Left to right, and each x is borrowed from the panel row so the two line
+# up: J2 above MASTER (the input feeds the master volume, so that is the
+# short net), each output above the volume pot that feeds it, and J1 in
+# the largest gap left - mid-board, which is also the shortest average
+# distance from the power terminal to the three ICs, and a long way from
+# the input.
+REAR = ["J2", "J5", "J1", "J4", "J3"]
 POT_GANGS = {"VR1": ("VR1A", "VR1B"), "VR2": ("VR2A", "VR2B")}
 POT_LABEL = {"VR3": "HIGH VOL", "VR4": "MID VOL", "VR5": "LOW VOL",
              "VR6": "MASTER"}
@@ -1102,7 +1117,10 @@ ROTS = {}
 for _r in SOIC_SECTIONS:
     ROTS[_r] = (0, 90, 180, 270)      # which way the 14 pins escape
 for _r in TERMS:
-    ROTS[_r] = (0, 90, 180, 270)      # which board edge the wires enter from
+    # Rot 0 faces -y, which is the rear edge.  The rear row is pinned, so
+    # there is nothing left to search here: a screw terminal in that row
+    # faces off the back of the board and no other angle is a candidate.
+    ROTS[_r] = (0,) if _r in REAR else (0, 90, 180, 270)
 for _r in ELECTRO:
     ROTS[_r] = (0, 90)
 for _r in JFETS + DIODES:
@@ -1132,12 +1150,24 @@ PANEL_SPAN = PANEL_WIDTH + POT_W
 _PANEL_FRONT = max(GEOM[r][0]["box"][3] for r in PANEL)
 PANEL_Y = {r: _PANEL_FRONT - GEOM[r][0]["box"][3] for r in PANEL}
 
+# The rear row, laid out the same way and for the same reasons: x borrowed
+# from the panel row so the two line up, y aligned on the parts' BACK faces
+# so the row presents one flat plane to the rear edge.  The row's absolute
+# depth is not set here - it is a rigid group, and the anneal slides it in
+# until the parts between the two rows stop it.  Board height stays an
+# OUTPUT; what is fixed is that nothing may be outside either row.
+REAR_X = {"J2": PANEL_X["VR6"], "J5": PANEL_X["VR5"],
+          "J1": (PANEL_X["VR5"] + PANEL_X["VR2"]) / 2,
+          "J4": PANEL_X["VR4"], "J3": PANEL_X["VR3"]}
+_REAR_BACK = min(GEOM[r][0]["box"][1] for r in REAR)
+REAR_Y = {r: -170.0 + (_REAR_BACK - GEOM[r][0]["box"][1]) for r in REAR}
+
 _parts = []
 for _ref, _rots in ROTS.items():
     _parts.append(place.Part(
         _ref, GEOM[_ref], _rots,
         group=("panel" if _ref in PANEL else
-               "outputs" if _ref in OUTPUTS else None),
+               "rear" if _ref in REAR else None),
         # Screw terminals take wire from off-board, so their entry side has
         # to face out; the panel row has to be the panel.  Both are real
         # mechanical constraints, and both are expressed the same way: name
@@ -1216,8 +1246,13 @@ PLACER = place.Placer(_parts, seed=SEED,
                       plane_nets=PLANE_NETS)
 
 # The panel row: fixed pitch, fixed order, all on one line.
+# The two edge rows go down FIRST, before anything is seeded.  seed()
+# skips grouped parts, so everything else spirals out around them rather
+# than the rows having to fight their way into a board already full.
 for _ref in PANEL:
     PLACER.set_pose(PLACER.idx[_ref], PANEL_X[_ref], PANEL_Y[_ref], 0)
+for _ref in REAR:
+    PLACER.set_pose(PLACER.idx[_ref], REAR_X[_ref], REAR_Y[_ref], 0)
 
 # Weights are in cost-units per unit of whatever they measure, so what
 # matters is their ratios.  Calibrated so that one fully starved pin-escape
@@ -1277,7 +1312,14 @@ WEIGHTS = dict(
     h=float(os.environ.get("W_H", 400)),
     w=120.0,         # width past the panel floor is pure waste - push hard
     wfloor=PANEL_SPAN,
-    edge=40.0,       # terminals/panel must have a clear path to their edge
+    # Nothing outside the panel row or the rear row.  This is not a
+    # routability surrogate like the others - it is a MECHANICAL
+    # constraint, because a part in front of the pot row is a part the
+    # front panel has to close on - so it is priced to be unpayable
+    # rather than to be traded.  At 40 it was traded: the anneal parked
+    # J6 5.7 mm in front of the panel row and paid 20k out of a 142k
+    # total to keep it near its switch.
+    edge=float(os.environ.get("W_EDGE", 400)),
     near=25.0,       # bypass caps must reach their own op-amp's supply pin
     t0=150.0, t1=0.5,
 )
@@ -1328,7 +1370,7 @@ def _place_key():
     h.update(repr(place.PLANE_GAP).encode())
     h.update(repr((MOVES, RESTARTS, PANEL_PITCH, SWITCH_PITCH,
                    sorted(PANEL_X.items()), sorted(PANEL_Y.items()),
-                   OUTPUT_PITCH, EDGE,
+                   sorted(REAR_X.items()), sorted(REAR_Y.items()), EDGE,
                    MOUNT_INSET, MOUNT_KEEP, SEED,
                    os.environ.get("ESC_CAP"), os.environ.get("ESC_FLOOR"),
                    os.environ.get("SUPPLY"), BYPASS_NEAR, MUTE_NEAR,
@@ -1382,9 +1424,8 @@ def run_placement(rng_seed):
     PLACER.fixed_boxes = []
     for _ref in PANEL:
         PLACER.set_pose(PLACER.idx[_ref], PANEL_X[_ref], PANEL_Y[_ref], 0)
-    for _i, _ref in enumerate(OUTPUTS):
-        PLACER.set_pose(PLACER.idx[_ref],
-                        PANEL_SPAN / 2 - OUTPUT_PITCH + _i * OUTPUT_PITCH, -170.0, 0)
+    for _ref in REAR:
+        PLACER.set_pose(PLACER.idx[_ref], REAR_X[_ref], REAR_Y[_ref], 0)
     PLACER.seed()
     PLACER.anneal(moves=MOVES // 3, w=WEIGHTS, report=PLACE_LOG)
     x0, y0, x1, y1 = PLACER.extent()
@@ -1445,6 +1486,7 @@ MOUNT_HOLES = [(MOUNT_INSET, MOUNT_INSET), (BW - MOUNT_INSET, MOUNT_INSET),
                (MOUNT_INSET, BH - MOUNT_INSET), (BW - MOUNT_INSET, BH - MOUNT_INSET)]
 
 # ---- commit the placement: draw every part where the search put it -------
+PLACED_BOX = {}          # ref -> courtyard box in board coordinates
 for _ref in sorted(POSE):
     _x, _y, _rot = POSE[_ref]
     xf_push(_x + EDGE, _y + EDGE, _rot)
@@ -1455,6 +1497,7 @@ for _ref in sorted(POSE):
     _b = GEOM[_ref][_rot]["box"]
     placed.append((_x + EDGE + _b[0], _y + EDGE + _b[1],
                    _x + EDGE + _b[2], _y + EDGE + _b[3]))
+    PLACED_BOX[_ref] = placed[-1]
 
 # NO locating-boss holes are drilled.  They used to be, at a position that
 # was openly a guess - no verified dual-gang drawing was ever found, and
@@ -3456,6 +3499,27 @@ def route_with_ripup():
 # out, which is a shorter board and a less even one.  Height and
 # utilisation are the objective; this is a diagnostic for where the parts
 # went.
+def row_report():
+    """Anything sticking out past either pinned edge row, and by how much.
+
+    The rows define the two planes the board edges sit behind, so a part
+    outside one is board area that exists only to cover it - and it is
+    invisible in the board line, which only reports the total.  This is the
+    check that catches it by name."""
+    front = max(PLACED_BOX[r][3] for r in PANEL if r in PLACED_BOX)
+    back = min(PLACED_BOX[r][1] for r in REAR if r in PLACED_BOX)
+    out = []
+    for ref, (bx0, by0, bx1, by1) in sorted(PLACED_BOX.items()):
+        if ref in PANEL or ref in REAR:
+            continue
+        if by1 > front:
+            out.append("%s %.1f mm past the panel row" % (ref, (by1 - front) * 0.254))
+        if by0 < back:
+            out.append("%s %.1f mm past the rear row" % (ref, (back - by0) * 0.254))
+    print("  rows: %s" % ("; ".join(out) if out else
+                          "nothing outside the panel or rear row"))
+
+
 def width_report(ncol=10):
     xs = [p["x"] for p in pads]
     if not xs:
@@ -3503,6 +3567,7 @@ def width_report(ncol=10):
 
 
 if os.environ.get("WIDTH_LOG"):
+    row_report()
     width_report()
 
 

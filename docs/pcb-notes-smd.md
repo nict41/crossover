@@ -424,6 +424,55 @@ straight line for the panel to sit flat against every control at once.
 `PANEL_Y` computes the offsets from the probed geometry, so a footprint
 change carries through instead of quietly leaving one control short.
 
+## Two pinned edge rows
+
+Everything that has to reach an edge is pinned into one of **two rigid
+rows**, and they go down before anything else is placed:
+
+* the **panel row** on the front edge - nine controls, `PANEL_X`/`PANEL_Y`
+* the **rear row** on the opposite edge - `J2` (IN), `J5` (LOW), `J1`
+  (power), `J4` (MID), `J3` (HIGH), on `REAR_X`/`REAR_Y`
+
+The x of each rear part is borrowed from the panel row, so the two line
+up: `J2` above MASTER (the input feeds the master volume, so that is the
+short net), each output above the volume pot that feeds it, and `J1` in
+the largest gap left - mid-board, the shortest average distance from the
+power terminal to the three ICs and a long way from the input. Each row is
+aligned on the parts' outer FACES, not their pad rows, so the row presents
+one flat plane to its edge.
+
+**Why pin them at all.** Their positions were never really a search
+problem - a pot has to be at the panel and a screw terminal has to be at an
+edge - and leaving them free produced exactly what you would expect: `J2`,
+the input, ended up in the bottom-left corner facing across the board, on
+the same edge as the panel. `place.seed()` skips grouped parts, so pinning
+a row also means everything else gets seeded *around* it rather than the
+row having to fight into a board that is already full.
+
+**And a row defines a plane.** `edge_violation()` checks a rigid row as
+one wide part against its own outer face, with no column test; a lone
+edge-facing part is still checked per column (see the docstring for why
+the two cases differ). Per-column alone was not enough and the board showed
+how: `PANEL_PITCH` leaves 41 units of clear gap between one knob and the
+next, part of no column, and the anneal happily parked C5/C6/R2/R4 in
+*front* of the pot row - where the front panel has to go.
+
+The weight is `W_EDGE`, and unlike the other placement weights it is priced
+to be **unpayable rather than traded**: it expresses a mechanical fact, not
+a routability guess. At the old 40 the anneal parked `J6` 5.7 mm in front
+of the panel row and paid 20k out of a 142k total to keep it near its
+switch. At 400 the term reads zero.
+
+Board size is still an OUTPUT. The rows are pinned in x and in their
+row-relative y, but each row's absolute depth is free - it is a rigid
+group, and the anneal slides the rear row in until the parts between the
+two rows stop it. What is fixed is only that nothing may be outside either
+row, so the board edges land `EDGE` (1.27 mm) behind each one.
+
+`WIDTH_LOG=1` prints a `rows:` line naming anything that got outside a row
+and by how much, because the board line only reports the total and a part
+sticking out is invisible in it.
+
 ## The mute buttons
 
 **SW1, SW2 and SW3 are on the board**, in the front-panel row, one beside

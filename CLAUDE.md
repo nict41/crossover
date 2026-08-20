@@ -107,6 +107,58 @@ invisible in the preview image. When it complains, the default assumption is
 that it is right and the layout is wrong. Do not weaken a check to make a board
 pass.
 
+## Two pinned edge rows, and why a row is not just a group of parts
+
+Everything that has to reach an edge is pinned into one of two rigid rows,
+placed before anything else: the **panel row** on the front edge (nine
+controls) and the **rear row** on the opposite one (`J2` IN, `J5` LOW,
+`J1` power, `J4` MID, `J3` HIGH). Rear x values are borrowed from the panel
+row so the two line up, and each row is aligned on the parts' outer FACES
+rather than their pad rows, so a row presents one flat plane to its edge.
+
+Their positions were never a search problem - a pot has to be at the panel,
+a screw terminal has to be at an edge - and leaving the terminals free
+produced exactly what you would expect: `J2`, the INPUT, on the bottom-left
+corner facing across the board, on the same edge as the panel.
+
+**`seed()` skips grouped parts, so pinning a row is also what makes it
+first.** Everything else spirals out around the rows instead of the rows
+having to fight into a board that is already full.
+
+**A ROW defines a plane; a PART defines a column.** That distinction is the
+whole of `edge_violation()` now, and getting it wrong is what let the old
+board go wrong:
+
+* a lone edge-facing part is checked per COLUMN - has anything got between
+  it and its edge, within its own width. The obvious alternative ("is it
+  the outermost thing on the board") is wrong for a lone part, because
+  parts facing the same edge at different depths can never all be
+  outermost and the penalty never reaches zero.
+* a rigid ROW is checked as ONE WIDE PART against its own outer face, with
+  no column test. That test is legitimate here precisely because a row is
+  flush by construction.
+
+Per-column alone was not enough: `PANEL_PITCH` leaves 41 units of clear gap
+between one knob and the next, part of no column, and the anneal parked
+C5/C6/R2/R4 in FRONT of the pot row - where the front panel goes.
+
+**`W_EDGE` is priced to be unpayable, not traded.** It is the one placement
+weight that expresses a MECHANICAL fact rather than a routability guess.
+At the old 40 the anneal put `J6` 5.7 mm in front of the panel row and paid
+20k out of a 142k total to keep it near its switch; at 400 the term reads
+zero. Everything else in `WEIGHTS` is a surrogate and should stay tradeable.
+
+**Board size is still an output.** The rows are pinned in x and in their
+row-relative y, but each row's absolute depth is free - it is a rigid
+group, and the anneal slides the rear row in until the parts between the
+rows stop it. The only fixed thing is that nothing may be outside either
+row, so the board edges land `EDGE` (1.27 mm) behind each one.
+
+`WIDTH_LOG=1` prints a `rows:` line naming anything outside a row and by
+how much. The board line reports only the total, and a part sticking out
+past the panel is invisible in it - which is how it survived for as long as
+it did.
+
 ## Layout first, then board size — the pipeline's central idea
 
 **The board size is an output, not an input.** `tools/place.py` arranges the
