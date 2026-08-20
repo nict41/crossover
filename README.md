@@ -211,6 +211,40 @@ article only warns against going below ~2.2k.
 
 Full explanation, design equations and frequency tables: [`docs/circuit-notes.md`](docs/circuit-notes.md).
 
+## Subcircuits
+
+A set of focused documentation pages and diagrams isolate the board's
+helper circuits (muting/soft-start, level pots, buffered outputs) so you can
+read or export each function on its own.
+
+- **Overview & extraction helper:** [docs/subcircuits/README.md](docs/subcircuits/README.md) — explains the `scripts/extract_subcircuit.py` helper and workflow.
+- **Mute / soft-start:** [docs/subcircuits/mute.md](docs/subcircuits/mute.md) — includes an embedded SVG diagram at `docs/subcircuits/images/mute.svg`.
+- **Level (volume) pots:** [docs/subcircuits/level-pots.md](docs/subcircuits/level-pots.md) — includes `docs/subcircuits/images/level-pots.svg`.
+
+Quick example — extract the mute netlist and open it in your schematic tool:
+
+```bash
+python scripts/extract_subcircuit.py docs/netlist-esp-p148-3way-state-variable-crossover.json \
+  --parts Q1,Q2,Q3,R31,R32,R33,R34,R35,R36,D1,D2,D3,D4,R40,C16,R37,R38,R39,J6 \
+  --out docs/subcircuits/mute_netlist.json
+
+# Open `docs/subcircuits/mute_netlist.json` in EasyEDA or your preferred viewer.
+```
+
+If you want PNG exports of the SVG diagrams and have `cairosvg` installed:
+
+```bash
+python -m pip install cairosvg
+cairosvg docs/subcircuits/images/mute.svg -o docs/subcircuits/images/mute.png
+cairosvg docs/subcircuits/images/level-pots.svg -o docs/subcircuits/images/level-pots.png
+```
+
+These subcircuit pages are intended as concise, self-contained references for
+panel wiring, build notes, and mechanical checks. If you want me to auto-render
+high-fidelity schematics from the full JSON and add the resulting PNGs to the
+docs, I can automate that next (it requires the local schematic renderer or
+EasyEDA import steps to be run on your machine).
+
 ## Additions to the original drawing
 
 The ESP figures deliberately leave out supply wiring. This schematic adds it so
