@@ -2891,6 +2891,42 @@ def route_with_ripup():
 
 
 # --------------------------------------------------------------------------
+#  is the board actually using its width?
+# --------------------------------------------------------------------------
+# The panel row fixes the width at six controls x PANEL_PITCH whatever the
+# router does, so that width is FREE - `place.terms` only charges for width
+# past `wfloor`.  Height is not free, and height is what is left to
+# optimise.  A layout that leaves a column empty is therefore taller than it
+# needs to be, and nothing in the board line says so.
+#
+# The reason it happens is worth stating, because it is a property of the
+# cost model rather than of any one seed: height is a BOUNDING BOX, so only
+# the topmost and bottommost parts get any credit for moving, while every
+# other part sees pure wirelength cost for spreading sideways.  There is no
+# gradient towards an empty column.
+#
+# `WIDTH_LOG=1` prints the pads-per-column histogram and its coefficient of
+# variation (0 = perfectly even), which is the number to watch when tuning
+# anything that is supposed to spread the layout out.
+def width_report(ncol=10):
+    xs = [p["x"] for p in pads]
+    if not xs:
+        return
+    x0, x1 = min(xs), max(xs)
+    wcol = (x1 - x0) / ncol or 1.0
+    counts = [0] * ncol
+    for p in pads:
+        counts[min(ncol - 1, int((p["x"] - x0) / wcol))] += 1
+    mean = sum(counts) / float(ncol)
+    cv = (sum((c - mean) ** 2 for c in counts) / ncol) ** 0.5 / mean
+    print("WIDTH cv=%.3f counts=%s" % (cv, ",".join(str(c) for c in counts)))
+
+
+if os.environ.get("WIDTH_LOG"):
+    width_report()
+
+
+# --------------------------------------------------------------------------
 #  the structural pre-filter
 # --------------------------------------------------------------------------
 # A ground pad the plane cannot reach BEFORE any signal net is routed can

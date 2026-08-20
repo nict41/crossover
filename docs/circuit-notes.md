@@ -150,10 +150,73 @@ lurching. `D4` does the reverse on the way down: as −15 V collapses it drags
 `MUTE_SS` up and mutes everything while the rails are still falling, which
 is the messier of the two transients.
 
-Pressing a panel button pulls its `MG` line to `MUTE_SS`; the diode is what
-keeps that from muting the other two. **No audio leaves the board** — the
-switches and LEDs are panel hardware on the `J6` loom, so the only thing on
-that cable is DC.
+There are therefore **two independent ways** a band gets muted, and they
+meet at the same gate. The soft start pulls all three gates up together
+through `D1`–`D3`; a panel switch pulls **one** gate up on its own, by
+shorting it to ground. The steering diodes are what keep those two from
+interfering: with `MUTE_SS` down at −15 V and a switch holding one gate at
+0 V, that band's diode is reverse-biased, so the switch cannot drag
+`MUTE_SS` — or the other two bands — anywhere.
+
+#### Wiring the panel to `J6`
+
+`J6` is a 1×8 header carrying **DC only** — no audio is on this cable, so it
+can be a long loom to the front panel without any shielding concern.
+
+| Pin | Net | Band | What it is |
+|---|---|---|---|
+| 1 | `MG1` | **HIGH** | Mute gate — short to GND to mute |
+| 2 | `MG2` | **MID** | Mute gate |
+| 3 | `MG3` | **LOW** | Mute gate |
+| 4 | `GND` | — | Return for the switches |
+| 5 | `LD1` | **HIGH** | LED feed, +15 V through 2.2 kΩ |
+| 6 | `LD2` | **MID** | LED feed |
+| 7 | `LD3` | **LOW** | LED feed |
+| 8 | `GND` | — | Return for the LEDs |
+
+**Watch the order.** `MG1` is the **HIGH** band and `MG3` is **LOW**, which
+is the reverse of the front-panel control row (that runs LOW → HIGH, left to
+right). The two orders are independent and there is nothing on the board to
+stop a loom being wired straight across; the result is a working mute on the
+wrong knob.
+
+**The switches.** Each band wants a simple **SPST** contact between its `MG`
+pin and a `GND` pin:
+
+* **closed = muted** (gate at 0 V, the JFET conducts, that band is shunted)
+* **open = playing** (the 1 MΩ pulldown takes the gate to −15 V)
+
+Any latching switch or toggle works. The contact carries the gate pulldown
+current only — 15 V across 1 MΩ, i.e. **15 µA** — so contact rating is
+irrelevant, but for the same reason use a switch with a gold or otherwise
+low-level contact rather than a big power toggle, which can develop enough
+film resistance at 15 µA to mute unreliably.
+
+**The LEDs.** Each `LD` pin is a current-limited feed, not a switched
+output: `+15 V` through 2.2 kΩ, so an LED from `LD`*n* to `GND` draws about
+`(15 − 2) / 2200 ≈ 5.9 mA`. On its own that means **the LED is lit whenever
+the board is powered**, regardless of mute state. To make it indicate, the
+switch needs a second pole:
+
+* **Recommended: a 2-pole (DPDT/DPST) switch per band.** Pole 1 shorts `MG`*n*
+  to GND; pole 2 shorts the LED's cathode to GND. The LED then lights
+  exactly when the band is muted.
+* An illuminated switch with *independent* lamp terminals works the same
+  way — wire the lamp across pole 2, not across the mute contact.
+
+**Do not** wire the LED cathode to the `MG` pin to save a pole. It looks
+like it should work — ground the `MG` line and the LED lights with it — but
+with the switch open, `LD`*n* drives ~28 µA through the LED into the gate
+node and the 1 MΩ pulldown cannot sink it: the gate ends up at roughly
+**+13 V**, not −15 V. The JFET conducts, so the band stays muted with its
+switch off, and the gate junction is forward-biased into the bargain. If
+you only have single-pole switches, leave the LEDs out (or run them permanently lit as power indicators) rather
+than borrowing the gate node for them.
+
+**If you do not want muting at all**, leave `J6` unpopulated. The board
+powers up muted and unmutes itself after about two seconds through
+`R40`/`C16`; the switches are optional and their absence is the
+never-muted state.
 
 ### Power and decoupling
 
