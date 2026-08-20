@@ -1553,9 +1553,15 @@ def passable(L, x, y, nid, blocked_extra=None, relaxed=False):
     clearance. Used only for the second-pass retry on nets the strict pass
     couldn't reach; the independent geometric verifier checks exact distances
     on whatever it finds, so a relaxed path is never trusted blind."""
-    # NOTE: the caller's neighbour loop only ever pushes cells that are
-    # already inside 1..NX-2 / 1..NY-2, because it starts from in-range
-    # sources and only steps ±1.  The bounds re-check here was pure overhead.
+    # The bounds test is NOT redundant, and removing it is not safe.  The
+    # neighbour loop pushes x+-1 from every cell it expands, so the frontier
+    # only stays inside the board because this check refuses to ENTER the
+    # border ring: reject x==0 and the search never reaches a cell that
+    # could push x==-1.  Drop it and numpy does not complain - occ[L][y, -1]
+    # silently reads the far edge of the board, so a trace can wrap from one
+    # side to the other, while x==NX raises IndexError instead.
+    if not (1 <= x < NX - 1 and 1 <= y < NY - 1):
+        return False
     if not relaxed and contested[L][y, x]:
         return False
     v = occ[L][y, x]
@@ -1825,8 +1831,6 @@ def commit_path(net, nid, runs, via_pts, polys):
     global OCC_VERSION
     OCC_VERSION += 1
     VIA_MEMO.clear()
-    global _PATH_CLEAR_CACHE
-    _PATH_CLEAR_CACHE = None
     own_dil = net_width(net) / 2 + CLEAR + MAX_W / 2 + GRID
     for vx, vy in keep:
         VIAS.append((vx, vy, net))
@@ -1837,40 +1841,10 @@ def commit_path(net, nid, runs, via_pts, polys):
             stamp_disc(c[0] + 1, c[1] * GRID, c[2] * GRID, own_dil, nid)
     for layer, pts in polys:
         ROUTED.append((layer, pts, net))
-    # If a path-clear cache exists, incrementally append the new features
-    # so we don't need a full rebuild of the cache on every commit.
-    try:
-        if _PATH_CLEAR_CACHE is not None:
-            others, ox0, oy0, ox1, oy1, olay, buckets, S = _PATH_CLEAR_CACHE
-            new_others = []
-            # append vias
-            for vx, vy in keep:
-                new_others.append(dict(k="pt", hw=VIA_PAD / 2, L={1, 2}, g=(vx, vy)))
-            # append runs
-            for run in runs:
-                for a, b in zip(run, run[1:]):
-                    new_others.append(dict(k="seg", hw=net_width(net) / 2, L={run[0][0]}, g=((a[1] * GRID, a[2] * GRID), (b[1] * GRID, b[2] * GRID))))
-            if new_others:
-                n_ox0, n_oy0, n_ox1, n_oy1, n_olay = _expanded_boxes(new_others)
-                ox0 = np.concatenate([ox0, n_ox0]) if ox0 is not None else n_ox0
-                oy0 = np.concatenate([oy0, n_oy0]) if oy0 is not None else n_oy0
-                ox1 = np.concatenate([ox1, n_ox1]) if ox1 is not None else n_ox1
-                oy1 = np.concatenate([oy1, n_oy1]) if oy1 is not None else n_oy1
-                olay = np.concatenate([olay, n_olay]) if olay is not None else n_olay
-                base = len(others)
-                others.extend(new_others)
-                # update buckets
-                for j in range(len(new_others)):
-                    idx = base + j
-                    bx0 = int(math.floor(n_ox0[j] / S))
-                    by0 = int(math.floor(n_oy0[j] / S))
-                    bx1 = int(math.floor(n_ox1[j] / S))
-                    by1 = int(math.floor(n_oy1[j] / S))
-                    for bx in range(bx0, bx1 + 1):
-                        for by in range(by0, by1 + 1):
-                            buckets.setdefault((bx, by), []).append(idx)
-                _PATH_CLEAR_CACHE = (others, ox0, oy0, ox1, oy1, olay, buckets, S)
-    # _PATH_CLEAR_CACHE invalidated; next call rebuilds fresh.
+    # path_clearance_ok() rebuilds its `others` list per call, so there is
+    # nothing to invalidate here.  The incremental-append branch that used
+    # to live here was dead code against a cache nothing populated, and it
+    # was left with a `try:` and no handler.
     return True
 
 
@@ -2585,12 +2559,13 @@ def build_features():
 
     Also the ONLY place the `gap()` memo needs clearing: `gap()` keys on
     feature-object identity, and this is where the objects are replaced.
-    It used to be cleared on every `commit_path()`, which threw away
-    answers that were still exactly correct - the relaxed retry pass asks
-    the same pair questions over and over against the same live objects,
-    and each commit destroyed that work for no correctness reason."""
+    There is deliberately no gap() memo to clear.  One keyed on
+    `id(feature)` was tried and reverted: path_clearance_ok(), plane_stubs()
+    and the silk check all build their feature dicts fresh per call, and
+    CPython recycles the addresses of freed objects, so the key collides
+    with unrelated pairs.  Measured, 4965 of 4965 cache hits returned the
+    wrong gap."""
     FEATURES.clear()
-    _GAP_CACHE.clear()
     for p in pads:
         FEATURES.append(dict(net=p["net"], k="rect", hw=0.0,
                              L={1, 2} if p["layer"] == MULTI else {p["layer"]},

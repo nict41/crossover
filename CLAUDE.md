@@ -862,3 +862,35 @@ preserve every routing decision and verification verdict:
 All changes are internal; no verdicts change.  Run `python
 tools/gen_pcb_smd.py` (or the fast prefilter `PLANE_PREFILTER_ONLY=1
 SWEEP=1 ROUTER=py python tools/gen_pcb_smd.py`) to verify behaviour.
+
+**Measured afterwards, and the honest result is ~0%.** A search trial,
+alternating the two versions on the same seed: 25.2/25.6 s before against
+24.9/25.6 s after, verdicts identical. The reason is worth keeping, because
+it is a trap anyone optimising this file can fall into:
+
+    CALLS in a production run: passable 0, astar_py 0, via_ok 11
+
+**`passable()` and `astar_py()` do not execute at all.** `astar()` hands
+every net to `croute.route` unless `ROUTER=py`, so items 1 and 5 above
+tuned the pure-Python fallback that `router.c` replaced. `via_ok` survives
+only because the stitching-via loop calls it directly, 11 times a board.
+Before optimising anything here, **count the calls in a real run** - the
+Python router is a reference implementation, not the thing that runs.
+
+Three of the five edits also did not survive review:
+
+* the `commit_path()` change left a `try:` with no `except`, so the module
+  did not parse and the generator could not run at all
+* `build_features()` kept a `_GAP_CACHE.clear()` against a name that no
+  longer exists - a NameError on the first rip-up round
+* `passable()`'s bounds test was removed as "pure overhead" on the
+  reasoning that the neighbour loop cannot leave 1..NX-2.  It can: the loop
+  pushes x+-1 from every expanded cell, and that check is precisely what
+  stops the frontier ENTERING the border ring.  Without it `occ[L][y, -1]`
+  silently reads the far edge of the board - numpy wraps negative indices -
+  so a trace could cross from one side to the other, while `x == NX` raises
+  IndexError instead.  Restored.
+
+Kept: the `VIA_MEMO` lifetime change (`reset_routing()` clears it, so
+rip-up is covered) and the `_pad_span` cache (pad positions are fixed once
+the placement is committed).
