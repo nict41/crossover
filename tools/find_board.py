@@ -116,13 +116,13 @@ def screen(seed, env_extra):
     return seed, False, ("pour-blocked" if m else "no verdict")
 
 
-def trial(job, env_extra):
+def trial(job, env_extra, timeout=1800):
     seed, rseed = job
     env = dict(os.environ, SWEEP="1", SEED=str(seed),
                ROUTE_SEED=str(rseed), **env_extra)
     env.setdefault("MAX_EXPAND", SEARCH_MAX_EXPAND)
     try:
-        out = subprocess.run([sys.executable, GEN], env=env, timeout=1800,
+        out = subprocess.run([sys.executable, GEN], env=env, timeout=timeout,
                              capture_output=True, text=True).stdout
     except subprocess.TimeoutExpired:
         return dict(seed=seed, rseed=rseed, ok=False, note="timeout")
@@ -141,6 +141,25 @@ def trial(job, env_extra):
                 area=w * h, note="", pour=pour, waste=waste,
                 defects=n - waste,
                 unrouted=len(UNROUTED.findall(out)))
+
+
+def describe(r):
+    """One line for one finished trial, printed the moment it lands."""
+    if r["note"]:
+        return "  --     %-28s SEED=%d ROUTE_SEED=%d  (%s)" % (
+            "", r["seed"], r["rseed"], r["note"])
+    why = []
+    if r["pour"]:
+        why.append("%d pour" % r["pour"])
+    if r["unrouted"]:
+        why.append("%d unrouted" % r["unrouted"])
+    if r["waste"]:
+        why.append("wastes space")
+    tag = ("CLEAN " if r["ok"] else "SOUND " if r["defects"] == 0
+           else "  %2d  " % r["defects"])
+    return "%s %6.0f mm2  %.1f x %.1f  SEED=%d ROUTE_SEED=%d  %s" % (
+        tag, r["area"], r["w"], r["h"], r["seed"], r["rseed"],
+        ", ".join(why))
 
 
 def parse_seeds(spec):
@@ -163,6 +182,23 @@ def main():
     ap.add_argument("--all", action="store_true",
                     help="run every trial even after a clean board is found "
                          "(for comparing the whole field, not for finding one)")
+    ap.add_argument("--trial-timeout", type=int, default=420,
+                    help="seconds one trial may take before it is abandoned "
+                         "(default 420; the tail is what eats a search)")
+    ap.add_argument("--confirm", type=int, default=3,
+                    help="how many of the best ranked seeds to re-run at "
+                         "production settings (0 to skip)")
+    # OPT-IN until the ordering it assumes has been validated.  The cost
+    # case is measured and strong - 28 s a trial against 201 s at the same
+    # cap - but cheap ranking is only sound if it ORDERS seeds the way the
+    # expensive config does, and rip-up is exactly the mechanism that
+    # rescues a seed whose first route order goes badly (it is what made 63
+    # footprints routable at all: 0 clean in 96 without it).  So switching
+    # it off could plausibly re-rank the field rather than just blur it.
+    # Default flips to on once that is measured, not before.
+    ap.add_argument("--cheap-rank", action="store_true", default=False,
+                    help="rank seeds with one capped, rip-up-free route "
+                         "each, then confirm only the best")
     ap.add_argument("--no-screen", action="store_true",
                     help="skip the cheap ground-plane pre-screen and route "
                          "every seed (for measuring the screen itself)")
@@ -198,23 +234,88 @@ def main():
     # acted on.  Trials already in flight are allowed to finish (they are
     # subprocesses, and killing them mid-write is how a half-written
     # artifact would happen); only unstarted ones are cancelled.
-    results = []
-    with ThreadPoolExecutor(max_workers=a.jobs) as pool:
-        futures = {pool.submit(trial, j, extra): j for j in jobs}
-        try:
-            for fut in as_completed(futures):
-                r = fut.result()
-                results.append(r)
-                if r["ok"] and not a.all:
-                    print("clean board found - cancelling the rest "
-                          "(pass --all to sweep every trial)", flush=True)
-                    for f in futures:
-                        f.cancel()
-                    break
-        except KeyboardInterrupt:
-            for f in futures:
-                f.cancel()
-            raise
+    # Rank cheaply, confirm expensively.
+    #
+    # A search spends nearly all of its time on boards it is going to
+    # reject, and it does not need a production-quality route to know that.
+    # Two settings dominate the cost and neither changes the RANKING much:
+    # the expansion cap (a failing A* drains the queue over the whole grid,
+    # and capping it is ~2x) and rip-up, which re-routes the entire board up
+    # to seven times to polish a candidate that is about to be thrown away.
+    #
+    # Measured on this board: one capped route with rip-up off is seconds,
+    # against minutes for the full treatment, for the same verdict about
+    # whether a seed is worth another look.  So stage two answers "which
+    # seeds are promising" as cheaply as possible and stage three pays the
+    # real price on the handful that survive.  Both filters are pessimistic
+    # in the same direction, which is what makes them safe to rank with and
+    # unsafe to judge with - the same bargain GRID=0.5 offers.
+    rank_env = dict(extra)
+    if a.cheap_rank:
+        rank_env.setdefault("MAX_EXPAND", SEARCH_MAX_EXPAND)
+        rank_env.setdefault("RIPUP_ROUNDS", "0")
+
+    def sweep(jobs, env, timeout, label):
+        """Run these trials, printing each one THE MOMENT IT LANDS.
+
+        Streaming is not cosmetic.  The previous version collected every
+        result and printed at the end, so when a 36-seed search hit its
+        outer timeout it was killed with nothing on stdout - ninety minutes
+        of routing discarded, and not one seed's verdict recoverable.  A
+        long search must be interruptible without losing what it has
+        already learned."""
+        out = []
+        print("%s: %d trial(s), %d at a time" % (label, len(jobs), a.jobs),
+              flush=True)
+        with ThreadPoolExecutor(max_workers=a.jobs) as pool:
+            futures = {pool.submit(trial, j, env, timeout): j for j in jobs}
+            try:
+                for fut in as_completed(futures):
+                    r = fut.result()
+                    out.append(r)
+                    print(describe(r), flush=True)
+                    if r["ok"] and not a.all:
+                        print("clean board found - cancelling the rest "
+                              "(pass --all to sweep every trial)", flush=True)
+                        for f in futures:
+                            f.cancel()
+                        break
+            except KeyboardInterrupt:
+                for f in futures:
+                    f.cancel()
+                raise
+        return out
+
+    results = sweep(jobs, rank_env, a.trial_timeout,
+                    "ranking" if a.cheap_rank else "routing")
+
+    # Stage three: the cheap pass is pessimistic, so anything it liked has
+    # to be re-run for real before it can be believed.
+    #
+    # Note the asymmetry: a CLEAN verdict from the cheap pass needs no
+    # confirming.  Capping expansions and switching rip-up off can only
+    # make the ROUTER give up sooner; neither touches verify(), which
+    # measures the finished copper.  So the cheap pass can miss a good
+    # board but cannot invent one, and a clean result short-circuits the
+    # whole thing.
+    if a.cheap_rank and a.confirm and not any(r["ok"] for r in results):
+        scored = sorted((r for r in results if not r["note"]),
+                        key=lambda r: (r["defects"], r["area"]))[:a.confirm]
+        if scored:
+            print("\nconfirming the best %d at production settings "
+                  "(uncapped, rip-up on)" % len(scored), flush=True)
+            confirm_env = dict(extra)
+            confirm_env["MAX_EXPAND"] = extra.get("MAX_EXPAND", "0")
+            confirmed = sweep([(r["seed"], r["rseed"]) for r in scored],
+                              confirm_env, a.trial_timeout * 3, "confirming")
+            # The confirmed verdicts REPLACE the ranked ones rather than
+            # joining them: a capped, rip-up-free route is pessimistic by
+            # construction, so reporting its problem counts next to real
+            # ones would invite comparing two different measurements.
+            print("(ranked %d seed(s) cheaply; the verdicts below are the "
+                  "%d confirmed at production settings)"
+                  % (len(results), len(confirmed)), flush=True)
+            results = confirmed
 
     clean = sorted((r for r in results if r["ok"]), key=lambda r: r["area"])
     sound = sorted((r for r in results
@@ -225,27 +326,12 @@ def main():
                    key=lambda r: (r["defects"], r["area"]))
     broke = [r for r in results if r["note"]]
 
-    for r in clean:
-        print("CLEAN  %6.0f mm2  %.1f x %.1f  SEED=%d ROUTE_SEED=%d"
-              % (r["area"], r["w"], r["h"], r["seed"], r["rseed"]))
-    for r in sound:
-        print("SOUND  %6.0f mm2  %.1f x %.1f  SEED=%d ROUTE_SEED=%d  "
-              "(no defects; wastes space)"
-              % (r["area"], r["w"], r["h"], r["seed"], r["rseed"]))
-    for r in dirty:
-        why = []
-        if r["pour"]:
-            why.append("%d pour" % r["pour"])
-        if r["unrouted"]:
-            why.append("%d unrouted" % r["unrouted"])
-        if r["waste"]:
-            why.append("wastes space")
-        print("  %2d    %6.0f mm2  %.1f x %.1f  SEED=%d ROUTE_SEED=%d  %s"
-              % (r["defects"], r["area"], r["w"], r["h"], r["seed"],
-                 r["rseed"], ", ".join(why)))
-    for r in broke:
-        print("  --                            SEED=%d ROUTE_SEED=%d  (%s)"
-              % (r["seed"], r["rseed"], r["note"]))
+    # Every trial already printed itself as it landed; this is the same
+    # field sorted, so a reader who watched it go by gets the ranking and a
+    # reader who was killed part way through has lost nothing.
+    print("\n--- ranked ---")
+    for r in clean + sound + dirty + broke:
+        print(describe(r))
     # Report the cap the TRIALS actually ran with, which is the one in
     # `extra` if --env set it, not whatever this parent process happens to
     # have.  Reading the parent's environment printed "MAX_EXPAND=400000"
