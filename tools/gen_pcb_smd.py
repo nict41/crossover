@@ -3932,6 +3932,12 @@ if not _pour_ok:
 if os.environ.get("SWEEP"):
     print("board %.1f x %.1f mm | %d footprints | %d pads | %d tracks | %d vias"
           % (BW * 0.254, BH * 0.254, len(FP_SPANS), len(pads), len(ROUTED), len(VIAS)))
+    # Utilisation and the largest empty rectangle, same as the full path.
+    # A sweep that is measuring how densely a placement packs the board
+    # could not see either of them, which is exactly the number the W_FILL
+    # experiment needed.
+    for _r in REPORT:
+        print("  note:", _r)
     for _p in FAILED:
         print("  UNROUTED", _p)
     for _p in ISSUES:

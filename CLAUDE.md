@@ -837,6 +837,48 @@ boards the router rejected** - MOVES=90000, RESTARTS=4, and now W_FILL.
 If the board genuinely needs to be smaller, the lever is more layers or
 finer design rules, not tighter placement.
 
+**Re-measured on FOUR layers, and reverted again - for a different
+reason.** The two-layer verdict rested on "the gaps between the parts are
+the corridors the nets use", and four layers moved most of that capacity
+into the stackup, so the term deserved a fresh test rather than an
+inherited answer. It was rebuilt exactly as described above (both bugs
+still avoided; `Cfg` re-checked field for field - 46 fields, `sizeof` 344,
+every offset identical; `fill_imbalance()` checked against the numpy
+version over 300 random layouts, worst relative difference 3e-16) and run
+over 12 seeds at each weight, ranking config:
+
+| W_FILL | mean height | mean utilisation | mean DRC | best | distinct boards from 12 seeds |
+|---|---|---|---|---|---|
+| 0 | 73.4 mm | 58.0% | **9.2** | 4 | **12** |
+| 1000 | 73.0 mm | 60.7% | 11.8 | 3 | 9 |
+| 4000 | 73.3 mm | 59.4% | 11.3 | 5 | 7 |
+
+Utilisation is no longer flat - it moves 58% -> 61%, where on two layers it
+did not move at all - so the term *does* densify this board. It buys
+nothing for it: height is unchanged (73.4 vs 73.0, inside the noise) and
+routing is worse, 9.2 problems against 11.8. Paired by seed, `W_FILL=4000`
+beats 0 on four seeds and loses on seven.
+
+Two findings that are new at four layers and worth keeping:
+
+* **It collapses the search field.** At `W_FILL=4000` six of twelve seeds
+  produce the *same* 138.7 x 69.1 mm board. The term is strong enough to
+  wash the seed out, so twelve trials buy seven distinct candidates - and
+  a search whose whole method is "route many placements and keep the one
+  that verifies" is paying full price for less field.
+* **It fights the pinned edge rows**, which is a mechanical constraint,
+  not a surrogate. Counting placements that put a part outside the panel
+  or rear row (`WIDTH_LOG=1` reports this): **1 of 12 at `W_FILL=0`, 10 of
+  12 at 1000, 8 of 12 at 4000** - typically J6 several mm in front of the
+  pot row, which is the row the front panel has to close on. Evening out
+  the columns and holding the rows flush are directly opposed, and the
+  rows are not negotiable.
+
+What survives this round is the `note:` lines under `SWEEP=1`: sweep mode
+printed the board line and the DRC list but not utilisation or the largest
+empty rectangle, so the one number this experiment was about could not be
+read out of the run that measured it.
+
 **And because the width is fixed, the HEIGHT is the whole objective - so
 price it accordingly.** `w` only charges for width past the panel floor,
 which makes the width up to that floor free; at `W_H=60` the anneal did not
