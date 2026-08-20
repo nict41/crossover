@@ -723,34 +723,52 @@ background with a timeout; don't poll them in a tight loop.
 
 ## Current state / open threads
 
-### Current board: 4 layers, 141.7 x 70.4 mm, verifies CLEAN
+### Current board: 4 layers, 147.3 x 84.8 mm, two pinned rows, verifies CLEAN
 
-`SEED=35 ROUTE_SEED=15`, 86 footprints, 242 pads, 262 tracks, 166 vias,
-utilisation 58%. `verify()` passes on every check and `validate_fab.py`
-passes offline.
+`SEED=5 ROUTE_SEED=5`, 86 footprints, 242 pads, 223 tracks, 160 vias.
+`verify()` passes every check and `validate_fab.py` passes offline.
 
-**How it was found, because the shape of the search is the lesson.** Two
-layers could not do it: ~115 seeds and route-order sweeps bottomed out at
-10 DRC problems on a board 54% utilised. Then, on four layers:
+**Ground is FANNED OUT, not repaired, and that is the load-bearing change.**
+Every SMD ground pad gets its own via to the plane before a single signal
+net is routed. Two bugs had to be fixed to get there, and both are the
+same mistake in different clothes - trusting the ROUTER's bookkeeping
+where only exact geometry will do:
 
-| stage | best DRC count |
-|---|---|
-| 32 seeds, ROUTE_SEED=0 | 5 |
-| + route seeds 0-5 on the best two | 3 |
-| + route seeds 6-17 on the best one | 2 |
-| + production rip-up (6 rounds) on ROUTE_SEED=15 | **0** |
+* **`via_ok()` reads `occ`**, which carries dilated keepout rings sized so
+  a TRACE has room for its own half-width, plus `contested` wherever two
+  nets' rings merely overlap. Between two SOIC pads nearly every cell is
+  contested, so it refused a via with **2.9x** the clearance it needed (a
+  via centred on a SOIC ground pad clears the neighbouring pad by 2.35
+  units against a 0.8 rule). `pad_plane_via()` checks the same exact
+  geometry `verify()` does, plus the real drill rules, and ignores `occ`.
+  Worth five stranded pads down to two on its own.
+* **Ground was asked about too late.** `plane_stubs()` runs inside each
+  routing attempt, but the rip-up loop then keeps a DIFFERENT attempt and
+  the stitching vias land afterwards - ~20 plane vias placed over a run,
+  six surviving into the artifact. And repairing ground after the traces
+  are down cannot work at the worst pads anyway: 33 candidate via sites at
+  `Q1.2` and `U2D.12`, all refused on REAL clearance, because traces were
+  hard against them. Nothing threads to a pad that is boxed in.
 
-**Route order did two thirds of that**, on a placement the seed search had
-already settled. That is the same finding as the note further down - "route
-order does real work at this size" - and it is now the strongest evidence
-for it: seeds 0-17 on ONE placement span 2 to 13 problems.
+Measured on one placement, twelve route orders each way:
 
-It also explains why the three textbook routing techniques added at the
-same time all lost (see below). They change HOW every net routes; what
-this board needed was WHICH ORDER they route in.
+| | best result | pour failures |
+|---|---|---|
+| repair afterwards | 1 stranded ground pad | **12 of 12** route orders |
+| fan out first | 1 unrouted net | **0 of 12** |
+| fan out first, production rip-up | **0** | 0 |
 
-The board is also smaller than the two-layer attempt: 141.7 x 70.4 mm
-against 146.3 x 74.7.
+**Read that table for the KIND of failure, not the count.** Fanout costs
+real routing room - 24 through-hole vias, each blocking 4.4 units on all
+four layers - and at the ranking config it looks like a wash. What makes
+it worth taking is that a pour pocket is made by the PLACEMENT and no
+route order touches it, while an unrouted net is exactly what route order
+fixes: the same twelve orders span 2 to 10 problems. It converts a
+stubborn failure into a tractable one.
+
+**The two pinned edge rows cost height**: 70.4 mm becomes 84.8. The board
+before them was smaller partly because it used the strip in FRONT of the
+pot row, where the front panel goes. That area was never really available.
 
 Beyond the filter the board carries: a master volume, per-band volume, a
 47 kΩ line input, buffered outputs with build-out resistors, DC blocking

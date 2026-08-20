@@ -2231,7 +2231,7 @@ def path_clearance_ok(net, via_pts, polys):
 # Worth having because the measured clean rate over placements alone is only
 # a couple of percent - the same layout often routes cleanly under one order
 # and not another, and searching that is far cheaper than searching seeds.
-_ROUTE_SEED = int(os.environ.get("ROUTE_SEED", 0))
+_ROUTE_SEED = int(os.environ.get("ROUTE_SEED", 5))
 _ORDER_JITTER = {}
 if _ROUTE_SEED:
     import random as _r
