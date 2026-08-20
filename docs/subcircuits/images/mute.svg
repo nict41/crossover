@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="240" viewBox="0 0 800 240">
+  <style> .c{fill:none;stroke:#222;stroke-width:2} .t{font:12px sans-serif;fill:#000} .p{fill:#eee;stroke:#444} </style>
+  <!-- Header / Input -->
+  <rect x="20" y="20" width="80" height="28" class="p"/>
+  <text x="30" y="38" class="t">J6: Input</text>
+  <!-- Series resistor -->
+  <line x1="100" y1="34" x2="180" y2="34" class="c"/>
+  <rect x="180" y="22" width="56" height="24" class="p"/>
+  <text x="186" y="38" class="t">R31</text>
+  <!-- JFETs (mute transistors) -->
+  <g transform="translate(260,14)">
+    <rect x="0" y="0" width="56" height="56" class="p"/>
+    <text x="6" y="20" class="t">Q1</text>
+    <text x="6" y="36" class="t">JFET</text>
+  </g>
+  <g transform="translate(340,14)">
+    <rect x="0" y="0" width="56" height="56" class="p"/>
+    <text x="6" y="20" class="t">Q2</text>
+    <text x="6" y="36" class="t">JFET</text>
+  </g>
+  <!-- Steering diodes -->
+  <g transform="translate(420,14)">
+    <rect x="0" y="0" width="56" height="56" class="p"/>
+    <text x="6" y="20" class="t">D1..D3</text>
+    <text x="6" y="36" class="t">Diodes</text>
+  </g>
+  <!-- Soft-start RC -->
+  <rect x="520" y="22" width="120" height="60" class="p"/>
+  <text x="532" y="42" class="t">R40 + C16</text>
+  <text x="532" y="60" class="t">Soft-start RC</text>
+  <!-- LEDs and resistors -->
+  <rect x="660" y="22" width="100" height="60" class="p"/>
+  <text x="670" y="42" class="t">LEDs + R37..R39</text>
+
+  <!-- Connections -->
+  <line x1="236" y1="34" x2="260" y2="34" class="c"/>
+  <line x1="316" y1="34" x2="340" y2="34" class="c"/>
+  <line x1="396" y1="34" x2="420" y2="34" class="c"/>
+  <line x1="476" y1="34" x2="520" y2="34" class="c"/>
+  <line x1="640" y1="34" x2="660" y2="34" class="c"/>
+  <!-- Ground and control net labels -->
+  <text x="20" y="80" class="t">Notes:</text>
+  <text x="20" y="98" class="t">- Steering diodes gate LEDs & mute FETs</text>
+  <text x="20" y="114" class="t">- Soft-start RC delays LED / gate drive on power</text>
+  <text x="20" y="130" class="t">- Parts: Q1/Q2: JFETs, D1..D4: diodes, R31..R36 series/gate resistors</text>
+</svg>

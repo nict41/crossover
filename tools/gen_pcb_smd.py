@@ -1378,8 +1378,11 @@ def stamp_disc(layer, x, y, r, netid):
         a, b, c, d = ca, cb, cc, cd
     else:
         a, b, c, d = cells_in_rect(x - r, y - r, x + r, y + r)
-        ys, xs = np.mgrid[b:d + 1, a:c + 1]
-        m = ((xs * GRID - x) ** 2 + (ys * GRID - y) ** 2) <= r * r
+        # Use 1-D coordinate arrays and broadcasting to avoid allocating
+        # a full meshgrid via `np.mgrid` every call (hot path).
+        xs = (np.arange(a, c + 1) * GRID) - x
+        ys = (np.arange(b, d + 1) * GRID) - y
+        m = (ys[:, None] ** 2 + xs[None, :] ** 2) <= r * r
     for L in ([0, 1] if layer == MULTI else [layer - 1]):
         sub = occ[L][b:d + 1, a:c + 1]
         csub = contested[L][b:d + 1, a:c + 1]
@@ -1481,7 +1484,10 @@ def via_ok(x, y, nid, extra=0.0):
     cache is exactly equivalent to recomputing, not an approximation:
     unlike the expansion cap tried and reverted above, it cannot change
     which board sizes route."""
-    key = (x, y, nid, extra)
+    # Include an occupancy/version token so cached answers are tied to the
+    # board state that produced them.  `commit_path()` increments
+    # `OCC_VERSION` whenever occupancy changes.
+    key = (x, y, nid, extra, OCC_VERSION)
     hit = VIA_MEMO.get(key)
     if hit is not None:
         return hit
@@ -1498,6 +1504,9 @@ def via_ok(x, y, nid, extra=0.0):
                   contested[L][b:d + 1, a:c + 1]):
             ok = False
             break
+    # Cap the memo size to avoid unbounded growth on long runs.
+    if len(VIA_MEMO) > 200000:
+        VIA_MEMO.clear()
     VIA_MEMO[key] = ok
     return ok
 
@@ -1612,6 +1621,7 @@ def hole_ok(cx, cy):
 
 
 VIA_MEMO = {}
+OCC_VERSION = 0
 
 
 def astar(sources, targets, nid, tgt_xy, extra=0.0, blocked_extra=None, relaxed=False):
@@ -1806,13 +1816,17 @@ def commit_path(net, nid, runs, via_pts, polys):
     keep = drill_filter(net, via_pts)
     if keep is None:
         return False
-    # Occupancy is about to change, so every cached via_ok answer becomes a
-    # statement about a board that no longer exists.  See via_ok().
+    # Occupancy is about to change: increment the occupancy version so any
+    # cached answers that include `OCC_VERSION` become stale.  Also clear
+    # the VIA memo and the GAP cache.  Try to update the path-clear cache
+    # incrementally instead of full-clear when possible.
+    global OCC_VERSION
+    OCC_VERSION += 1
     VIA_MEMO.clear()
-    # Also clear the path-clearance cache: ROUTED/VIAS change here and the
-    # cached 'others' expanded boxes are no longer valid.
     global _PATH_CLEAR_CACHE
-    _PATH_CLEAR_CACHE = None
+    # Clear GAP cache unconditionally (distances depend on occupancy)
+    global _GAP_CACHE
+    _GAP_CACHE.clear()
     # Clear any memoised gap results — occupancy changed so cached distances
     # may no longer reflect the current geometry.
     global _GAP_CACHE
@@ -1827,6 +1841,43 @@ def commit_path(net, nid, runs, via_pts, polys):
             stamp_disc(c[0] + 1, c[1] * GRID, c[2] * GRID, own_dil, nid)
     for layer, pts in polys:
         ROUTED.append((layer, pts, net))
+    # If a path-clear cache exists, incrementally append the new features
+    # so we don't need a full rebuild of the cache on every commit.
+    try:
+        if _PATH_CLEAR_CACHE is not None:
+            others, ox0, oy0, ox1, oy1, olay, buckets, S = _PATH_CLEAR_CACHE
+            new_others = []
+            # append vias
+            for vx, vy in keep:
+                new_others.append(dict(k="pt", hw=VIA_PAD / 2, L={1, 2}, g=(vx, vy)))
+            # append runs
+            for run in runs:
+                for a, b in zip(run, run[1:]):
+                    new_others.append(dict(k="seg", hw=net_width(net) / 2, L={run[0][0]}, g=((a[1] * GRID, a[2] * GRID), (b[1] * GRID, b[2] * GRID))))
+            if new_others:
+                n_ox0, n_oy0, n_ox1, n_oy1, n_olay = _expanded_boxes(new_others)
+                ox0 = np.concatenate([ox0, n_ox0]) if ox0 is not None else n_ox0
+                oy0 = np.concatenate([oy0, n_oy0]) if oy0 is not None else n_oy0
+                ox1 = np.concatenate([ox1, n_ox1]) if ox1 is not None else n_ox1
+                oy1 = np.concatenate([oy1, n_oy1]) if oy1 is not None else n_oy1
+                olay = np.concatenate([olay, n_olay]) if olay is not None else n_olay
+                base = len(others)
+                others.extend(new_others)
+                # update buckets
+                for j in range(len(new_others)):
+                    idx = base + j
+                    bx0 = int(math.floor(n_ox0[j] / S))
+                    by0 = int(math.floor(n_oy0[j] / S))
+                    bx1 = int(math.floor(n_ox1[j] / S))
+                    by1 = int(math.floor(n_oy1[j] / S))
+                    for bx in range(bx0, bx1 + 1):
+                        for by in range(by0, by1 + 1):
+                            buckets.setdefault((bx, by), []).append(idx)
+                _PATH_CLEAR_CACHE = (others, ox0, oy0, ox1, oy1, olay, buckets, S)
+    except Exception:
+        # Fallback: if incremental update fails for any reason, invalidate
+        # the cache to preserve correctness.
+        _PATH_CLEAR_CACHE = None
     return True
 
 
