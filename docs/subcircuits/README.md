@@ -46,11 +46,11 @@ One unity-gain buffer per band, a build-out resistor, a DC blocking cap and a bl
 
 ![Muting - the shunt devices in the signal path](images/muting-shunt.svg)
 
-## Muting - gate control and soft start
+## Muting - gate control, buttons and soft start
 
-The gate pulldowns that unmute, the steering diodes that keep one button from muting all three bands, and the `R40`/`C16` soft start that holds everything muted until the rails settle.
+The gate pulldowns that unmute, the steering diodes that keep one button from muting all three bands, the `R40`/`C16` soft start that holds everything muted until the rails settle, and `SW1`-`SW3` themselves - the on-board latching buttons, one pole grounding the gate line and the other switching that band's LED feed out to `J6`.
 
-![Muting - gate control and soft start](images/muting-control.svg)
+![Muting - gate control, buttons and soft start](images/muting-control.svg)
 
 ## Power and decoupling
 

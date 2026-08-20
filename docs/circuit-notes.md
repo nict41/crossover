@@ -139,7 +139,8 @@ it will oscillate into the three sections sharing its supply pins.
 | `R40`, `C16` | 1 MΩ, 10 µF | Soft-start RC on `MUTE_SS`, ≈ 2 s |
 | `D4` | 1N4148W | Fast re-mute when the −15 V rail collapses |
 | `R37`, `R38`, `R39` | 2.2 kΩ | Panel LED current, one per band |
-| `J6` | 8-pin header | Loom to the panel: `MG1`–`MG3`, `LD1`–`LD3`, 2 × GND |
+| `SW1`, `SW2`, `SW3` | PS-22E05 | The mute buttons themselves, on the board in the panel row |
+| `J6` | 4-pin header | Optional LED loom: `LD1`–`LD3` + GND |
 
 A J111 is a **depletion-mode** JFET: it conducts at Vgs = 0. That is the
 whole trick — with the rails still coming up, every gate sits near 0 V and
@@ -152,71 +153,138 @@ is the messier of the two transients.
 
 There are therefore **two independent ways** a band gets muted, and they
 meet at the same gate. The soft start pulls all three gates up together
-through `D1`–`D3`; a panel switch pulls **one** gate up on its own, by
+through `D1`–`D3`; a mute button pulls **one** gate up on its own, by
 shorting it to ground. The steering diodes are what keep those two from
-interfering: with `MUTE_SS` down at −15 V and a switch holding one gate at
-0 V, that band's diode is reverse-biased, so the switch cannot drag
+interfering: with `MUTE_SS` down at −15 V and a button holding one gate at
+0 V, that band's diode is reverse-biased, so the button cannot drag
 `MUTE_SS` — or the other two bands — anywhere.
 
-#### Wiring the panel to `J6`
+#### The mute buttons
 
-`J6` is a 1×8 header carrying **DC only** — no audio is on this cable, so it
-can be a long loom to the front panel without any shielding concern.
+`SW1`–`SW3` are **on the board**, in the front-panel row between the volume
+pots — one beside each band's volume trim:
+
+```
+ MASTER | [LOW mute]  LOW VOL | LOW/MID | [MID mute]  MID VOL | MID/HIGH |
+        [HIGH mute]  HIGH VOL
+```
+
+They are **G-Switch PS-22E05** (LCSC `C2848949`, about £0.16 each): a
+right-angle push-lock DPDT, so the plunger points out of the board edge in
+the same direction as the pot shafts and through the same panel. Nothing
+about muting leaves the board any more.
+
+**Watch the designator order.** `SW1`/`MG1` is the **HIGH** band and
+`SW3`/`MG3` is **LOW**, which is the reverse of the panel row (LOW → HIGH,
+left to right). The silkscreen says `MUTE HI` / `MUTE MID` / `MUTE LO`
+beside each button, so the board itself is unambiguous — but the netlist is
+not, and neither is the schematic.
+
+**Pole A does the muting.** The common (pin 4) is that band's `MG` line and
+one throw is GND, so latching the button shorts the gate to ground and the
+JFET shunts that band's buffer input.
+
+**Pole B does the LED**, and it is wired to the throw at the *opposite* end
+of the body from the mute ground. That is deliberate: whichever way round
+the mechanism actually is, the LED is lit exactly when the band is **not**
+muted. Lit = playing.
+
+**Which button position mutes is a build option, not a fact.** G-Switch's
+outline drawing shows the two poles and the non-shorting changeover but
+never says which throw closes when the plunger latches, and no distributor
+page does either. The generator assumes the common latches onto the throws
+at the *far* end from the plunger. If the built board turns out to mute
+when the buttons are **out**, regenerate with
+
+```sh
+MUTE_SW_SENSE=beta python3 tools/gen_schematic.py
+python3 tools/gen_pcb_smd.py
+```
+
+which swaps GND and the LED onto the other pair of throws. Both spare
+throws are drilled and plated either way (`SW`*n*`_NC1` / `_NC2`), so it is
+a board respin, not a rework — check it with a meter on one switch before
+ordering.
+
+**The lug holes are on GND.** Pins 7 and 8 are the frame's mounting lugs;
+they take the push force, so the board solders them rather than leaving
+them dry. That assumes the metal frame is isolated from the contacts, which
+is true of every switch of this construction but is *not* stated on the
+drawing. **Check it with a meter before ordering** — it is the one thing in
+this footprint taken on trust.
+
+#### Is a 15 µA contact reliable?
+
+The mute contact carries the gate pulldown current and nothing else: 15 V
+across 1 MΩ, i.e. **15 µA**. That is a dry circuit, well below the level at
+which a silver contact reliably breaks through its own sulphide film, and
+on most circuits it would be a real reliability worry.
+
+Here it is not, and the reason is worth stating rather than asserting. What
+matters is not the contact resistance but whether the gate still gets close
+enough to 0 V to keep the JFET conducting. The contact and `R34` form a
+divider off −15 V:
+
+```
+Vg = -15 * Rc / (Rc + 1 MΩ)
+```
+
+A J111 conducts until Vgs reaches Vgs(off), which is −3 V for the most
+easily pinched device in the spec spread. Solving gives **Rc < 250 kΩ**;
+for a typical −5 V device, **Rc < 500 kΩ**. A wiping contact with a film on
+it measures ohms to kilohms — three to five orders of magnitude of margin.
+The dry circuit is safe *because the load is 1 MΩ*, not because the contact
+is a good one.
+
+The LED pole carries 5.9 mA, which is above the wetting threshold anyway.
+
+#### The optional LED loom (`J6`)
+
+`J6` is a 1×4 header carrying **DC only**, so it can be a long unshielded
+loom to the panel. Leave it unpopulated and you lose the indicators and
+nothing else.
 
 | Pin | Net | Band | What it is |
 |---|---|---|---|
-| 1 | `MG1` | **HIGH** | Mute gate — short to GND to mute |
-| 2 | `MG2` | **MID** | Mute gate |
-| 3 | `MG3` | **LOW** | Mute gate |
-| 4 | `GND` | — | Return for the switches |
-| 5 | `LD1` | **HIGH** | LED feed, +15 V through 2.2 kΩ |
-| 6 | `LD2` | **MID** | LED feed |
-| 7 | `LD3` | **LOW** | LED feed |
-| 8 | `GND` | — | Return for the LEDs |
+| 1 | `LD1` | **HIGH** | LED feed, switched: live when HIGH is playing |
+| 2 | `LD2` | **MID** | LED feed |
+| 3 | `LD3` | **LOW** | LED feed |
+| 4 | `GND` | — | Shared return for all three LEDs |
 
-**Watch the order.** `MG1` is the **HIGH** band and `MG3` is **LOW**, which
-is the reverse of the front-panel control row (that runs LOW → HIGH, left to
-right). The two orders are independent and there is nothing on the board to
-stop a loom being wired straight across; the result is a working mute on the
-wrong knob.
+Each `LD` pin is `+15 V` through 2.2 kΩ and then through the button's
+second pole, so a bare LED from `LD`*n* to the GND pin draws about
+`(15 − 2) / 2200 ≈ 5.9 mA` when that band is playing and nothing when it is
+muted. No resistor on the panel, one shared ground wire, four cores.
 
-**The switches.** Each band wants a simple **SPST** contact between its `MG`
-pin and a `GND` pin:
+Note the same reversal as the buttons: **`LD1` is HIGH, `LD3` is LOW.**
 
-* **closed = muted** (gate at 0 V, the JFET conducts, that band is shunted)
-* **open = playing** (the 1 MΩ pulldown takes the gate to −15 V)
+**Do not** wire an LED to an `MG` line to save a pole — the trap is still
+there even though the board no longer invites it. `LD`*n* would drive
+~28 µA into the gate node, the 1 MΩ pulldown cannot sink it, and the gate
+settles at roughly **+13 V**: the band stays muted with its button off and
+the gate junction is forward-biased into the bargain.
 
-Any latching switch or toggle works. The contact carries the gate pulldown
-current only — 15 V across 1 MΩ, i.e. **15 µA** — so contact rating is
-irrelevant, but for the same reason use a switch with a gold or otherwise
-low-level contact rather than a big power toggle, which can develop enough
-film resistance at 15 µA to mute unreliably.
+#### Building without the LEDs
 
-**The LEDs.** Each `LD` pin is a current-limited feed, not a switched
-output: `+15 V` through 2.2 kΩ, so an LED from `LD`*n* to `GND` draws about
-`(15 − 2) / 2200 ≈ 5.9 mA`. On its own that means **the LED is lit whenever
-the board is powered**, regardless of mute state. To make it indicate, the
-switch needs a second pole:
+`MUTE_LEDS=0` on `tools/gen_schematic.py` drops `R37`-`R39` and `J6`
+entirely and wires the button's **second pole in parallel with the first**
+instead: same gate line, same ground, two contacts. That is worth having
+on the one dry-circuit contact on the board even though (see above) it has
+enormous margin already.
 
-* **Recommended: a 2-pole (DPDT/DPST) switch per band.** Pole 1 shorts `MG`*n*
-  to GND; pole 2 shorts the LED's cathode to GND. The LED then lights
-  exactly when the band is muted.
-* An illuminated switch with *independent* lamp terminals works the same
-  way — wire the lamp across pole 2, not across the mute contact.
+It was also tried as a way to buy routing room - six nets and ten pads out
+of the panel row, which is the most congested strip on the board - and
+**measured, it does not**: over eight seeds it produced 157 DRC problems
+against 137 with the indicators in. So the LEDs are not what makes this
+board hard to route, and they are on by default.
 
-**Do not** wire the LED cathode to the `MG` pin to save a pole. It looks
-like it should work — ground the `MG` line and the LED lights with it — but
-with the switch open, `LD`*n* drives ~28 µA through the LED into the gate
-node and the 1 MΩ pulldown cannot sink it: the gate ends up at roughly
-**+13 V**, not −15 V. The JFET conducts, so the band stays muted with its
-switch off, and the gate junction is forward-biased into the bargain. If
-you only have single-pole switches, leave the LEDs out (or run them permanently lit as power indicators) rather
-than borrowing the gate node for them.
+#### Building without the buttons
 
-**If you do not want muting at all**, leave `J6` unpopulated. The board
-powers up muted and unmutes itself after about two seconds through
-`R40`/`C16`; the switches are optional and their absence is the
-never-muted state.
+Leave `SW1`–`SW3` off the board and every band plays: each `MG` line then
+has only its 1 MΩ pulldown and its steering diode on it, so the gates sit
+at −15 V once the soft start has finished. The power-up mute and the
+fast re-mute on power-down both still work — `R40`, `C16` and `D1`–`D4` are
+all on the board and none of them needs the buttons.
 
 ### Power and decoupling
 

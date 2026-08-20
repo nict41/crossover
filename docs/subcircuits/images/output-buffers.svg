@@ -1,6 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1402" height="758" viewBox="1110 1092 1402 758"><rect x="1110" y="1092" width="1402" height="758" fill="#fff"/>
 <circle cx="1130" cy="1260" r="2" fill="#0000FF"/>
 <text x="1134" y="1263" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">INPUT_PRE</text>
+<polyline points="1130 1300 1130 1290" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1120 1300 1139 1300" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1124 1302 1137 1302" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1126 1304 1133 1304" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1129 1306 1131 1306" stroke="#000000" stroke-width="1" fill="none"/>
 <rect x="1220" y="1245" width="50" height="70" stroke="#000080" stroke-width="1" fill="none"/>
 <path d="M 1290 1260 h -20" stroke="#880000" stroke-width="1" fill="none"/>
 <text x="1274" y="1256" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">1</text>
@@ -12,6 +17,11 @@
 <text x="1260" y="1238" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">HIGH</text>
 <circle cx="1350" cy="1260" r="2" fill="#0000FF"/>
 <text x="1354" y="1263" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">HIGH</text>
+<polyline points="1350 1300 1350 1290" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1340 1300 1359 1300" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1344 1302 1357 1302" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1346 1304 1353 1304" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1349 1306 1351 1306" stroke="#000000" stroke-width="1" fill="none"/>
 <rect x="1220" y="1325" width="50" height="70" stroke="#000080" stroke-width="1" fill="none"/>
 <path d="M 1290 1340 h -20" stroke="#880000" stroke-width="1" fill="none"/>
 <text x="1274" y="1336" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">1</text>
@@ -23,6 +33,11 @@
 <text x="1260" y="1318" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">MID</text>
 <circle cx="1350" cy="1340" r="2" fill="#0000FF"/>
 <text x="1354" y="1343" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">MID</text>
+<polyline points="1350 1380 1350 1370" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1340 1380 1359 1380" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1344 1382 1357 1382" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1346 1384 1353 1384" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1349 1386 1351 1386" stroke="#000000" stroke-width="1" fill="none"/>
 <rect x="1220" y="1405" width="50" height="70" stroke="#000080" stroke-width="1" fill="none"/>
 <path d="M 1290 1420 h -20" stroke="#880000" stroke-width="1" fill="none"/>
 <text x="1274" y="1416" fill="#000" font-family="Verdana" font-size="6pt" text-anchor="start">1</text>
@@ -34,26 +49,51 @@
 <text x="1260" y="1398" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">LOW</text>
 <circle cx="1350" cy="1420" r="2" fill="#0000FF"/>
 <text x="1354" y="1423" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">LOW</text>
+<polyline points="1350 1460 1350 1450" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1340 1460 1359 1460" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1344 1462 1357 1462" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1346 1464 1353 1464" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1349 1466 1351 1466" stroke="#000000" stroke-width="1" fill="none"/>
 <circle cx="1590" cy="1260" r="2" fill="#0000FF"/>
 <text x="1594" y="1263" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">TP1</text>
 <circle cx="1590" cy="1340" r="2" fill="#0000FF"/>
 <text x="1594" y="1343" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">TP2</text>
 <circle cx="1770" cy="1250" r="2" fill="#0000FF"/>
 <text x="1766" y="1253" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="end">HIGH_PRE</text>
+<polyline points="1890 1260 1890 1250" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1880 1260 1899 1260" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1884 1262 1897 1262" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1886 1264 1893 1264" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1889 1266 1891 1266" stroke="#000000" stroke-width="1" fill="none"/>
 <circle cx="1830" cy="1300" r="2" fill="#0000FF"/>
 <text x="1830" y="1316" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">HIGH_VOL</text>
 <circle cx="1770" cy="1360" r="2" fill="#0000FF"/>
 <text x="1766" y="1363" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="end">MID_PRE</text>
+<polyline points="1890 1370 1890 1360" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1880 1370 1899 1370" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1884 1372 1897 1372" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1886 1374 1893 1374" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1889 1376 1891 1376" stroke="#000000" stroke-width="1" fill="none"/>
 <circle cx="1830" cy="1410" r="2" fill="#0000FF"/>
 <text x="1830" y="1426" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">MID_VOL</text>
 <circle cx="1770" cy="1470" r="2" fill="#0000FF"/>
 <text x="1766" y="1473" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="end">LOW_PRE</text>
+<polyline points="1890 1480 1890 1470" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1880 1480 1899 1480" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1884 1482 1897 1482" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1886 1484 1893 1484" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1889 1486 1891 1486" stroke="#000000" stroke-width="1" fill="none"/>
 <circle cx="1830" cy="1520" r="2" fill="#0000FF"/>
 <text x="1830" y="1536" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">LOW_VOL</text>
 <circle cx="1810" cy="1230" r="2" fill="#0000FF"/>
 <text x="1806" y="1233" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="end">HIGH_VOL</text>
 <circle cx="2000" cy="1230" r="2" fill="#0000FF"/>
 <text x="2000" y="1220" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">HIGH_MUTE</text>
+<polyline points="1968 1360 1968 1350" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1958 1360 1977 1360" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1962 1362 1975 1362" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1964 1364 1971 1364" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1967 1366 1969 1366" stroke="#000000" stroke-width="1" fill="none"/>
 <circle cx="1870" cy="1290" r="2" fill="#0000FF"/>
 <text x="1866" y="1293" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="end">MG1</text>
 <polygon points="2060 1210 2060 1290 2130 1250" stroke="#000080" stroke-width="1" fill="none"/>
@@ -84,12 +124,22 @@
 <path d="M 2390 1335 v -10" stroke="#880000" stroke-width="1" fill="none"/>
 <text x="2402" y="1303" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">R28</text>
 <text x="2402" y="1317" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">100k</text>
+<polyline points="2390 1365 2390 1355" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="2380 1365 2399 1365" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="2384 1367 2397 1367" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="2386 1369 2393 1369" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="2389 1371 2391 1371" stroke="#000000" stroke-width="1" fill="none"/>
 <circle cx="2440" cy="1250" r="2" fill="#0000FF"/>
 <text x="2444" y="1253" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">HIGH</text>
 <circle cx="1810" cy="1380" r="2" fill="#0000FF"/>
 <text x="1806" y="1383" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="end">MID_VOL</text>
 <circle cx="2000" cy="1380" r="2" fill="#0000FF"/>
 <text x="2000" y="1370" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">MID_MUTE</text>
+<polyline points="1968 1510 1968 1500" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1958 1510 1977 1510" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1962 1512 1975 1512" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1964 1514 1971 1514" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1967 1516 1969 1516" stroke="#000000" stroke-width="1" fill="none"/>
 <circle cx="1870" cy="1440" r="2" fill="#0000FF"/>
 <text x="1866" y="1443" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="end">MG2</text>
 <polygon points="2060 1360 2060 1440 2130 1400" stroke="#000080" stroke-width="1" fill="none"/>
@@ -120,12 +170,22 @@
 <path d="M 2390 1485 v -10" stroke="#880000" stroke-width="1" fill="none"/>
 <text x="2402" y="1453" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">R29</text>
 <text x="2402" y="1467" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">100k</text>
+<polyline points="2390 1515 2390 1505" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="2380 1515 2399 1515" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="2384 1517 2397 1517" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="2386 1519 2393 1519" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="2389 1521 2391 1521" stroke="#000000" stroke-width="1" fill="none"/>
 <circle cx="2440" cy="1400" r="2" fill="#0000FF"/>
 <text x="2444" y="1403" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">MID</text>
 <circle cx="1810" cy="1530" r="2" fill="#0000FF"/>
 <text x="1806" y="1533" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="end">LOW_VOL</text>
 <circle cx="2000" cy="1530" r="2" fill="#0000FF"/>
 <text x="2000" y="1520" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">LOW_MUTE</text>
+<polyline points="1968 1660 1968 1650" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1958 1660 1977 1660" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1962 1662 1975 1662" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1964 1664 1971 1664" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1967 1666 1969 1666" stroke="#000000" stroke-width="1" fill="none"/>
 <circle cx="1870" cy="1590" r="2" fill="#0000FF"/>
 <text x="1866" y="1593" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="end">MG3</text>
 <polygon points="2060 1510 2060 1590 2130 1550" stroke="#000080" stroke-width="1" fill="none"/>
@@ -156,6 +216,11 @@
 <path d="M 2390 1635 v -10" stroke="#880000" stroke-width="1" fill="none"/>
 <text x="2402" y="1603" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">R30</text>
 <text x="2402" y="1617" fill="#000080" font-family="Verdana" font-size="7pt" font-weight="normal" text-anchor="start">100k</text>
+<polyline points="2390 1665 2390 1655" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="2380 1665 2399 1665" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="2384 1667 2397 1667" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="2386 1669 2393 1669" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="2389 1671 2391 1671" stroke="#000000" stroke-width="1" fill="none"/>
 <circle cx="2440" cy="1550" r="2" fill="#0000FF"/>
 <text x="2444" y="1553" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">LOW</text>
 <polygon points="2060 1660 2060 1740 2130 1700" stroke="#000080" stroke-width="1" fill="none"/>
@@ -177,18 +242,22 @@
 <text x="2080" y="1632" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">+15V</text>
 <circle cx="2080" cy="1760" r="2" fill="#0000FF"/>
 <text x="2080" y="1776" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="middle">-15V</text>
+<polyline points="2000 1690 2000 1680" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1990 1690 2009 1690" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1994 1692 2007 1692" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1996 1694 2003 1694" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1999 1696 2001 1696" stroke="#000000" stroke-width="1" fill="none"/>
 <circle cx="1480" cy="1520" r="2" fill="#0000FF"/>
-<text x="1484" y="1523" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">MG1</text>
+<text x="1484" y="1523" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">LD1</text>
 <circle cx="1480" cy="1550" r="2" fill="#0000FF"/>
-<text x="1484" y="1553" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">MG2</text>
+<text x="1484" y="1553" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">LD2</text>
 <circle cx="1480" cy="1580" r="2" fill="#0000FF"/>
-<text x="1484" y="1583" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">MG3</text>
-<circle cx="1480" cy="1640" r="2" fill="#0000FF"/>
-<text x="1484" y="1643" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">LD1</text>
-<circle cx="1480" cy="1670" r="2" fill="#0000FF"/>
-<text x="1484" y="1673" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">LD2</text>
-<circle cx="1480" cy="1700" r="2" fill="#0000FF"/>
-<text x="1484" y="1703" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">LD3</text>
+<text x="1484" y="1583" fill="#0000FF" font-family="Verdana" font-size="7pt" text-anchor="start">LD3</text>
+<polyline points="1480 1620 1480 1610" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1470 1620 1489 1620" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1474 1622 1487 1622" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1476 1624 1483 1624" stroke="#000000" stroke-width="1" fill="none"/>
+<polyline points="1479 1626 1481 1626" stroke="#000000" stroke-width="1" fill="none"/>
 <circle cx="1968" cy="1230" r="2.5" fill="#CC0000"/>
 <circle cx="1968" cy="1380" r="2.5" fill="#CC0000"/>
 <circle cx="1968" cy="1530" r="2.5" fill="#CC0000"/>
@@ -268,8 +337,4 @@
 <polyline points="1420 1550 1480 1550" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1420 1580 1480 1580" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1420 1610 1480 1610" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="1420 1640 1480 1640" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="1420 1670 1480 1670" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="1420 1700 1480 1700" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="1420 1730 1480 1730" stroke="#008800" stroke-width="1" fill="none"/>
 </svg>

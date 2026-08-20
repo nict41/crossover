@@ -50,7 +50,11 @@ DESIG_SIZE = 4.0
 # the board area it costs.
 LABEL_SIZE = 5.0
 
-CLEAR = 0.8                           # 8 mil clearance
+# 8 mil.  An env knob only so the fab's finer capability can be MEASURED
+# against this board - JLCPCB's 2-layer process does 6 mil as standard -
+# not because it should be turned down casually: every clearance claim in
+# the docs and in verify()'s summary line is this number.
+CLEAR = float(os.environ.get("CLEAR", 0.8))
 
 # Silkscreen line width.  0.8 units = 0.203 mm, against JLCPCB's 0.15 mm
 # minimum printable width - below that the fab may thin the line or drop it
@@ -669,6 +673,62 @@ def fp_pot_single(ref, x, y, net_of, label):
     part_record(ref, "10k log", x, y, False, "POT-9MM-SINGLE")
 
 
+def fp_switch_ra(ref, x, y, net_of, label):
+    """Right-angle push-lock DPDT mute button: G-Switch PS-22E05,
+    LCSC C2848949.  Geometry from G-Switch's own outline drawing
+    (PS-22E05 rev X1, 2016-05-29), the P.C.B LAYOUT / BOTTOM VIEW panel:
+
+        6 signal pins   0.8 mm holes, 2 x 3 on a 2.5 mm grid
+        2 mounting lugs 1.3 mm holes, 4.0 mm apart across,
+                        11.4 mm apart along, diagonally opposite
+        body            12.0 x 6.6 mm, 11.9 mm tall
+        plunger         10.3 mm proud of the body at rest,
+                        3.5 mm total travel, 2.2 mm to latch
+
+    Drawn on 2.54 mm rather than the datasheet's 2.5, which is the same
+    sub-0.1 mm slop fp_pot_single already absorbs: 0.08 mm accumulated
+    across the pin field against a 0.86 mm hole on a 0.5 x 0.6 mm pin.
+    Everything then stays on the 0.5-unit grid the rest of this file uses.
+
+    +y is the panel.  The three pin ROWS run along that axis, so pins 5/6
+    sit at the plunger end and 1/2 at the far end, with the two commons
+    (4 = pole A, 3 = pole B) in the middle - which is what the datasheet's
+    schematic panel shows, its middle pair drawn as the filled contacts.
+
+    The outline is the real 12 x 6.6 mm body, drawn as four tracks with
+    the end caps broken around the lug pads rather than run across them.
+    It is smaller than the courtyard the probe derives, because the lug
+    pads reach ~0.8 mm further out than the plastic does; that is the
+    right way round, since it is the pads that need board under them.
+    """
+    _m = fp_begin()
+    # pole A at -x (pins 1/4/5), pole B at +x (pins 2/3/6); far end at -y
+    for num, px, py in ((1, -5.0, -10.0), (4, -5.0, 0.0), (5, -5.0, 10.0),
+                        (2, 5.0, -10.0), (3, 5.0, 0.0), (6, 5.0, 10.0)):
+        pad_tht(ref, num, x + px, y + py, net_of(ref, num), dia=6.0, hole=3.4)
+    # The frame lugs.  They take the push, so they are soldered, and they
+    # are on GND - see the note in gen_schematic.switch_dpdt() about
+    # checking that the frame really is isolated from the contacts.
+    for num, px, py in ((8, -8.0, 22.5), (7, 8.0, -22.5)):
+        pad_tht(ref, num, x + px, y + py, net_of(ref, num), dia=8.0, hole=5.2)
+    bx0, by0, bx1, by1 = x - 13.0, y - 23.5, x + 13.0, y + 23.5
+    track([(bx0, by0), (bx0, by1)], TOPSILK, SILK_W)
+    track([(bx1, by0), (bx1, by1)], TOPSILK, SILK_W)
+    track([(x - 3.0, by1), (bx1, by1)], TOPSILK, SILK_W)
+    track([(bx0, by0), (x + 3.0, by0)], TOPSILK, SILK_W)
+    # Designator first, band name second - the reverse of every other
+    # footprint here, and for a reason the checker found: lug pad 7
+    # straddles the rear body edge, so the line nearest the body has only
+    # ~16 units of clear width before it runs into copper.  "SW1" fits
+    # there and "MUTE HI" does not (verify(): "silk 'MUTE HI' sits over
+    # pad SW1.7").  The second line is past the pad and can be as long as
+    # it likes.
+    silk_ref(bx0, by0 - 3, ref, LABEL_SIZE)
+    silk(bx0, by0 - 11, label, LABEL_SIZE)
+    fp_end(ref, _m, x, y)
+    part_record(ref, "DPDT LOCK", x, y, False, "SW-PS22E05")
+
+
 POT_BOSSES = []          # non-plated locating holes, filled in at placement
 
 
@@ -782,7 +842,11 @@ SOIC_SECTIONS = {"U1": U1S, "U2": U2S, "U3": U3S}
 # 0805 (see ELECTRO).
 JFETS = sorted(r for r in VALUE if VALUE[r] == "MMBFJ111")
 DIODES = sorted(r for r in VALUE if VALUE[r] == "1N4148W")
-HEADERS = {"J6": 8}
+# The LED loom, and only if the schematic was built with the indicators
+# (MUTE_LEDS=0 drops R37-R39 and J6 and parallels the button's second pole
+# onto the first instead).  Read from the netlist rather than asserted
+# here, so the board cannot disagree with the sheet about what exists.
+HEADERS = {"J6": 4} if "J6" in VALUE else {}
 
 TERMS = {
     "J2": dict(n=2, names=["IN", "GND"]),
@@ -800,7 +864,21 @@ TERMS = {
 # Master volume on the left-hand end, then LOW -> HIGH as before.  It is a
 # different KIND of control - it sets listening level, where the other five
 # set the crossover - so it sits at one end rather than in among them.
-PANEL = ["VR6", "VR5", "VR2", "VR4", "VR1", "VR3"]
+# Each band's mute button sits immediately to the LEFT of the volume pot
+# it mutes, so the two controls for a band read as a pair and the frequency
+# pots separate the bands:
+#
+#   MASTER | LOW-mute LOW-VOL | LOW/MID | MID-mute MID-VOL | MID/HIGH |
+#   HIGH-mute HIGH-VOL
+#
+# The offsets are explicit rather than k * PANEL_PITCH because the row is
+# no longer uniform: a knob needs 20.3 mm of edge to itself and a button
+# needs far less, so pricing the buttons at the knob pitch would have cost
+# 30 mm of board for nothing.  See SWITCH_PITCH.
+PANEL_ORDER = ["VR6", "SW3", "VR5", "VR2", "SW2", "VR4", "VR1", "SW1", "VR3"]
+PANEL = list(PANEL_ORDER)
+SWITCHES = ["SW1", "SW2", "SW3"]
+SWITCH_LABEL = {"SW1": "MUTE HI", "SW2": "MUTE MID", "SW3": "MUTE LO"}
 # The three output terminals are a row of their own, in the same LOW -> HIGH
 # order as the panel, so each output block sits above the volume pot that
 # feeds it.  Left free, they scattered to three different board edges -
@@ -817,6 +895,26 @@ POT_LABEL = {"VR3": "HIGH VOL", "VR4": "MID VOL", "VR5": "LOW VOL",
 # which is why this cannot be left to the optimiser to discover - it has no
 # model of the thing that actually sets the limit, which is fingers.
 PANEL_PITCH = float(os.environ.get("PANEL_PITCH", 80))
+# 56 units = 14.2 mm from a knob centre to the button beside it, which is
+# the same kind of number as PANEL_PITCH and set by the same thing: the
+# gap left between two knobs with a button between them is
+# 2 * SWITCH_PITCH - knob_diameter, so 56 leaves 10.4 mm of finger room
+# either side of an 18 mm knob.  The COURTYARDS would allow 34 units, and
+# the plunger itself is 2.8 mm square, so as with PANEL_PITCH this cannot
+# be left to the optimiser - it has no model of a fingertip.
+SWITCH_PITCH = float(os.environ.get("SWITCH_PITCH", 56))
+
+# Knob-to-knob gaps get PANEL_PITCH; any gap with a button on one side of
+# it gets SWITCH_PITCH.
+PANEL_X = {}
+_x = 0.0
+for _i, _ref in enumerate(PANEL_ORDER):
+    if _i:
+        _pair = (PANEL_ORDER[_i - 1], _ref)
+        _x += (SWITCH_PITCH if any(_r in SWITCH_LABEL for _r in _pair)
+               else PANEL_PITCH)
+    PANEL_X[_ref] = _x
+PANEL_WIDTH = _x
 
 # Three short lines, not two long ones.  The title is a real keepout (silk
 # reserves top copper), so a 130-unit-wide bar is a bar across whatever part
@@ -871,8 +969,7 @@ def drawer(ref):
         return lambda: fp_term(ref, 0, 0, N, **TERMS[ref])
     if ref in HEADERS:
         return lambda: fp_hdr(ref, HEADERS[ref], 0, 0, N,
-                              ["MG1", "MG2", "MG3", "GND",
-                               "LD1", "LD2", "LD3", "GND"])
+                              ["LD1", "LD2", "LD3", "GND"])
     if ref in JFETS:
         return lambda: fp_sot23(ref, 0, 0, N, VALUE[ref])
     if ref in DIODES:
@@ -885,6 +982,8 @@ def drawer(ref):
         return lambda: fp_pot(ref, POT_GANGS[ref][0], POT_GANGS[ref][1], 0, 0, N)
     if ref in POT_LABEL:
         return lambda: fp_pot_single(ref, 0, 0, N, POT_LABEL[ref])
+    if ref in SWITCH_LABEL:
+        return lambda: fp_switch_ra(ref, 0, 0, N, SWITCH_LABEL[ref])
     if ref == TITLE_REF:
         return draw_title
     return lambda: fp_chip(ref, 0, 0, N, VALUE[ref], CHIPS[ref])
@@ -911,7 +1010,7 @@ for _r in HEADERS:
 ROTS["TP1"] = ROTS["TP2"] = (0,)      # single round pad - rotation is a no-op
 ROTS[TITLE_REF] = (0,)
 for _r in PANEL:
-    ROTS[_r] = (0,)                   # shafts must all face the same way
+    ROTS[_r] = (0,)                   # shafts and plungers all face the panel
 for _r in CHIPS:
     ROTS[_r] = (0, 90)
 
@@ -919,7 +1018,17 @@ GEOM = {ref: {rot: probe(drawer(ref), rot) for rot in rots}
         for ref, rots in ROTS.items()}
 
 POT_W = max(GEOM[r][0]["box"][2] - GEOM[r][0]["box"][0] for r in PANEL)
-PANEL_SPAN = 4 * PANEL_PITCH + POT_W
+PANEL_SPAN = PANEL_WIDTH + POT_W
+
+# The panel row is a line of controls that all have to reach the same
+# panel, and they are not the same depth: the switch's mounting-lug pads
+# reach ~0.8 mm further forward than a pot's body does.  Line the
+# COURTYARD FRONTS up rather than the pad rows, so the board edge lands in
+# one place and every body face sits against the panel together.  Doing it
+# from the probed geometry means a footprint change carries through
+# instead of quietly leaving one control short of the edge.
+_PANEL_FRONT = max(GEOM[r][0]["box"][3] for r in PANEL)
+PANEL_Y = {r: _PANEL_FRONT - GEOM[r][0]["box"][3] for r in PANEL}
 
 _parts = []
 for _ref, _rots in ROTS.items():
@@ -969,15 +1078,33 @@ BYPASS_NEAR = [("C5", "U1", "+15V", 40.0), ("C6", "U1", "-15V", 40.0),
 # and the LED resistors sit on the header.  Nothing here is a routing
 # convenience: a gate pulldown belongs next to the gate it holds down, and
 # the soft-start RC belongs next to the diodes it feeds.
-MUTE_NEAR = ([("Q%d" % (k + 1), "U3", "%s_MUTE" % nm, 40.0)
+# How close each JFET has to sit to the buffer input it shunts.  An env
+# knob because it is the one number in this block that is a JUDGEMENT
+# rather than a physical requirement: at audio frequencies 10 mm and
+# 18 mm of shunt lead are equally irrelevant electrically, and the
+# distance is really buying "the gate line does not cross the board",
+# which the panel-row buttons now decide anyway.
+MUTE_Q_NEAR = float(os.environ.get("MUTE_Q_NEAR", 40))
+MUTE_NEAR = ([("Q%d" % (k + 1), "U3", "%s_MUTE" % nm, MUTE_Q_NEAR)
               for k, nm in enumerate(("HIGH", "MID", "LOW"))]
              + [("D%d" % (k + 1), "Q%d" % (k + 1), "MG%d" % (k + 1), 30.0)
                 for k in range(3)]
              + [("R%d" % (34 + k), "Q%d" % (k + 1), "MG%d" % (k + 1), 30.0)
                 for k in range(3)]
-             + [("R%d" % (37 + k), "J6", "LD%d" % (k + 1), 40.0)
-                for k in range(3)]
-             + [("J6", "Q2", "MG2", 100.0),
+             # The LED feed resistor belongs beside its own BUTTON, not
+             # beside the header.  Putting the buttons in the panel row
+             # turned LX1-LX3 into board-spanning two-pad nets - the
+             # *_PRE failure mode again, three more times - because R37
+             # was anchored to J6 and J6 to the JFETs, so every LED feed
+             # crossed the board and came back.  Anchoring the resistor to
+             # the switch and the header to the middle switch leaves only
+             # MG1-MG3 long, which is unavoidable: the JFET has to sit on
+             # the buffer input it shunts and the button has to be on the
+             # panel.
+             + [("R%d" % (37 + k), "SW%d" % (k + 1), "LX%d" % (k + 1), 40.0)
+                for k in range(3) if ("R%d" % (37 + k)) in VALUE]
+             + ([("J6", "SW2", "LD2", 60.0)] if "J6" in VALUE else [])
+             + [
                 ("R40", "D2", "MUTE_SS", 60.0),
                 ("C16", "D2", "MUTE_SS", 60.0),
                 ("D4", "R40", "MUTE_SS", 40.0)])
@@ -987,9 +1114,8 @@ PLACER = place.Placer(_parts, seed=SEED,
                       plane_nets=PLANE_NETS)
 
 # The panel row: fixed pitch, fixed order, all on one line.
-for _k, _ref in enumerate(PANEL):
-    _i = PLACER.idx[_ref]
-    PLACER.set_pose(_i, _k * PANEL_PITCH, 0.0, 0)
+for _ref in PANEL:
+    PLACER.set_pose(PLACER.idx[_ref], PANEL_X[_ref], PANEL_Y[_ref], 0)
 
 # Weights are in cost-units per unit of whatever they measure, so what
 # matters is their ratios.  Calibrated so that one fully starved pin-escape
@@ -1098,7 +1224,9 @@ def _place_key():
     # it here, switching the constraint on silently reuses a layout
     # computed without it.
     h.update(repr(place.PLANE_GAP).encode())
-    h.update(repr((MOVES, RESTARTS, PANEL_PITCH, OUTPUT_PITCH, EDGE,
+    h.update(repr((MOVES, RESTARTS, PANEL_PITCH, SWITCH_PITCH,
+                   sorted(PANEL_X.items()), sorted(PANEL_Y.items()),
+                   OUTPUT_PITCH, EDGE,
                    MOUNT_INSET, MOUNT_KEEP, SEED,
                    os.environ.get("ESC_CAP"), os.environ.get("ESC_FLOOR"),
                    os.environ.get("SUPPLY"), BYPASS_NEAR, MUTE_NEAR,
@@ -1150,8 +1278,8 @@ def run_placement(rng_seed):
     cost in the search subtly wrong."""
     PLACER.rng.seed(rng_seed)
     PLACER.fixed_boxes = []
-    for _i, _ref in enumerate(PANEL):
-        PLACER.set_pose(PLACER.idx[_ref], _i * PANEL_PITCH, 0.0, 0)
+    for _ref in PANEL:
+        PLACER.set_pose(PLACER.idx[_ref], PANEL_X[_ref], PANEL_Y[_ref], 0)
     for _i, _ref in enumerate(OUTPUTS):
         PLACER.set_pose(PLACER.idx[_ref],
                         PANEL_SPAN / 2 - OUTPUT_PITCH + _i * OUTPUT_PITCH, -170.0, 0)

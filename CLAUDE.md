@@ -272,6 +272,84 @@ was caught by measuring the ARTIFACT rather than reading the change.
 
 ## Hard-won learnings (each of these cost real debugging time)
 
+**On-board mute buttons made the board 28% wider, and every weight that
+was tuned against the narrow board was re-checked rather than assumed.**
+Three right-angle push-lock DPDTs (G-Switch PS-22E05) went into the panel
+row between the volume pots, taking it from six controls to nine and the
+board from 114.3 mm wide to ~146 mm. Three knobs' worth of extra edge is
+unavoidable - a control costs panel width whatever the router does - but
+the row now has TWO pitches, `PANEL_PITCH` between knobs and
+`SWITCH_PITCH` between a knob and a button, because a 2.8 mm plunger does
+not need 20.3 mm of edge and pricing it as if it did cost 30 mm of board.
+
+The re-checks, all measured on the same four seeds under the ranking
+config, total DRC problems (lower is better):
+
+| change | problems | verdict |
+|---|---|---|
+| baseline (`W_H=400`, `MUTE_Q_NEAR=40`) | 72 | - |
+| `W_H=200` (taller boards) | 108 | **rejected** |
+| `MUTE_Q_NEAR=75` (looser JFET anchor) | 84 | **rejected** |
+
+And the one that looked most promising and was not, over eight seeds:
+`MUTE_LEDS=0` takes `R37`-`R39` and `J6` off the board and parallels the
+button's second pole onto the first, removing six nets and ten pads from
+the panel row - the most congested strip on the board. **157 problems
+against 137 with the LEDs in.** The indicators are not what is costing the
+routing, so they stay; the option stays too, because paralleling the
+contacts is a real improvement if you do not want indicators.
+
+Two more, each measured on the four best seeds against a baseline of 54:
+
+| change | problems | verdict |
+|---|---|---|
+| `CLEAR=0.6` (6 mil, JLCPCB standard) | 106 | **rejected** |
+| `W_H=60` (the pre-2026-08 height weight) | 114 | **rejected** |
+
+`CLEAR=0.6` is the one worth understanding, because "give the router more
+room between things" sounds unarguable and it made the board twice as bad.
+`CLEAR` is not only a routing rule: it sets the courtyard margin the
+footprint probe adds, `track_pitch` in the placer, and the escape term's
+idea of how many tracks fit down a gap. Turning it down tells the PLACER
+that escapes are cheaper than they are, so it packs tighter, and the
+router gets a denser board with proportionally the same corridors. **A
+constant that feeds both the model and the thing being modelled cannot be
+tuned as if it only fed one of them.**
+
+`W_H=400` was tuned when the panel row was 400 units wide and it still
+wins at 496, which was not obvious: the whole argument for 400 was "the
+panel fixes the width, so height is the only thing left to trade", and a
+wider panel makes that argument *more* true, not less. Worth knowing that
+the knob did not need re-tuning; worth more that it was checked.
+
+**The failures are in the mute chain, not in the long haul to the panel.**
+The obvious theory - buttons on the panel turn every mute net into a
+board-spanning two-pad net, the `*_PRE` failure mode times nine - was
+wrong, and the diagnostic said so plainly: on the best seed the unrouted
+nets were `MID_MUTE`, `LOW_MUTE`, and two filter nets, and the pour missed
+`Q1.2`/`Q2.2`/`Q3.2`. `MG1`-`MG3` route fine. The congestion is around the
+JFETs on the buffer inputs, which is where it was before the buttons
+existed; the buttons just took away the slack. *Read the named nets before
+theorising about which nets are hard.*
+
+The re-anchoring that theory produced was kept anyway, on its own merits:
+`R37`-`R39` are anchored to their own SWITCH rather than to `J6`, and `J6`
+to `SW2`. That is right for the same reason a bypass cap is anchored to its
+own op-amp - the resistor sets the current for one button's LED - and it
+removes six board-spanning nets by construction. Measured over four seeds
+it is 69 against 72, which is noise; it is in because the reasoning stands,
+not because the number moved.
+
+**Every ground symbol was missing from all eight subcircuit diagrams.**
+`_shape_bbox()` had no case for the `F~` net-flag shape, so the crop
+predicate dropped every one of them, and the diagrams looked finished. This
+is the same failure the subcircuit code's own comment warns about, one
+layer down: a diagram drawn by the same code as the sheet cannot drift in
+STYLE, but it can still drift in CONTENT if the filter silently discards a
+shape kind. If a generated picture is missing something, check what the
+filter can and cannot see before checking the drawing code.
+
+
 **Board-size sweeps cannot fix layout problems.** Kept here because the
 reasoning still applies to anything that looks like "just give it more room".
 Causes found, in order of discovery:
@@ -509,21 +587,82 @@ background with a timeout; don't poll them in a tight loop.
 
 ## Current state / open threads
 
-The committed board is **114.3 × 77.5 mm** (`SEED=4 ROUTE_SEED=0`, 83
-footprints, 222 pads, 233 tracks, 151 vias). It verifies clean AND passes
-`validate_fab.py --online`. Utilisation 60%.
+### The board does NOT currently verify clean. Read this first.
 
-Beyond the filter it carries: a master volume, per-band volume, a 47 kΩ
-line input, buffered outputs with build-out resistors, DC blocking and
-bleeders, bulk and per-IC supply decoupling, and **per-output muting with
-power-up soft start** - a JFET shunting each buffer input, steering diodes
-so one button mutes one band, and an RC that holds everything muted until
-the rails settle then re-mutes fast when they collapse. The switches and
-LEDs are panel hardware on a loom to `J6`; no audio leaves the board.
+The committed board is `SEED=7 ROUTE_SEED=0`, **146.3 x 74.7 mm**, 86
+footprints, 242 pads, 240 tracks, 155 vias. It has **10 DRC problems**:
+eight nets left in pieces - including **both supply rails** - one
+ground-pour line (`Q3.2`, `U2B.5`, `U3D.12`), and the wasted-area note,
+which is not a defect. It is committed anyway, because the alternative was
+leaving a board in the repo that no longer matches its own schematic - but
+**it is not orderable as it stands** and nothing here should be read as
+saying otherwise.
 
-**Width is now set by the panel, not by routing.** Six controls at
-`PANEL_PITCH` come to 114.3 mm and every seed lands there. A knob costs
-20.3 mm of edge whatever the router does.
+Worth noting for whoever picks this up: the capped RANKING run of the same
+seed and route order also scores 10, but fails on *different* nets
+(`MID_MUTE`, `LOW_MUTE` and two filter nets, with the pour missing all
+three JFET sources). Same count, different composition - so the count is a
+fair ranking signal and a poor description of what is wrong. Read the
+list, not the number.
+
+What broke it: the three panel mute buttons (see below). The board before
+them was 114.3 x 77.5 mm with 83 footprints and verified clean.
+
+**What was tried, all measured, none of it enough.** Roughly 115 seeds
+were routed, plus route-order sweeps on the best of them, and the floor
+never came below 10 problems:
+
+| lever | result |
+|---|---|
+| ~115 seeds, ROUTE_SEED=0 | best 10 (SEED=7), second 11 (SEED=99) |
+| ROUTE_SEED 0-3 on the best 6 seeds | best unchanged; SEED=61 16 -> 13 |
+| re-anchoring the LED resistors to their own switch | 69 vs 72 over 4 seeds - noise |
+| `MUTE_LEDS=0` (six nets and ten pads out of the panel row) | 157 vs 137 over 8 seeds - WORSE |
+| `MUTE_Q_NEAR=75` (room around the JFETs) | 84 vs 72 - worse |
+| `W_H=200` / `W_H=60` (taller boards) | 108 / 114 vs 72 and 54 - worse |
+| `CLEAR=0.6` (6 mil, JLCPCB standard) | 106 vs 54 - much worse |
+
+**The failures are at the output-buffer end, not at the buttons.** On the
+best seed the unrouted nets are `MID_MUTE`, `LOW_MUTE` and two filter
+nets, and the pour misses `Q1.2`/`Q2.2`/`Q3.2` - the JFET sources. The
+buttons did not congest the panel row so much as take away the slack that
+the mute cluster around `U3` was living on. `MUTE_LEDS=0` proves the
+point: removing six nets and ten pads from the panel row made the board
+worse, not better.
+
+**The levers NOT yet tried, in the order worth trying them:**
+
+1. **Four layers.** This is the honest answer to a two-layer board that is
+   35% utilised and still out of channels. It is also the one CLAUDE.md
+   has been pointing at since the fill-term round: "if the board genuinely
+   needs to be smaller, the lever is more layers or finer design rules".
+   Finer rules have now been measured and rejected (`CLEAR=0.6`, above),
+   which leaves layers.
+2. **A thinner signal trace** (8 mil rather than 12) WITHOUT touching
+   `CLEAR`. The two were never separated - `CLEAR=0.6` moved the placement
+   model as well as the routing rule, and that is what made it worse. Trace
+   width feeds `track_pitch` too, so the same care applies, but `SIG_W` and
+   `CLEAR` are not the same experiment and only one of them has been run.
+3. **Negotiated congestion routing**, which was tried once, would not
+   converge, and is documented above with two specific things to fix if it
+   is retried.
+4. **Giving the buttons their own row on a daughterboard** - i.e. undoing
+   this change. Kept last deliberately: it is a real option and the user
+   chose the on-board version knowingly.
+
+Beyond the filter the board carries: a master volume, per-band volume, a
+47 kΩ line input, buffered outputs with build-out resistors, DC blocking
+and bleeders, bulk and per-IC supply decoupling, and **per-output muting
+with power-up soft start** - a JFET shunting each buffer input, steering
+diodes so one button mutes one band, and an RC that holds everything muted
+until the rails settle then re-mutes fast when they collapse. The three
+mute buttons are now **on the board**, in the panel row; `J6` carries only
+the optional LEDs. No audio leaves the board.
+
+**Width is set by the panel, not by routing.** Nine controls - six knobs
+at `PANEL_PITCH` and three buttons at `SWITCH_PITCH` - come to 146.3 mm
+and every seed lands there. A control costs panel edge whatever the router
+does.
 
 **The empty space on the board is ROUTING space, and squeezing it out
 costs nets.** This is the answer to "there is a 24 x 29 mm hole, use it",

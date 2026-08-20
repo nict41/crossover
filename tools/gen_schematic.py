@@ -110,6 +110,22 @@ _OBUF = os.environ.get("OUTPUT_BUFFERS", "1") != "0"
 # separate circuit, it is the resting state of the parts already fitted.
 _MUTE = os.environ.get("MUTE", "1") != "0"
 
+# Which of the button's two throws carries GND.  See switch_dpdt().
+# "alpha" (default) is the end AWAY from the plunger, on the reading
+# that a push-lock latches its common onto the far contacts; set
+# MUTE_SW_SENSE=beta if the built board mutes when the button is OUT.
+_MUTE_SW_ALPHA = os.environ.get("MUTE_SW_SENSE", "alpha") != "beta"
+
+# Panel mute indicators.  With them ON, the button's second pole switches
+# a current-limited LED feed out to J6 (lit = that band is playing) and
+# R37-R39 set the current.  With them OFF, R37-R39 and J6 come off the
+# board entirely and the second pole is wired in PARALLEL with the first
+# instead, which is not a consolation prize: it halves the mute contact
+# resistance and gives the one dry-circuit contact on the board a second
+# path.  The cost of ON is three more parts and six more nets in the panel
+# row, which is the most congested strip on this board.
+_MUTE_LEDS = os.environ.get("MUTE_LEDS", "1") != "0"
+
 # Master volume, ahead of everything.
 #
 # It goes at the INPUT, before the buffer, for two reasons.  It then sets
@@ -187,7 +203,13 @@ VARIANTS = [
 
 # Wide enough for the output-buffer column at x = 1980-2490 and tall
 # enough for the spare section's supply labels at y = 1776.
-W_CANVAS, H_CANVAS = 2560, 2060
+# 2400 tall, not 2060: the mute-button row (SW1-SW3) sits under the
+# MUTING AND SOFT START column, and the sheet grew rather than the
+# buttons being squeezed into the first gap that looked empty - the
+# first attempt put them at x=1750 and landed them on top of the
+# output-buffer block, which the netlist could not see and the render
+# showed immediately.
+W_CANVAS, H_CANVAS = 2560, 2470
 
 
 # --------------------------------------------------------------------------
@@ -384,6 +406,55 @@ def jfet(ref, model, x, y, package="SOT-23"):
     add_pin(ref, 1, x + 18, y - 40)
     add_pin(ref, 2, x + 18, y + 40)
     add_pin(ref, 3, x - 40, y)
+    LIB(x, y, a, sub)
+
+
+def switch_dpdt(ref, value, x, y, package="SW-PS22E05"):
+    """On-board latching mute button: G-Switch PS-22E05, LCSC C2848949.
+
+    A right-angle (edge-mount) push-lock DPDT, drawn here the way it is
+    numbered on the board - two changeover poles, commons 4 (pole A) and
+    3 (pole B), and each pole's two throws at opposite ends of the body:
+    1/2 at the far end from the plunger, 5/6 at the plunger end.
+
+    Pins 7 and 8 are the frame's mounting lugs.  They take the push force,
+    so they are soldered rather than left dry, and they go to GND - which
+    assumes the metal frame is isolated from the contacts.  It is on every
+    switch of this construction, but it is a CHECK BEFORE ORDERING, not a
+    fact taken from the drawing: G-Switch's outline drawing shows the lugs
+    and does not say what they touch.
+
+    Which throw closes when the button LATCHES is also not on the drawing,
+    and it decides whether the button mutes in or out.  MUTE_SW_SENSE
+    swaps the two ends over, so a build that comes out backwards is a
+    regenerate rather than a rework.  The LED does not depend on it - see
+    the wiring in draw()."""
+    a = attrs_of([("package", package), ("nameAlias", "Value"),
+                  ("Value", value), ("spicePre", "SW"),
+                  ("spiceSymbolName", "Switch")])
+    sub = []
+    poles = ((y - 30, 4, 1, 5), (y + 30, 3, 2, 6))
+    for yp, com, alpha, beta in poles:
+        sub += [PIN(com, x - 70, yp, "M %d %d h 20" % (x - 70, yp), 180),
+                PIN(alpha, x + 70, yp - 16,
+                    "M %d %d h -20" % (x + 70, yp - 16), 0),
+                PIN(beta, x + 70, yp + 16,
+                    "M %d %d h -20" % (x + 70, yp + 16), 0),
+                PG([(x - 54, yp - 4), (x - 46, yp - 4), (x - 46, yp + 4),
+                    (x - 54, yp + 4)], fill=SYM_COLOR),
+                PL([(x - 50, yp), (x + 46, yp - 16)], width=2)]
+        add_pin(ref, com, x - 70, yp)
+        add_pin(ref, alpha, x + 70, yp - 16)
+        add_pin(ref, beta, x + 70, yp + 16)
+    # the two poles move together
+    sub.append(PL([(x + 30, y - 43), (x + 30, y + 17)]))
+    # the frame, and the two lugs that hold it down
+    sub.append(RECT(x - 30, y + 62, 60, 14))
+    for num, lx in ((7, x - 20), (8, x + 20)):
+        sub.append(PIN(num, lx, y + 116, "M %d %d v -40" % (lx, y + 116), 90))
+        add_pin(ref, num, lx, y + 116)
+    sub.append(T("P", x - 70, y - 60, ref, anchor="start"))
+    sub.append(T("N", x + 70, y - 60, value, anchor="end"))
     LIB(x, y, a, sub)
 
 
@@ -980,13 +1051,16 @@ def draw(cfg):
             w((cx - 40, my - 90), (cx, my - 90))
             w((cx - 100, my - 90), (cx - 140, my - 90))
             netlabel("MUTE_SS", cx - 140, my - 90, anchor="end", dx=-4, dy=3)
-            # Panel LED feed.  The LED and its switch are off-board; only
-            # the resistor that sets its current lives here.
-            resistor("R%d" % (37 + k), "2.2k", cx, my + 150, vertical=True)
-            w((cx, my + 120), (cx, my + 100))
-            netlabel("+15V", cx, my + 100, anchor="middle", dy=-10)
-            w((cx, my + 180), (cx, my + 210))
-            netlabel("LD%d" % (1 + k), cx, my + 210, anchor="middle", dy=16)
+            # Panel LED feed.  The resistor sets the current; the switch's
+            # second pole (below) does the switching, so what leaves the
+            # board on LD%d is a current-limited feed that is live only
+            # when the band is playing.
+            if _MUTE_LEDS:
+                resistor("R%d" % (37 + k), "2.2k", cx, my + 150, vertical=True)
+                w((cx, my + 120), (cx, my + 100))
+                netlabel("+15V", cx, my + 100, anchor="middle", dy=-10)
+                w((cx, my + 180), (cx, my + 210))
+                netlabel("LX%d" % (1 + k), cx, my + 210, anchor="middle", dy=16)
 
         # The soft start.  MUTE_SS rests at 0 V, which holds every gate up
         # through its diode, and creeps to -15 V through R40 over roughly
@@ -1013,52 +1087,116 @@ def draw(cfg):
         w((sx + 150, my - 160), (sx + 150, my - 190), (sx, my - 190))
         w((sx + 150, my - 100), (sx + 150, my - 90), (sx, my - 90))
 
-        # One loom to the front panel.
-        header("J6", "MUTE", 1400, my - 190,
-               ["MG1", "MG2", "MG3", "GND", "LD1", "LD2", "LD3", "GND"],
-               package="HDR-1X8")
-        for _i, _nm in enumerate(["MG1", "MG2", "MG3", "GND",
-                                  "LD1", "LD2", "LD3", "GND"]):
-            _py = my - 180 + 30 * _i
-            w((1420, _py), (1480, _py))
-            if _nm == "GND":
-                gnd(1480, _py)
+        # The buttons themselves, on the board, in the panel row between
+        # the volume pots.  Right-angle push-lock DPDTs: pole A grounds
+        # the gate line, pole B switches the LED feed.
+        #
+        # WHICH END closes when the button latches is not in G-Switch's
+        # drawing, so it is a build option rather than a fact: pole A's
+        # two throws sit at opposite ends of the body and MUTE_SW_SENSE
+        # picks which one carries GND.  Get it backwards and the buttons
+        # mute when OUT rather than when IN - a regenerate, not a rework.
+        #
+        # The LED does NOT depend on that choice, and that is deliberate.
+        # It is taken from the throw at the OPPOSITE end from the mute
+        # ground, so whatever the mechanism does, the LED is lit exactly
+        # when its band is NOT muted.  Lit = playing, in either build.
+        alpha, beta = ((1, 2), (5, 6)) if _MUTE_SW_ALPHA else ((5, 6), (1, 2))
+        note(60, my + 280, "MUTE BUTTONS - on the board, in the panel row "
+             "between the volume pots", weight="bold")
+        for k in range(3):
+            sx = 220 + 380 * k
+            sy = my + 400
+            switch_dpdt("SW%d" % (1 + k), "DPDT LOCK", sx, sy)
+            _py = dict(zip((4, 1, 5, 3, 2, 6),
+                           (sy - 30, sy - 46, sy - 14,
+                            sy + 30, sy + 14, sy + 46)))
+            # pole A: gate line to ground
+            w((sx - 70, _py[4]), (sx - 110, _py[4]))
+            netlabel("MG%d" % (1 + k), sx - 110, _py[4], anchor="end",
+                     dx=-4, dy=3)
+            w((sx + 70, _py[alpha[0]]), (sx + 120, _py[alpha[0]]))
+            gnd(sx + 120, _py[alpha[0]])
+            if _MUTE_LEDS:
+                # pole B: LED feed, taken from the far throw so it reads
+                # "playing" regardless of which way round the mechanism is
+                w((sx - 70, _py[3]), (sx - 110, _py[3]))
+                netlabel("LX%d" % (1 + k), sx - 110, _py[3], anchor="end",
+                         dx=-4, dy=3)
+                w((sx + 70, _py[beta[1]]), (sx + 120, _py[beta[1]]))
+                netlabel("LD%d" % (1 + k), sx + 120, _py[beta[1]],
+                         anchor="start", dx=4, dy=3)
+                spare = ((1, beta[0]), (2, alpha[1]))
             else:
-                netlabel(_nm, 1480, _py, anchor="start", dx=4, dy=3)
+                # pole B in parallel with pole A - same gate line, same
+                # ground, twice the contact
+                w((sx - 70, _py[3]), (sx - 110, _py[3]))
+                netlabel("MG%d" % (1 + k), sx - 110, _py[3], anchor="end",
+                         dx=-4, dy=3)
+                w((sx + 70, _py[alpha[1]]), (sx + 120, _py[alpha[1]]))
+                gnd(sx + 120, _py[alpha[1]])
+                spare = ((1, beta[0]), (2, beta[1]))
+            # The throws left over.  They are real pads on real pins, so
+            # they get real names: a pad with no net fails the board's own
+            # schematic-agreement check, and rightly - "I meant to leave
+            # that one" and "I forgot that one" look identical.
+            for _n, _pin in spare:
+                w((sx + 70, _py[_pin]), (sx + 108, _py[_pin]))
+                netlabel("SW%d_NC%d" % (1 + k, _n), sx + 108, _py[_pin],
+                         anchor="start", dx=4, dy=3)
+            # mounting lugs
+            w((sx - 20, sy + 116), (sx - 20, sy + 140), (sx + 20, sy + 140),
+              (sx + 20, sy + 116))
+            gnd(sx, sy + 140)
+            w((sx - 20, sy + 140), (sx + 20, sy + 140))
+
+        # One four-way loom to the panel LEDs, if they are fitted at all.
+        # The switches no longer go through it, so an unpopulated J6 costs
+        # nothing but the indicators.
+        if _MUTE_LEDS:
+            header("J6", "LEDS", 1400, my - 190,
+                   ["LD1", "LD2", "LD3", "GND"], package="HDR-1X4")
+            for _i, _nm in enumerate(["LD1", "LD2", "LD3", "GND"]):
+                _py = my - 180 + 30 * _i
+                w((1420, _py), (1480, _py))
+                if _nm == "GND":
+                    gnd(1480, _py)
+                else:
+                    netlabel(_nm, 1480, _py, anchor="start", dx=4, dy=3)
         note(60, my - 250, "MUTING AND SOFT START", weight="bold")
         note(60, my - 228, "Q1-Q3 shunt each buffer input through R31-R33. "
              "A JFET conducts at Vgs=0, so the board powers up MUTED and "
-             "R40/C16 release it after ~2 s.  The panel switches and LEDs "
-             "wire to J6 - no audio leaves the board.", size="7pt")
+             "R40/C16 release it after ~2 s.  SW1-SW3 are on the board, in "
+             "the panel row; J6 carries only the optional LEDs.", size="7pt")
 
     note(60, 1180, "SUPPLY BYPASSING - one 100nF ceramic per rail, at each IC",
          weight="bold")
 
     # ---------------- title block --------------------------------------------
     note(60, 30, cfg["title"], size="14pt", weight="bold", color="#000000")
-    note(60, 1900, "After Rod Elliott, Elliott Sound Products, Project 148 "
+    note(60, 2320, "After Rod Elliott, Elliott Sound Products, Project 148 "
          "(https://sound-au.com/project148.htm).  Redrawn for EasyEDA.",
          size="8pt", color="#404040")
-    note(60, 1920, "All op-amps %s - %d x %s package%s.  Q = 0.5 Linkwitz-Riley "
+    note(60, 2340, "All op-amps %s - %d x %s package%s.  Q = 0.5 Linkwitz-Riley "
          "with R3 / R13 = %s; use 11k2 for exact Q = 0.5, or 5k04 for "
          "Butterworth (Q = 0.707)."
          % (cfg["model"], len(cfg["packages"]), cfg["pkg"],
             "" if len(cfg["packages"]) == 1 else "s", cfg["rq"]),
          size="8pt", color="#404040")
-    note(60, 1940, "VR1 and VR2 are dual-gang 20k linear pots wired as rheostats. "
+    note(60, 2360, "VR1 and VR2 are dual-gang 20k linear pots wired as rheostats. "
          "TP1 / TP2 null at the crossover frequency and may be omitted."
          + (" VR3/VR4/VR5 are single-gang 10k audio-taper pots wired as "
             "attenuators - per-output volume, not part of the filter."
             if cfg.get("volume_pots") else ""),
          size="8pt", color="#404040")
     if cfg.get("output_buffers"):
-        note(60, 1960, "U3A/U3B/U3C buffer each volume pot's wiper, so the "
+        note(60, 2380, "U3A/U3B/U3C buffer each volume pot's wiper, so the "
              "output impedance is the op-amp's rather than up to 2.5k of pot "
              "track, and the amplifier's input impedance no longer loads the "
              "pot or bends its taper.  U3D is the unused section, terminated.  "
              "R28-R30 hold each output at 0 V when nothing is plugged in.",
              size="8pt", color="#404040")
-        note(60, 1980, "Input impedance is R1 = 47k, a line-level figure: a "
+        note(60, 2400, "Input impedance is R1 = 47k, a line-level figure: a "
              "master volume pot ahead of the board (one dual-gang for a "
              "stereo pair, feeding both channels' J2) works properly into it.  "
              "It is off-board because this board is one channel.",
@@ -1302,9 +1440,9 @@ SUBCIRCUITS = [
     # sheet a metre wide.
     ("muting-shunt", "Muting - the shunt devices in the signal path",
      ["Q1", "Q2", "Q3", "R31", "R32", "R33"]),
-    ("muting-control", "Muting - gate control and soft start",
+    ("muting-control", "Muting - gate control, buttons and soft start",
      ["R34", "R35", "R36", "R37", "R38", "R39", "R40",
-      "D1", "D2", "D3", "D4", "C16", "J6"]),
+      "D1", "D2", "D3", "D4", "C16", "J6", "SW1", "SW2", "SW3"]),
     ("power-decoupling", "Power and decoupling",
      ["J1", "C5", "C6", "C7", "C8", "C9", "C10", "C11", "C12"]),
 ]
@@ -1338,6 +1476,14 @@ def _shape_bbox(sh):
         if f[0] in ("J", "N"):
             x, y = float(f[1]), float(f[2])
             return (x, y, x, y)
+        if f[0] == "F":
+            # A net flag - GND, in this sheet.  It has to have a box or the
+            # subcircuit crops drop it, and they did: every ground symbol
+            # was missing from all eight diagrams, which is a drawing that
+            # LOOKS complete and is not.  The box is the flag's own symbol,
+            # which is drawn downwards from the connection point.
+            x, y = float(f[2]), float(f[3])
+            return (x - 12, y - 14, x + 12, y + 20)
     except (ValueError, IndexError):
         return None
     return None
@@ -1471,6 +1617,14 @@ def write_bom(filename="bom.csv"):
         "47k": "Sets the board's input impedance - see docs/design-review.md",
         "100k": "Output bleeders: hold each output at 0 V through its coupling "
                 "capacitor when nothing is plugged into the terminal block",
+        "DPDT LOCK": "G-Switch PS-22E05 (LCSC C2848949) right-angle "
+                     "push-lock DPDT, one per band, in the panel row. Pole A "
+                     "grounds the JFET gate; pole B switches that band's LED "
+                     "feed. Check the frame lugs are isolated from the "
+                     "contacts before ordering - the board grounds them",
+        "LEDS": "Optional panel indicators: LD1/LD2/LD3 are current-limited "
+                "feeds that are live when the band is playing, so a bare LED "
+                "from each to the GND pin is the whole loom",
         "TP": "Test points - optional, omit with R10/R11 and R23/R24",
         "IN": "Signal input",
         "HIGH": "Output terminal block to the treble amplifier",
@@ -1666,7 +1820,8 @@ def signal_map(nets, cfg):
     # steering diodes, the soft-start RC, the LED feed resistors and the
     # panel connector) hangs off to the side and simply does not exist in
     # the other variants, which is absence rather than divergence.
-    mute_refs = ({"Q1", "Q2", "Q3", "D1", "D2", "D3", "D4", "C16", "J6"}
+    mute_refs = ({"Q1", "Q2", "Q3", "D1", "D2", "D3", "D4", "C16", "J6",
+                  "SW1", "SW2", "SW3"}
                  | {"R%d" % r for r in range(31, 41)}
                  if cfg.get("mute") else set())
     out = {}

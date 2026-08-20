@@ -269,34 +269,52 @@ what it does is listed in
 
 ### SMD board, routed, for JLCPCB fab + assembly
 
-`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **114.3 ×
-77.5 mm**, two layers, **fully routed**, six front-panel controls on the
-board (a frequency pot and a volume trim per band, plus a master volume),
-trace width matched to purpose (12 mil signal, 16 mil power/ground), 45°
-chamfered corners, every SMD part a real LCSC line item.
+`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **146.3 ×
+74.7 mm**, two layers, nine front-panel controls on the board (a frequency
+pot and a volume trim per band, a master volume, and a mute button per
+band), trace width matched to purpose (12 mil signal, 16 mil power/ground),
+45° chamfered corners, every SMD part a real LCSC line item.
+
+> **This board does not verify clean and is not orderable as it stands.**
+> Eight nets are left in pieces — including both supply rails — and the
+> ground pour misses three pads: 10 DRC problems. Adding the three panel
+> mute buttons
+> used up the two-layer board's remaining routing slack; ~115 placement
+> seeds and route-order sweeps did not find a clean one, and the levers
+> tried and rejected are listed in
+> [`CLAUDE.md`](CLAUDE.md#the-board-does-not-currently-verify-clean-read-this-first).
+> The board immediately before this change (114.3 × 77.5 mm, no on-board
+> buttons) did verify clean and is in the git history.
 
 Beyond the filter itself it carries buffered outputs with build-out
 resistors, DC blocking and bleeders, a 47 kΩ line input, bulk and per-IC
 supply decoupling, and **per-output muting with power-up soft start** — a
 JFET shunting each buffer input, steering diodes so one button mutes one
 band, and an RC that holds everything muted until the rails settle and
-re-mutes fast when they collapse. The switches and LEDs are panel hardware
-on a loom to `J6`; no audio leaves the board. Which parts do what, block
+re-mutes fast when they collapse. The three mute buttons are **on the
+board**, in the panel row beside the volume trims - right-angle push-lock
+DPDTs, so their plungers come out of the board edge alongside the pot
+shafts. `J6` carries only the optional panel LEDs, which light when a band
+is playing. No audio leaves the board. Which parts do what, block
 by block, is in
 [`docs/circuit-notes.md`](docs/circuit-notes.md#function-blocks-on-the-smd-board).
 
 ![SMD board](pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.png)
 
 ```
-board 114.3 x 77.5 mm | 83 footprints | 222 pads | 233 tracks | 151 vias
-verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
-          pads match the schematic exactly
+board 146.3 x 74.7 mm | 86 footprints | 242 pads | 240 tracks | 155 vias
+board utilisation 54%; largest empty rectangle 24 x 47 mm at (0, 5)
+DRC PROBLEMS (10) - see the warning above
 ```
 
-Sockets on the rear edge; on the front edge, left to right: MASTER, LOW
-volume, MID/LOW frequency, MID volume, HIGH/MID frequency, HIGH volume —
-the board mounts flat behind the front panel, and the frequency pots carry
-their sweep range on the silkscreen. The volume controls are single-gang
+Sockets on the rear edge; on the front edge, left to right: MASTER,
+**LOW mute**, LOW volume, MID/LOW frequency, **MID mute**, MID volume,
+HIGH/MID frequency, **HIGH mute**, HIGH volume — nine controls, each mute
+button beside the volume trim it mutes. The board lies **flat in the
+enclosure, perpendicular to the front panel**, with right-angle pots and
+right-angle switches on the front edge and their shafts and plungers
+through the panel — the way a small amplifier board is usually arranged.
+The frequency pots carry their sweep range on the silkscreen. The volume controls are single-gang
 audio-taper pots (Alps RK097 pattern) wired as attenuators; the frequency
 pots are the standard 9 mm dual-gang pattern. Both **need checking against
 your parts' datasheets** — there are no locating-boss holes, deliberately;
