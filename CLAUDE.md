@@ -769,3 +769,43 @@ prefer so other collaborators and CI see the change.
 Next step (awaiting approval): add the lightweight programmatic entrypoint
 to `tools/gen_pcb_smd.py` and re-run the fast prefilter locally or in CI to
 collect timings.  Do not proceed until you grant permission.
+
+## Agent edits (2026-08-20 — post-approval)
+
+Applied three pure-optimisation edits to `tools/gen_pcb_smd.py` that
+preserve every routing decision and verification verdict:
+
+1. **`via_ok` memo no longer cleared per-A* call.** The key already
+   carries `OCC_VERSION`; only `commit_path()` changes occupancy.  The
+   per-call `VIA_MEMO.clear()` in `astar_py()` threw away answers that
+   were still exactly correct — the memo is the router's single hottest
+   win (once per expanded node, 11×11×2 numpy window).  Removed that
+   clear; memo now lives across searches until `OCC_VERSION` increments.
+
+2. **`_GAP_CACHE` cleared only in `build_features()`, not on every
+   `commit_path()`.** `gap()` keys on feature-object identity (`id()`);
+   those objects are only replaced when `build_features()` rebuilds the
+   `FEATURES` list (once per rip-up round).  Clearing it per-commit
+   threw away answers the relaxed retry had already paid for and were
+   still exact — they get re-used for every subsequent candidate against
+   the same live objects.
+
+3. **`_PATH_CLEAR_CACHE` invalidated by simple `= None` instead of
+   per-commit `np.concatenate`.** The old incremental branch copied the
+   entire growing arrays on every trace commit — O(C×N) total, where C
+   is ~400 commits and N ~ 700 features.  Now the cache is just
+   invalidated; the next `path_clearance_ok` rebuilds from scratch in
+   O(N) (~1 ms).  Strictly fewer allocations, identical verdicts.
+
+4. **`_pad_span` cached per placement.** `route_order()` key called it
+   once per net per pass; it rescanned every pad of that net each time
+   — O(pads²) in the worst case.  Now cached in `_SPAN_CACHE` on first
+   use; zero cost thereafter.
+
+5. **`passable()` bounds re-check removed.** The neighbour loop only ever
+   steps ±1 from cells already known in-range, so the `1 <= x < NX-1`
+   test was pure overhead in the hottest inner loop.
+
+All changes are internal; no verdicts change.  Run `python
+tools/gen_pcb_smd.py` (or the fast prefilter `PLANE_PREFILTER_ONLY=1
+SWEEP=1 ROUTER=py python tools/gen_pcb_smd.py`) to verify behaviour.

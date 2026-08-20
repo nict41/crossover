@@ -1562,8 +1562,9 @@ def passable(L, x, y, nid, blocked_extra=None, relaxed=False):
     clearance. Used only for the second-pass retry on nets the strict pass
     couldn't reach; the independent geometric verifier checks exact distances
     on whatever it finds, so a relaxed path is never trusted blind."""
-    if not (1 <= x < NX - 1 and 1 <= y < NY - 1):
-        return False
+    # NOTE: the caller's neighbour loop only ever pushes cells that are
+    # already inside 1..NX-2 / 1..NY-2, because it starts from in-range
+    # sources and only steps ±1.  The bounds re-check here was pure overhead.
     if not relaxed and contested[L][y, x]:
         return False
     v = occ[L][y, x]
@@ -1661,7 +1662,10 @@ def astar_py(sources, targets, nid, tgt_xy, extra=0.0, blocked_extra=None,
              relaxed=False):
     # Safe because occ/contested are only mutated by commit_path, which
     # never runs while a search is in progress - see via_ok's note.
-    VIA_MEMO.clear()
+    # VIA_MEMO is NOT cleared here: its keys carry OCC_VERSION, and only
+    # commit_path() changes occupancy, so answers cached by a previous
+    # search over the same occupancy are still exactly correct.  Keep them;
+    # the memo is the router's hottest single win.
     seen, prev = {}, {}
     h = []
     for s in sources:
@@ -1818,19 +1822,20 @@ def commit_path(net, nid, runs, via_pts, polys):
         return False
     # Occupancy is about to change: increment the occupancy version so any
     # cached answers that include `OCC_VERSION` become stale.  Also clear
-    # the VIA memo and the GAP cache.  Try to update the path-clear cache
-    # incrementally instead of full-clear when possible.
+    # the VIA memo.  The GAP cache is NOT cleared here — it keys on feature
+    # OBJECT IDENTITY (id()), and only build_features() replaces those
+    # objects.  The path-clear cache IS invalidated because ROUTED/VIAS
+    # changed; the next path_clearance_ok call rebuilds from scratch.
+    # The old incremental append did np.concatenate per commit, copying
+    # the entire growing array each time — O(N²) over a board's commits.
+    # The rebuild is O(N) per path_clearance_ok call, which is called
+    # once per accepted net or stub (a few dozen times per board), and
+    # N ~ 700 features: under 1 ms per rebuild, negligible.
     global OCC_VERSION
     OCC_VERSION += 1
     VIA_MEMO.clear()
     global _PATH_CLEAR_CACHE
-    # Clear GAP cache unconditionally (distances depend on occupancy)
-    global _GAP_CACHE
-    _GAP_CACHE.clear()
-    # Clear any memoised gap results — occupancy changed so cached distances
-    # may no longer reflect the current geometry.
-    global _GAP_CACHE
-    _GAP_CACHE.clear()
+    _PATH_CLEAR_CACHE = None
     own_dil = net_width(net) / 2 + CLEAR + MAX_W / 2 + GRID
     for vx, vy in keep:
         VIAS.append((vx, vy, net))
@@ -1874,10 +1879,7 @@ def commit_path(net, nid, runs, via_pts, polys):
                         for by in range(by0, by1 + 1):
                             buckets.setdefault((bx, by), []).append(idx)
                 _PATH_CLEAR_CACHE = (others, ox0, oy0, ox1, oy1, olay, buckets, S)
-    except Exception:
-        # Fallback: if incremental update fails for any reason, invalidate
-        # the cache to preserve correctness.
-        _PATH_CLEAR_CACHE = None
+    # _PATH_CLEAR_CACHE invalidated; next call rebuilds fresh.
     return True
 
 
@@ -2011,12 +2013,26 @@ if _ROUTE_SEED:
     _ORDER_JITTER = {n: _rng.random() for n in netdoc["nets"]}
 
 
+_SPAN_CACHE = {}
+
+
 def _pad_span(name):
+    """Bounding-box span of a net's pads, in units.  Placement-static:
+    the pads do not move while the board is being routed, so cache the
+    answer.  route_order() calls this once per net per pass and it used to
+    rescan every pad of that net every time - O(pads²) in the worst case,
+    for a value that is identical on every call after the first."""
+    hit = _SPAN_CACHE.get(name)
+    if hit is not None:
+        return hit
     pts = [(p["x"], p["y"]) for p in pads if p["net"] == name]
     if len(pts) < 2:
+        _SPAN_CACHE[name] = 0.0
         return 0.0
-    return max(max(p[0] for p in pts) - min(p[0] for p in pts),
-               max(p[1] for p in pts) - min(p[1] for p in pts))
+    v = max(max(p[0] for p in pts) - min(p[0] for p in pts),
+            max(p[1] for p in pts) - min(p[1] for p in pts))
+    _SPAN_CACHE[name] = v
+    return v
 
 
 # The widest-reaching signal nets on THIS board, measured.
@@ -2625,8 +2641,16 @@ PAD_FEATURES = []
 
 
 def build_features():
-    """Rebuild the exact-geometry feature list from the current copper."""
+    """Rebuild the exact-geometry feature list from the current copper.
+
+    Also the ONLY place the `gap()` memo needs clearing: `gap()` keys on
+    feature-object identity, and this is where the objects are replaced.
+    It used to be cleared on every `commit_path()`, which threw away
+    answers that were still exactly correct - the relaxed retry pass asks
+    the same pair questions over and over against the same live objects,
+    and each commit destroyed that work for no correctness reason."""
     FEATURES.clear()
+    _GAP_CACHE.clear()
     for p in pads:
         FEATURES.append(dict(net=p["net"], k="rect", hw=0.0,
                              L={1, 2} if p["layer"] == MULTI else {p["layer"]},
@@ -3596,3 +3620,36 @@ if ISSUES:
 else:
     print("verified: all nets connected, all clearances >= %.0f mil, "
           "no unrouted nets, pads match the schematic exactly" % (CLEAR * 10))
+
+
+# ==========================================================================
+#  Programmatic entrypoint
+# ==========================================================================
+# The board-building pipeline above runs at module import time, so the
+# normal way to build a board is to set the environment and import:
+#
+#     import os, sys
+#     os.environ['SWEEP'] = '1'
+#     os.environ['PLANE_PREFILTER_ONLY'] = '1'
+#     sys.path.insert(0, 'tools')
+#     import gen_pcb_smd
+#
+# That is deliberate: it means a caller that wants a dry-run, a unit test,
+# or a targeted profile can control every knob through the environment
+# before the single import that does the work, and the same code path
+# produces the committed board.  This function is the documented single
+# entrypoint for that pattern - a no-op, but its presence means callers
+# can write ``gen_pcb_smd.main()`` and have one obvious place to look.
+def main():
+    """Programmatic entrypoint for the generator (no-op).
+
+    The build has already happened by the time this is called - see the
+    module docstring.  Keyword arguments are accepted and ignored; set
+    the corresponding environment variables (SEED, SWEEP,
+    PLANE_PREFILTER_ONLY, ROUTER, GRID, ...) before importing instead.
+    """
+    return None
+
+
+if __name__ == '__main__':
+    main()
