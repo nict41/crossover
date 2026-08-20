@@ -270,8 +270,8 @@ what it does is listed in
 
 ### SMD board, routed, for JLCPCB fab + assembly
 
-`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **141.7 ×
-70.4 mm**, **four layers**, **fully routed**, nine front-panel controls on
+`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **147.3 ×
+84.8 mm**, **four layers**, all 67 nets routed, nine front-panel controls on
 the board (a frequency pot and a volume trim per band, a master volume, and
 a mute button per band), trace width matched to purpose (12 mil signal,
 16 mil power/ground), 45° chamfered corners, every SMD part a real LCSC
@@ -281,6 +281,18 @@ The stackup is L1 signal / **L2 solid GND plane** / L3 signal / L4 signal.
 Two layers could not route this board once the three panel mute buttons
 went into the front row — see
 [`docs/pcb-notes-smd.md`](docs/pcb-notes-smd.md#the-stackup).
+
+Every part that reaches an edge is pinned into one of two rows — the panel
+row on the front, the connector row on the back — and nothing may sit
+outside either, so the board edges land 1.27 mm behind them. See
+[Two pinned edge rows](docs/pcb-notes-smd.md#two-pinned-edge-rows).
+
+> **One DRC problem outstanding:** the ground pour does not reach five
+> pads (`C7.2`, `Q1.2`, `Q2.2`, `U2C.10`, `U2D.12`). Every signal net is
+> routed. It is a structural pocket in the placement — the same five pads
+> fail at all twelve route orders tried — so only a different placement
+> closes it, and a seed search is the way there. Do not order this
+> revision; the pads named would have no ground connection.
 
 Beyond the filter itself it carries buffered outputs with build-out
 resistors, DC blocking and bleeders, a 47 kΩ line input, bulk and per-IC
@@ -298,10 +310,10 @@ by block, is in
 ![SMD board](pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.png)
 
 ```
-board 141.7 x 70.4 mm | 86 footprints | 242 pads | 262 tracks | 166 vias
-board utilisation 58%
-verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
-          pads match the schematic exactly
+board 147.3 x 84.8 mm | 86 footprints | 242 pads | 224 tracks | 138 vias
+board utilisation 53%
+DRC PROBLEMS (1):
+  - the ground pour does not reach 5 pad(s): C7.2, Q1.2, Q2.2, U2C.10, U2D.12
 ```
 
 Sockets on the rear edge; on the front edge, left to right: MASTER,
