@@ -1,23 +1,66 @@
-# Subcircuit documentation
+# Subcircuit diagrams
 
-This folder contains documentation and tools to extract and document individual
-functional blocks (subcircuits) from the full design.
+One diagram per functional block of the SMD board. They are **generated**,
+not drawn: `tools/gen_schematic.py` crops each block out of the full sheet
+through the same `render_svg()` the main schematic uses, so the symbols,
+strokes and fonts are identical and cannot drift from it. Re-run
+`python3 tools/gen_schematic.py` to rebuild them.
 
-Use `scripts/extract_subcircuit.py` to produce a small netlist JSON containing only
-parts and nets relevant to a subcircuit. Import that JSON into your schematic
-viewer (EasyEDA/your CAD) or feed it into the project's schematic generator to
-render an isolated diagram.
+The part-by-part tables for each block are in
+[`../circuit-notes.md`](../circuit-notes.md#function-blocks-on-the-smd-board);
+these are the pictures.
 
-Example:
+## Input and master volume
 
-```bash
-python scripts/extract_subcircuit.py docs/netlist-esp-p148-3way-state-variable-crossover.json \
-  --parts Q1,Q2,Q3,R31,R32,R33,R34,R35,R36,D1,D2,D3,R40,C16,D4,R37,R38,R39,J6 \
-  --out docs/subcircuits/mute_netlist.json
-```
+The line input, the master volume ahead of everything, and the unity-gain buffer that drives the first filter.
 
-Commands to generate the mute diagram (suggested):
+![Input and master volume](images/input-master-volume.svg)
 
-- Open `docs/subcircuits/mute_netlist.json` in EasyEDA or your schematic viewer.
-- Or use the repository's `tools/gen_schematic.py` if you have a flow for converting
-  the netlist JSON into an SVG image (local build required).
+## Crossover filter 1 - the HIGH / MID split
+
+State-variable filter. `U1B`'s output IS the high-pass; `U1D`'s is the low-pass that feeds filter 2. `VR1` sets the split frequency.
+
+![Crossover filter 1 - the HIGH / MID split](images/filter-high-mid.svg)
+
+## Crossover filter 2 - the MID / LOW split
+
+The same topology again on filter 1's low-pass output, splitting it into MID and LOW. `U2D` inverts the bass output.
+
+![Crossover filter 2 - the MID / LOW split](images/filter-mid-low.svg)
+
+## Level controls
+
+Master volume plus one trim per band, all passive attenuators after the filter and before the buffer.
+
+![Level controls](images/level-controls.svg)
+
+## Output buffers and DC blocking
+
+One unity-gain buffer per band, a build-out resistor, a DC blocking cap and a bleeder, into a terminal block with its own ground return.
+
+![Output buffers and DC blocking](images/output-buffers.svg)
+
+## Muting - the shunt devices in the signal path
+
+`Q1`-`Q3` shunt each buffer input to ground through `R31`-`R33`. Drawn here rather than with the rest of the mute circuit because this is where they sit electrically: across the buffer input.
+
+![Muting - the shunt devices in the signal path](images/muting-shunt.svg)
+
+## Muting - gate control and soft start
+
+The gate pulldowns that unmute, the steering diodes that keep one button from muting all three bands, and the `R40`/`C16` soft start that holds everything muted until the rails settle.
+
+![Muting - gate control and soft start](images/muting-control.svg)
+
+## Power and decoupling
+
+The supply terminal block, the bulk reservoir per rail, and a 100 nF bypass on each rail at each IC.
+
+![Power and decoupling](images/power-decoupling.svg)
+
+---
+
+Free-standing text is left out of the crops on purpose. Section headings and
+the sheet notes sit near a block but belong to no part, so a crop cannot
+attribute them - and an adjacent block's heading landing on this diagram
+would caption it with the wrong name.

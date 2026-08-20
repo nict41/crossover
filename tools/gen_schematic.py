@@ -1182,10 +1182,27 @@ def svg_escape(s):
     return (s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
 
-def render_svg():
+def render_svg(box=None, keep=None):
+    """The schematic as SVG.
+
+    `box` crops to (x0, y0, x1, y1) in schematic coordinates and `keep` is
+    a predicate over shape strings - which is how the subcircuit diagrams
+    are produced.  Cropping alone is not enough: a block's parts are not
+    always drawn together (the mute JFETs sit inline in the output-buffer
+    chain, because that is where they shunt), so a bounding box round them
+    swallows half the sheet.  They go through this same
+    function, and therefore the same symbols, strokes, fonts and colours as
+    the full sheet: a subcircuit diagram that is drawn by separate code is
+    a second thing to keep in step, and it drifts."""
+    if box is None:
+        vx, vy, vw, vh = 0, 0, W_CANVAS, H_CANVAS
+    else:
+        vx, vy = box[0], box[1]
+        vw, vh = box[2] - box[0], box[3] - box[1]
     out = ['<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" '
-           'viewBox="0 0 %d %d"><rect width="100%%" height="100%%" fill="#fff"/>'
-           % (W_CANVAS, H_CANVAS, W_CANVAS, H_CANVAS)]
+           'viewBox="%d %d %d %d"><rect x="%d" y="%d" width="%d" height="%d" '
+           'fill="#fff"/>'
+           % (vw, vh, vx, vy, vw, vh, vx, vy, vw, vh)]
 
     def draw(s):
         for part in s.split("#@$"):
@@ -1245,9 +1262,168 @@ def render_svg():
                     draw(sub)
 
     for s in shapes:
-        draw(s)
+        if keep is None or keep(s):
+            draw(s)
     out.append("</svg>")
     return "\n".join(out)
+
+
+# --------------------------------------------------------------------------
+#  subcircuit diagrams
+# --------------------------------------------------------------------------
+# One diagram per functional block, cropped out of the full sheet.  They go
+# through render_svg() rather than being drawn separately, so they cannot
+# drift from the main schematic's style - the alternative, hand-drawn boxes
+# with the part names written in them, was tried and was worse than nothing:
+# it labelled J6 "input" when J6 is the panel header, and nobody noticed
+# because it looked like a diagram.
+#
+# The designator lists are the same ones documented in
+# docs/circuit-notes.md under "Function blocks on the SMD board".
+SUBCIRCUITS = [
+    ("input-master-volume", "Input and master volume",
+     ["J2", "VR6", "C0", "R1", "U1A"]),
+    ("filter-high-mid", "Crossover filter 1 - the HIGH / MID split",
+     ["U1B", "U1C", "U1D", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9",
+      "R10", "R11", "TP1", "VR1A", "VR1B", "C1", "C2"]),
+    ("filter-mid-low", "Crossover filter 2 - the MID / LOW split",
+     ["U2A", "U2B", "U2C", "U2D", "R12", "R13", "R14", "R15", "R16", "R17",
+      "R18", "R19", "R20", "R21", "R22", "R23", "R24", "TP2",
+      "VR2A", "VR2B", "C3A", "C3B", "C4A", "C4B"]),
+    ("level-controls", "Level controls",
+     ["VR3", "VR4", "VR5", "VR6"]),
+    ("output-buffers", "Output buffers and DC blocking",
+     ["U3A", "U3B", "U3C", "U3D", "R25", "R26", "R27", "R28", "R29", "R30",
+      "C13", "C14", "C15", "J3", "J4", "J5"]),
+    # Muting is two diagrams, not one, because it is drawn in two places
+    # and that is correct: the JFETs shunt the BUFFER INPUTS, so they sit
+    # inline in the buffer chain, while the gate control and soft start are
+    # their own block.  Cropping both into one picture gives a mostly-empty
+    # sheet a metre wide.
+    ("muting-shunt", "Muting - the shunt devices in the signal path",
+     ["Q1", "Q2", "Q3", "R31", "R32", "R33"]),
+    ("muting-control", "Muting - gate control and soft start",
+     ["R34", "R35", "R36", "R37", "R38", "R39", "R40",
+      "D1", "D2", "D3", "D4", "C16", "J6"]),
+    ("power-decoupling", "Power and decoupling",
+     ["J1", "C5", "C6", "C7", "C8", "C9", "C10", "C11", "C12"]),
+]
+
+
+def _nums(text):
+    out = []
+    for tok in text.replace(",", " ").split():
+        try:
+            out.append(float(tok))
+        except ValueError:
+            pass
+    return out
+
+
+def _shape_bbox(sh):
+    """Bounds of a top-level non-LIB shape, or None if it has no geometry."""
+    f = sh.split("~")
+    try:
+        if f[0] in ("PL", "PG", "W", "B"):
+            v = _nums(f[1])
+            if not v:
+                return None
+            return (min(v[0::2]), min(v[1::2]), max(v[0::2]), max(v[1::2]))
+        if f[0] == "R":
+            x, y = float(f[1]), float(f[2])
+            return (x, y, x + float(f[5]), y + float(f[6]))
+        if f[0] == "T":
+            x, y = float(f[2]), float(f[3])
+            return (x, y, x, y)
+        if f[0] in ("J", "N"):
+            x, y = float(f[1]), float(f[2])
+            return (x, y, x, y)
+    except (ValueError, IndexError):
+        return None
+    return None
+
+
+def _lib_boxes():
+    """{designator: (x0, y0, x1, y1)} for every placed component."""
+    boxes = {}
+    for sh in shapes:
+        if not sh.startswith("LIB~"):
+            continue
+        ref = ""
+        xs, ys = [], []
+        for part in sh.split("#@$"):
+            f = part.split("~")
+            if part.startswith("T~P~"):
+                ref = f[12]
+            if f[0] in ("PL", "PG", "W", "B"):
+                v = _nums(f[1])
+                xs += v[0::2]
+                ys += v[1::2]
+            elif f[0] == "R":
+                x, y = float(f[1]), float(f[2])
+                xs += [x, x + float(f[5])]
+                ys += [y, y + float(f[6])]
+            elif f[0] in ("T", "J", "N") and len(f) > 3:
+                try:
+                    xs.append(float(f[2] if f[0] == "T" else f[1]))
+                    ys.append(float(f[3] if f[0] == "T" else f[2]))
+                except ValueError:
+                    pass
+        if ref and xs and ys:
+            boxes[ref] = (min(xs), min(ys), max(xs), max(ys))
+    return boxes
+
+
+def write_subcircuit_svgs(outdir, margin=110):
+    """One cropped SVG per functional block.  Returns [(slug, title, path)].
+
+    Anything whose designator is missing from the sheet is reported rather
+    than silently skipped - a subcircuit page with no diagram is exactly the
+    failure this is meant to prevent."""
+    boxes = _lib_boxes()
+    written, missing = [], []
+    os.makedirs(outdir, exist_ok=True)
+    for slug, title, refs in SUBCIRCUITS:
+        have = [r for r in refs if r in boxes]
+        gone = [r for r in refs if r not in boxes]
+        if gone:
+            missing.append((slug, gone))
+        if not have:
+            continue
+        x0 = min(boxes[r][0] for r in have) - margin
+        y0 = min(boxes[r][1] for r in have) - margin
+        x1 = max(boxes[r][2] for r in have) + margin
+        y1 = max(boxes[r][3] for r in have) + margin
+        crop = (int(x0), int(y0), int(x1), int(y1))
+        mine = set(have)
+        other = {r for r in boxes if r not in mine}
+
+        def keep(sh, _mine=mine, _other=other, _crop=crop):
+            if sh.startswith("LIB~"):
+                for part in sh.split("#@$"):
+                    if part.startswith("T~P~"):
+                        return part.split("~")[12] in _mine
+                return False
+            # Free-standing text is dropped.  Section headings and the
+            # sheet notes are positioned near a block but belong to no
+            # part, so a crop cannot attribute them - and an adjacent
+            # block's heading landing on this diagram would caption it
+            # with the wrong name.  The title lives in the markdown.
+            if sh.startswith("T~"):
+                return False
+            # wires, junctions and net labels: keep what falls in the crop,
+            # so the block's connections and labels come with it
+            b = _shape_bbox(sh)
+            if b is None:
+                return False
+            return not (b[2] < _crop[0] or b[0] > _crop[2] or
+                        b[3] < _crop[1] or b[1] > _crop[3])
+
+        path = os.path.join(outdir, slug + ".svg")
+        with open(path, "w") as f:
+            f.write(render_svg(crop, keep))
+        written.append((slug, title, path))
+    return written, missing
 
 
 # --------------------------------------------------------------------------
@@ -1378,6 +1554,16 @@ def emit(cfg, primary):
                          output_width=W_CANVAS, output_height=H_CANVAS)
     except Exception as exc:   # pragma: no cover - preview is a convenience only
         print("PNG preview skipped:", exc)
+
+    # The subcircuit diagrams come from the SMD variant, which is the one
+    # in pcb/ and the only one carrying the buffers, volume pots and mute.
+    if cfg["slug"].endswith("retuned-quad-smd"):
+        subdir = os.path.join(os.path.dirname(schdir), "docs", "subcircuits",
+                              "images")
+        made, missing = write_subcircuit_svgs(subdir)
+        print("  %d subcircuit diagrams" % len(made))
+        for slug, gone in missing:
+            print("  WARNING: %s is missing %s" % (slug, ", ".join(gone)))
 
     n_parts = write_bom("bom.csv" if primary else
                         "bom-%s.csv" % cfg["slug"].split("crossover-")[-1])
