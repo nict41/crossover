@@ -57,6 +57,8 @@ def _load():
             ctypes.c_int, ctypes.c_int,                         # target x, y
             np.ctypeslib.ndpointer(np.int32, flags="C"), ctypes.c_int,   # out
             ctypes.c_long,                                      # max_expand
+            ctypes.c_void_p,                                    # axis or NULL
+            ctypes.c_double, ctypes.c_int,                      # bias, diag
         ]
         lib.flood.restype = ctypes.c_int
         lib.flood.argtypes = [
@@ -158,7 +160,8 @@ def _sorted_cells(cells):
 
 
 def route(occ, contested, blocked, use, hist, nid, relaxed, via_r,
-          pres_fac, via_cost, sources, targets, tgt_xy, ny, nx, plane_l=-1):
+          pres_fac, via_cost, sources, targets, tgt_xy, ny, nx, plane_l=-1,
+          axis=None, bias=1.0, diag=False):
     """One net.  Arrays are (NL, NY, NX); sources/targets are (L, x, y).
 
     `plane_l` names a copper layer that is present but not routable - the
@@ -190,7 +193,8 @@ def route(occ, contested, blocked, use, hist, nid, relaxed, via_r,
                    nid, 1 if relaxed else 0, via_r, pres_fac, via_cost,
                    src, len(src) // 3, tgt, len(tgt) // 3,
                    int(tgt_xy[0]), int(tgt_xy[1]),
-                   out, nl * ny * nx, MAX_EXPAND)
+                   out, nl * ny * nx, MAX_EXPAND,
+                   ptr(axis), float(bias), 1 if diag else 0)
     if n < 0:
         return None
     return [tuple(int(v) for v in out[3 * i:3 * i + 3]) for i in range(n)]

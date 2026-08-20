@@ -73,6 +73,40 @@ PLANE_L = LAYER_GRID[INNER1] if FOURLAYER else -1
 ROUTE_L = [i for i in range(NLAY) if i != PLANE_L]
 ALL_COPPER = set(GRID_LAYER)
 
+# ---- three things out of the standard routing trick book -----------------
+#
+# All three default to OFF (the values below reproduce the old router
+# exactly), because each one has to earn its place by measurement on this
+# board rather than by being a well-known good idea.
+#
+# 1. VIA_COST - what a layer change costs, in units of one planar step.
+#    24 dates from the two-layer board, where every via also punched a hole
+#    through the ground pour on both sides.  With a dedicated plane and
+#    three signal layers a via is cheap in reality, and an over-priced via
+#    makes the router take long planar detours through channels other nets
+#    need instead of just dropping a layer.
+VIA_COST = float(os.environ.get("VIA_COST", 24))
+#
+# 2. LAYER_BIAS - the layer direction preference, the oldest trick in
+#    multi-layer routing.  Give each signal layer a grain and charge extra
+#    for going against it; tracks on a layer then run PARALLEL rather than
+#    crossing, so they stop cutting up each other's channels, and a via
+#    turns the corner.  Top and Bottom get x, the inner signal layer gets
+#    y, so adjacent routing layers are orthogonal.  1.0 disables it.
+LAYER_BIAS = float(os.environ.get("LAYER_BIAS", 1.0))
+_AXIS = {TOP: 0, INNER2: 1, BOT: 0}
+LAYER_AXIS = [(-1 if i == PLANE_L else _AXIS.get(GRID_LAYER[i], -1))
+              for i in range(NLAY)]
+LAYER_AXIS_ARR = np.ascontiguousarray(LAYER_AXIS, dtype=np.int32)
+#
+# 3. DIAG_ROUTE - 45-degree (octilinear) steps in the search itself.  The
+#    chamfering applied to finished polylines is cosmetic and happens far
+#    too late to open a channel; a Manhattan-only grid simply cannot use a
+#    gap that runs diagonally, and the corner of a pad is exactly such a
+#    gap.  Corner-cutting is refused: a diagonal step is legal only when
+#    both orthogonal cells beside it are free.
+DIAG_ROUTE = os.environ.get("DIAG_ROUTE", "0") != "0"
+
 # The placer's congestion gauge counts how many tracks fit across one cell,
 # and that is per ROUTING layer.  Its calibrated value (3.0, "one layer's
 # worth" - see place.py, where the geometric two-layer figure is explained
@@ -1847,8 +1881,9 @@ def astar(sources, targets, nid, tgt_xy, extra=0.0, blocked_extra=None, relaxed=
             None if blocked_extra is None
             else np.ascontiguousarray(np.stack(blocked_extra), dtype=np.uint8),
             None, None, nid, relaxed,
-            int(math.ceil((VIA_EXTRA + extra) / GRID)), 0.0, 24.0,
-            sources, targets, tgt_xy, NY, NX, PLANE_L)
+            int(math.ceil((VIA_EXTRA + extra) / GRID)), 0.0, VIA_COST,
+            sources, targets, tgt_xy, NY, NX, PLANE_L,
+            LAYER_AXIS_ARR, LAYER_BIAS, DIAG_ROUTE)
     return astar_py(sources, targets, nid, tgt_xy, extra, blocked_extra, relaxed)
 
 
@@ -1886,9 +1921,22 @@ def astar_py(sources, targets, nid, tgt_xy, extra=0.0, blocked_extra=None,
         # via away rather than just the opposite one.  PLANE_L is skipped:
         # it is copper, but it is the solid ground plane and nothing
         # routes on it.
-        nbrs = [(L, x + 1, y, 1), (L, x - 1, y, 1), (L, x, y + 1, 1),
-                (L, x, y - 1, 1)]
-        nbrs += [(nl, x, y, 24) for nl in ROUTE_L if nl != L]
+        nbrs = []
+        _dirs = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        if DIAG_ROUTE:
+            _dirs += [(1, 1), (1, -1), (-1, 1), (-1, -1)]
+        for _dx, _dy in _dirs:
+            _c = 1.0 if not (_dx and _dy) else 1.41421356237309505
+            if _dx and _dy and not (
+                    passable(L, x + _dx, y, nid, blocked_extra, relaxed)
+                    and passable(L, x, y + _dy, nid, blocked_extra, relaxed)):
+                continue          # no corner-cutting through occupied cells
+            if LAYER_AXIS[L] >= 0 and LAYER_BIAS > 1.0:
+                _along = (_dx != 0) if LAYER_AXIS[L] == 0 else (_dy != 0)
+                if not _along:
+                    _c *= LAYER_BIAS
+            nbrs.append((L, x + _dx, y + _dy, _c))
+        nbrs += [(nl, x, y, VIA_COST) for nl in ROUTE_L if nl != L]
         for nl, nx_, ny_, c in nbrs:
             if not passable(nl, nx_, ny_, nid, blocked_extra, relaxed):
                 continue
@@ -3220,9 +3268,14 @@ def _order_cache_file():
     # run reads, so regenerating the winner would build a DIFFERENT board
     # from the one the search measured - and it would look like the seed
     # simply failed to reproduce.
-    return os.path.join(PLACE_CACHE, "%s-order%d-lh%d-g%s.json"
+    # The router's own knobs belong here for exactly the same reason as
+    # GRID: they do not move a single part, and they change every route.
+    # An A/B of LAYER_BIAS that started each arm from the order the other
+    # arm learned would measure the cache, not the change.
+    _rt = "%g-%g-%d-%d" % (VIA_COST, LAYER_BIAS, 1 if DIAG_ROUTE else 0, NLAY)
+    return os.path.join(PLACE_CACHE, "%s-order%d-lh%d-g%s-r%s.json"
                         % (_place_key(), _ROUTE_SEED, LONG_HAUL_N,
-                           repr(GRID).replace(".", "_")))
+                           repr(GRID).replace(".", "_"), _rt))
 
 
 def load_route_order():

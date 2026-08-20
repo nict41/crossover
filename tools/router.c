@@ -171,7 +171,8 @@ int route(int NX, int NY, int NL, int plane_l,
           const unsigned char *blk, const int *use, const float *hist,
           int nid, int relaxed, int via_r, double pres_fac, double via_cost,
           const int *src, int nsrc, const int *tgt, int ntgt,
-          int tgx, int tgy, int *out, int cap, long max_expand)
+          int tgx, int tgy, int *out, int cap, long max_expand,
+          const int *axis, double bias, int diag)
 {
     Ctx c = { NX, NY, NL, plane_l, occ, cont, blk, use, hist,
               nid, relaxed, via_r, pres_fac };
@@ -228,20 +229,49 @@ int route(int NX, int NY, int NL, int plane_l,
         int y = rem / NX, x = rem % NX;
         double gc = g[node];
 
-        /* Four planar steps, then one layer change per OTHER layer.  A
-         * via here is a through-hole one - JLCPCB's standard 4-layer
-         * process has no blind or buried vias - so it joins every layer
-         * at once and a step to any other layer costs the same single
-         * via.  With NL = 2 this is exactly the old `nl = 1 - L`. */
-        for (int d = 0; d < 4 + (NL - 1); d++) {
+        /* Planar steps, then one layer change per OTHER layer.  A via
+         * here is a through-hole one - JLCPCB's standard 4-layer process
+         * has no blind or buried vias - so it joins every layer at once
+         * and a step to any other layer costs the same single via.  With
+         * NL = 2 this is exactly the old `nl = 1 - L`.
+         *
+         * `diag` adds the four 45-degree steps (octilinear routing).  A
+         * Manhattan-only grid cannot use a gap that runs across the grid,
+         * and a pad corner is exactly such a gap.  The chamfering applied
+         * to finished polylines is cosmetic and happens far too late to
+         * open a channel.
+         *
+         * `axis`/`bias` are the layer direction preference: each signal
+         * layer gets a grain (0 = prefer x, 1 = prefer y, -1 = neither)
+         * and a step against it costs `bias` times as much.  This is the
+         * oldest trick in multi-layer routing and the reason a stackup
+         * helps at all: tracks on one layer run PARALLEL instead of
+         * crossing, so they stop cutting each other's channels up, and a
+         * via turns the corner.  Diagonals move on both axes and are
+         * never penalised. */
+        const int ndir = diag ? 8 : 4;
+        static const int DX[8] = { 1, -1,  0,  0,  1,  1, -1, -1 };
+        static const int DY[8] = { 0,  0,  1, -1,  1, -1,  1, -1 };
+        for (int d = 0; d < ndir + (NL - 1); d++) {
             int nl = L, nx = x, ny = y;
             double step;
-            switch (d) {
-                case 0: nx = x + 1; step = 1.0; break;
-                case 1: nx = x - 1; step = 1.0; break;
-                case 2: ny = y + 1; step = 1.0; break;
-                case 3: ny = y - 1; step = 1.0; break;
-                default: nl = (L + 1 + (d - 4)) % NL; step = via_cost; break;
+            if (d < ndir) {
+                nx = x + DX[d];
+                ny = y + DY[d];
+                step = (d < 4) ? 1.0 : 1.41421356237309505;
+                /* No corner-cutting: a diagonal is only legal if both of
+                 * the orthogonal cells it passes between are free too,
+                 * otherwise the trace clips copper the grid says is
+                 * occupied. */
+                if (d >= 4 && (!passable(&c, L, x + DX[d], y) ||
+                               !passable(&c, L, x, y + DY[d]))) continue;
+                if (axis && axis[L] >= 0 && bias > 1.0) {
+                    int along = (axis[L] == 0) ? (DX[d] != 0) : (DY[d] != 0);
+                    if (!along) step *= bias;
+                }
+            } else {
+                nl = (L + 1 + (d - ndir)) % NL;
+                step = via_cost;
             }
             if (!passable(&c, nl, nx, ny)) continue;
             if (nl != L && !via_ok(&c, x, y)) continue;
