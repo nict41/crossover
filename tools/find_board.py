@@ -93,6 +93,10 @@ SEARCH_MAX_EXPAND = "400000"
 #   rip-up 1   1->2   4->5   2->15  3->20  5->14  6->17    ~73-104 s
 #   rip-up 6   the ground truth above                      ~201 s
 #
+# For scale, the config a search once ran by default - uncapped AND rip-up
+# 6 - costs 707 s a trial, so 36 seeds over 4 jobs is 106 minutes.  It was
+# given 90 and died with nothing to show.  Multiply before launching.
+#
 # Rip-up 0 is not a blurred version of the answer, it is a different one:
 # it ranks seed 2 - genuinely the third best - DEAD LAST, and promotes
 # seed 5 into second.  Rip-up 1 reproduces the top two exactly and gets

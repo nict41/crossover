@@ -41,6 +41,23 @@ minutes, thirty-six boards genuinely routed, not one verdict recoverable,
 because results were collected and printed at the end. Being slow is a
 cost; being slow *and* losing the answers is a bug.
 
+**Budget the search before launching it.** That sweep ran the router
+uncapped with full rip-up, which costs **707 s a trial** on this board.
+36 trials over 4 jobs is 106 minutes against a 90-minute timeout: it could
+not have finished, and one line of arithmetic beforehand would have said
+so. Per-trial cost, measured:
+
+| config | per trial |
+|---|---|
+| capped, rip-up 0 | 28 s |
+| capped, rip-up 1 | 71 s |
+| capped, rip-up 6 | 201 s |
+| **uncapped, rip-up 6** | **707 s** |
+
+`seeds x route-orders x per-trial / jobs` is the number to check against the
+time available. If it does not fit, cut the field or cheapen the config -
+do not start it and hope.
+
 **Rank with one rip-up round, not zero.** Measured against six seeds whose
 expensive ordering was known (rip-up 6: `1->2 4->3 2->11 3->13 5->15
 6->16`):
