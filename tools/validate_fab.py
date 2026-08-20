@@ -424,8 +424,17 @@ def check_lcsc(online):
         hit = next((p for p in (data.get("result") or {}).get("productList", [])
                     if p.get("number") == code), None)
         if hit is None:
-            note("%s (%s) did not come back from an LCSC search - confirm it "
-                 "is still orderable before paying" % (code, row.get("Comment")))
+            # A part number that returns NO results is not the same as one
+            # that returns zero stock: it is a number that no longer names
+            # anything, which is what an end-of-lifed line looks like from
+            # here.  That makes the board unbuildable as specified while
+            # every geometric check still passes, so it is a failure and
+            # not a note.  C46550416 (10uF, seven designators) sat in the
+            # BOM in exactly that state, and the note for it scrolled past
+            # under thirty lines of healthy stock figures.
+            bad("%s (%s) returns no LCSC search results at all - the part "
+                "number no longer names anything orderable"
+                % (code, row.get("Comment")))
             continue
         stock = hit.get("stock") or 0
         if stock < qty * 20:

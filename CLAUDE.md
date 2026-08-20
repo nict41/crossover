@@ -714,8 +714,10 @@ just isn't very good":
   What matters is that nothing is *between* the part and its edge, within its
   own column.
 
-Expect ~2–6 minutes per full run at `GRID=0.25`. Run long jobs in the
-background with a timeout; don't poll them in a tight loop.
+A full production run is **~9 s cold, ~7.5 s warm** at `GRID=0.25` - see
+the measured breakdown under "Run times" below. A SEARCH trial is dearer
+(no learned route order, and rip-up on), so a sweep is still a background
+job: run it with a timeout and don't poll it in a tight loop.
 
 ## Design decisions worth not relitigating
 
@@ -1016,12 +1018,33 @@ It is still a pessimistic filter, so confirm any winner with an uncapped
 run. Capping in *production* was tried twice and reverted twice: it
 silently breaks routable nets.
 
-**Run times, after the optimisation work** — a full cold run is ~33 s
-(placement ~25 s, routing ~5 s, verify ~3 s); a re-run reusing the cached
-placement is **~4.5 s**. Before: ~25 minutes. (Those are *production*
-numbers on the committed board with a learned route order; a SEARCH trial
-on a cold seed is the ~21 s in the table above, because it routes with
-rip-up and has no learned order to start from.) What did it:
+**Run times, re-measured on the current board.** Phase breakdown, taken by
+differencing runs that stop at different points (`PLANE_PREFILTER_ONLY=1`
+for everything up to the pour check, `SWEEP=1` for everything but the
+artifact writes):
+
+| | cold | warm |
+|---|---|---|
+| import + footprint probe + pour pre-check | 1.3 s | 1.3 s |
+| placement anneal | 1.7 s | **cached** |
+| routing + `verify()` | 6.2 s | 6.2 s |
+| artifact writes (JSON, SVG, PNG, BOM, CPL) | ~0.4 s | ~0.4 s |
+| **total** | **~9.2 s** | **~7.5 s** |
+
+Before any of the compiled work: **~25 minutes**.
+
+The older figures here said 33 s cold / 4.5 s warm and were wrong in both
+directions. Cold was quoted as "placement ~25 s" long after `anneal.c`
+took the anneal to under two seconds - the sentence survived the change it
+described. Warm has genuinely got dearer, from 4.5 s to 7.5 s, and that is
+the ground fanout doing what it was built to do: 154 vias and 227 tracks
+where the board it replaced had fewer of each. Routing is now four fifths
+of a warm run, so *that* is where the next second lives, not in placement.
+
+(These are *production* numbers on the committed board with a learned route
+order. A SEARCH trial on a cold seed is the ~21 s in the table above,
+because it routes with rip-up and has no learned order to start from.)
+What got it here:
 * `router.c` — the grid A* compiled and called via ctypes. Routing was
   ~20 min of every run.
 * `anneal.c` — the placement anneal, once routing stopped being the

@@ -281,7 +281,17 @@ LCSC = {                              # verified live against the JLCPCB API
     "13k":     ("C2933304", "0805", "extended", 213066),
     "33nF":    ("C569866", "1210", "extended", 2001),
     "100nF":   ("C49678", "0805", "basic", 14609213),
-    "10uF":    ("C46550416", "CASE-D5xL5.4", "extended", 288863),
+    # C46550416 was here and is GONE - an LCSC keyword search for it
+    # returns zero results, not a zero-stock hit, which is what an
+    # end-of-lifed number looks like.  Seven designators (C0, C11-C16)
+    # pointed at it, so the board was unbuildable as specified and every
+    # geometric check still passed: nothing about the copper is wrong.
+    # validate_fab.py now FAILS on a part it cannot find rather than
+    # printing a note under thirty lines of stock figures.
+    #
+    # Replacement is the same package (KNSCHA, SMD D5xL5.4mm, 10uF 50V) so
+    # no footprint changes, and 50 V is 3.3x the rail it sits across.
+    "10uF":    ("C2858858", "CASE-D5xL5.4", "extended", 50240),
 }
 
 
