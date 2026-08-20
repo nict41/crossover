@@ -2717,6 +2717,73 @@ PLANE_LOG = bool(os.environ.get("PLANE_LOG"))
 # geometry problem, not a congestion one.  Those stubs get cut while the
 # channels are still free; the second pass then picks up anything that only
 # became isolated once the signal nets were in.
+def pad_plane_via(p, gnid):
+    """Drop a via straight onto a stranded ground pad.
+
+    This is what a person does, and it is what the plane is FOR: the pad
+    is ground, the plane is ground, and they are 0.2 mm apart through the
+    board.  There is nothing to route.
+
+    The router would not do it, and the reason is a lesson this file has
+    already learned once at the next level up ("Do not model the pour from
+    `occ`").  `via_ok()` reads the ROUTER's occupancy grid, and that grid
+    carries dilated KEEPOUT RINGS - CLEAR + MAX_W/2 + GRID around every
+    foreign pad, sized so a TRACE routed there has room for its own
+    half-width - plus `contested`, which marks any cell where two nets'
+    rings merely overlap.  Between two SOIC pads almost every cell is
+    contested, so `via_ok()` says no.
+
+    The real geometry says yes, with room to spare.  A SOIC-14 pad is
+    2.5 units tall on a 5.0 pitch, so the neighbouring pad's near edge is
+    3.75 units from this pad's centre; a via pad reaches 1.4.  That is a
+    2.35-unit gap against a 0.8-unit rule - 2.9x the margin - and the
+    neighbour is on the TOP layer only while the via's job is on Inner1.
+
+    So this checks the same exact geometry verify() does
+    (path_clearance_ok) plus the drill rules, and ignores the router's
+    bookkeeping entirely.  Returns True if a via was placed."""
+    if PLANE_L < 0:
+        return False
+    global OCC_VERSION
+    step = GRID * 2
+    cands = [(p["x"], p["y"])]
+    # then just off-centre, still on or touching the pad, in case the
+    # centre is taken by a drill that is already there
+    for k in range(1, 5):
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1),
+                       (1, 1), (1, -1), (-1, 1), (-1, -1)):
+            cands.append((p["x"] + dx * k * step, p["y"] + dy * k * step))
+    for vx, vy in cands:
+        vx = round(vx / GRID) * GRID
+        vy = round(vy / GRID) * GRID
+        cx, cy = int(round(vx / GRID)), int(round(vy / GRID))
+        if not (1 <= cx < NX - 1 and 1 <= cy < NY - 1):
+            continue
+        if not hole_ok(cx, cy):
+            continue
+        # hole to hole is a property of the DRILL, not of the net, so a
+        # same-net via already there still has to be cleared.
+        if any(math.dist((vx, vy), (ox, oy)) < VIA_DRILL + MIN_HOLE_GAP
+               for ox, oy, _ in VIAS):
+            continue
+        if any(math.dist((vx, vy), (hx, hy)) < VIA_DRILL / 2 + MOUNT_R + MIN_HOLE_GAP
+               for hx, hy in MOUNT_HOLES):
+            continue
+        if not path_clearance_ok("GND", [(vx, vy)], []):
+            continue
+        VIAS.append((vx, vy, "GND"))
+        stamp_disc(MULTI, vx, vy, VIA_DIL, gnid)
+        stamp_hole(vx, vy)
+        VIA_MEMO.clear()
+        OCC_VERSION += 1
+        if PLANE_LOG:
+            print("  plane via %s.%s at (%.1f, %.1f), %.1f units off the pad"
+                  % (p["ref"], p["num"], vx, vy,
+                     math.dist((vx, vy), (p["x"], p["y"]))), flush=True)
+        return True
+    return False
+
+
 def plane_stubs():
     _hopeless = set()
     for _pass in range(6):
@@ -2735,6 +2802,13 @@ def plane_stubs():
             _ref, _, _num = _name.rpartition(".")
             _p = next((q for q in pads if q["ref"] == _ref and q["num"] == _num), None)
             if _p is None:
+                continue
+            # A via on the pad first.  It is shorter, lower inductance and
+            # what a person would do; the A* below is the fallback for a
+            # pad that genuinely has no room for one.
+            if pad_plane_via(_p, _gnid):
+                _progress = True
+                _hopeless.discard(_name)
                 continue
             # Every piece of copper that is genuinely part of the plane and
             # lies near the pad, on EITHER layer, offered to A* at once - plus
