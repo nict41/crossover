@@ -3208,8 +3208,32 @@ def route_pass():
     """One complete attempt: plane stubs, every signal net, the relaxed
     retries, plane stubs again, stitching vias.  Returns the nets it could
     not finish."""
-    # Cut the structural stubs BEFORE any signal net is routed - see the note
-    # above plane_stubs().
+    # FANOUT FIRST.  Every SMD ground pad gets its own via to the plane
+    # before a single signal net is routed.
+    #
+    # This is standard practice and it is also the answer to how the last
+    # two pads kept failing.  Repairing ground AFTERWARDS cannot work once
+    # the traces are down: the diagnostic said so in as many words - all 33
+    # candidate via sites at Q1.2 and U2D.12 refused on real clearance,
+    # not on the router's bookkeeping - because signal traces had been
+    # routed hard against those pads and no 0.71 mm via pad plus 0.2 mm of
+    # clearance fits anywhere near them any more.  Nothing threads to a pad
+    # that is boxed in; something else has to move, and the cheapest
+    # "something else" is a trace that has not been routed yet.
+    #
+    # Placing the via first turns the problem inside out.  The via becomes
+    # copper the signal nets route AROUND, which is exactly what reserving
+    # a fanout is for, and ground stops depending on whatever room happens
+    # to be left over.  A through-hole pad needs none of this - it is
+    # already on every layer, plane included.
+    if PLANE_L >= 0:
+        _gnid0 = NETID["GND"]
+        for _p in pads:
+            if _p["net"] == "GND" and _p["layer"] != MULTI:
+                pad_plane_via(_p, _gnid0)
+
+    # Then the structural stubs, for anything fanout could not reach - see
+    # the note above plane_stubs().
     plane_stubs()
 
     FAILED = []
