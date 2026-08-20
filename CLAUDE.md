@@ -750,3 +750,22 @@ and CI can iterate faster.
 
 Note: edits were applied in-workspace; please review and commit/push as you
 prefer so other collaborators and CI see the change.
+
+## Agent decisions & notes (2026-08-20)
+
+- A tracked performance plan was created to reduce placement and routing
+  time while preserving quality (profiling, Numba/C fallbacks, adaptive
+  routing caps, parallel confirmation, and CI benchmarks).
+- Recommendation: add a `if __name__ == '__main__':` entry to `tools/gen_pcb_smd.py`
+  so the generator can be invoked programmatically for reliable dry-runs,
+  unit tests, and targeted profiling.
+- Quick dry-run: an attempt to run `gen_pcb_smd.py` in `PLANE_PREFILTER_ONLY`
+  mode with the Python router in the sandbox produced no visible output;
+  the run could not be confirmed here.
+- User instruction: no implementation work performed beyond documentation —
+  the user asked to pause further changes; this note records the
+  recommendation and the current state.
+
+Next step (awaiting approval): add the lightweight programmatic entrypoint
+to `tools/gen_pcb_smd.py` and re-run the fast prefilter locally or in CI to
+collect timings.  Do not proceed until you grant permission.
