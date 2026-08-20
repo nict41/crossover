@@ -312,7 +312,7 @@ LCSC = {                              # verified live against the JLCPCB API
 # but the glyphs stay upright.  That is deliberate - silkscreen is read by a
 # human holding the board one way up, and sideways designators are a
 # legibility regression, which is the exact defect DESIG_SIZE/LABEL_SIZE
-# already exist to fix.  It also keeps label_bbox()'s width formula valid in
+# already exist to fix.  It also keeps text_bbox()'s width formula valid in
 # board coordinates, so the courtyard math stays correct for free.
 # --------------------------------------------------------------------------
 _XF = [(0.0, 0.0, 0)]                 # (origin x, origin y, quarter turns)
@@ -449,14 +449,6 @@ def _beside(box, s, size, local_dir, emit):
         emit(ax, ay, s, size)
     finally:
         xf_pop()
-
-
-def label_bbox(ax, ay, text, size=DESIG_SIZE):
-    """Matches text_bbox()'s geometry exactly (same magic numbers), so
-    courtyard math computed before a label is drawn agrees with the label
-    once it actually exists."""
-    w_ = 0.62 * size * len(text)
-    return (ax, ay - size, ax + w_, ay + 0.25 * size)
 
 
 def text_bbox(sh):
@@ -1407,9 +1399,17 @@ PLACE_CACHE = os.path.join(ROOT, ".place-cache")
 def _place_key():
     import hashlib
     h = hashlib.sha256()
-    h.update(repr(sorted((r, sorted(g.items())) for r, g in
-                         ((r, {k: v["box"] for k, v in gg.items()})
-                          for r, gg in sorted(GEOM.items())))).encode())
+    # The WHOLE probe result, not just the bounding box.  The placement
+    # cost model reads pad positions (escape, plane escape, wirelength)
+    # and the body rectangles (courtyard overlap), and neither is implied
+    # by the box: swap two pads of a footprint, or move a pad row inside
+    # a silk outline that already sets the extent, and the box is
+    # unchanged while every term that consumes it moves.  That is the
+    # same failure as hashing the weights but not the cost function -
+    # already in this file's history once - one level further down.
+    h.update(repr([(r, sorted((rot, g["box"], g["body"], g["pads"])
+                              for rot, g in sorted(gg.items())))
+                   for r, gg in sorted(GEOM.items())]).encode())
     h.update(repr(sorted(netdoc["nets"].items())).encode())
     h.update(repr(sorted((k, v) for k, v in WEIGHTS.items())).encode())
     # The cost MODEL, not just its weights.  A cached pose is only valid
@@ -3492,7 +3492,17 @@ def _order_cache_file():
     # GRID: they do not move a single part, and they change every route.
     # An A/B of LAYER_BIAS that started each arm from the order the other
     # arm learned would measure the cache, not the change.
-    _rt = "%g-%g-%d-%d" % (VIA_COST, LAYER_BIAS, 1 if DIAG_ROUTE else 0, NLAY)
+    # MAX_EXPAND and RIPUP_ROUNDS belong here for the same reason GRID
+    # does, and the case is if anything sharper.  A find_board.py ranking
+    # trial runs capped with one rip-up round and, because save_route_order()
+    # is unconditional, writes its learned order into the exact slot an
+    # uncapped production run reads - so a search silently changes the
+    # route the committed board takes, and an A/B of either knob starts
+    # each arm from the order the other arm learned and measures the
+    # cache.  SWEEP=1 keeps sweeps off the committed artifacts; this is
+    # the one committed-board input they could still reach.
+    _rt = "%g-%g-%d-%d-%d-%d" % (VIA_COST, LAYER_BIAS, 1 if DIAG_ROUTE else 0,
+                                 NLAY, MAX_EXPAND, RIPUP_ROUNDS)
     return os.path.join(PLACE_CACHE, "%s-order%d-lh%d-g%s-r%s.json"
                         % (_place_key(), _ROUTE_SEED, LONG_HAUL_N,
                            repr(GRID).replace(".", "_"), _rt))
@@ -4175,13 +4185,21 @@ def preview():
 svg = preview()
 with open(os.path.join(pcbdir, SLUG + "-pcb.svg"), "w") as f:
     f.write(svg)
+# The PNG is a COMMITTED artifact, so skipping it quietly leaves a stale
+# picture of a board that has changed - the run says "verified" and the
+# repo shows the previous layout.  Warn loudly and set a flag that makes
+# the process exit non-zero, so a regeneration that could not draw the
+# preview cannot be mistaken for one that did.
+_PNG_OK = True
 try:
     import cairosvg
     cairosvg.svg2png(bytestring=svg.encode(),
                      write_to=os.path.join(pcbdir, SLUG + "-pcb.png"),
                      output_width=int(BW * 4), output_height=int(BH * 4))
 except Exception as exc:
-    print("PNG preview skipped:", exc)
+    _PNG_OK = False
+    print("PNG PREVIEW FAILED (%s) - pcb/%s-pcb.png is now STALE and does "
+          "not show this board" % (exc, SLUG))
 
 print("board %.1f x %.1f mm | %d footprints | %d pads | %d tracks | %d vias"
       % (BW * 0.254, BH * 0.254, len(FP_SPANS), len(pads), len(ROUTED), len(VIAS)))
@@ -4218,6 +4236,14 @@ else:
 # produces the committed board.  This function is the documented single
 # entrypoint for that pattern - a no-op, but its presence means callers
 # can write ``gen_pcb_smd.main()`` and have one obvious place to look.
+# Last, so every other artifact is still written and the verdict is still
+# printed: a run that could not redraw the committed preview is a FAILED
+# run.  SWEEP=1 exits long before this and writes no artifacts at all, so
+# searches are unaffected.
+if not _PNG_OK:
+    raise SystemExit(1)
+
+
 def main():
     """Programmatic entrypoint for the generator (no-op).
 

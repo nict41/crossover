@@ -445,6 +445,59 @@ def check_lcsc(online):
                  % (code, row.get("Comment"), stock, qty))
 
 
+# =========================================================================
+#  the docs describe the board that exists
+# =========================================================================
+# Designator references rot silently.  When the output buffers were added,
+# the bulk capacitors moved from C9/C10 to C11/C12 and the output DC blocks
+# landed on C13-C15; three separate documents went on naming the old ones,
+# and circuit-notes.md acquired a "U4" that this board has never had.
+# Nothing failed, because a wrong designator in prose breaks no check that
+# looks at copper.
+#
+# So: every designator-shaped token written in `backticks` in the docs must
+# be a real part or a real net in the netlist.  Backticks are the filter
+# that makes this precise rather than noisy - the docs discuss plenty of
+# designators from the original ESP article, and those are written as plain
+# prose.  Part TYPE numbers that appear in discussion are listed below,
+# because they look identical to a designator and are not one.
+DOCS = ("README.md", "CLAUDE.md", "docs/circuit-notes.md",
+        "docs/pcb-notes-smd.md", "docs/design-review.md",
+        "docs/subcircuits/README.md")
+PART_TYPES = {"SS14", "TL074", "NE5532", "TL072", "LM4562", "MC33078"}
+DESIG = re.compile(r"`([A-Z]{1,3}\d{1,3}[A-Z]?)`")
+
+
+def check_docs():
+    """Every `X99` the docs name must exist on the board."""
+    if not os.path.exists(NET):
+        return
+    net = json.load(open(NET))
+    known = set(net["nets"]) | PART_TYPES
+    for members in net["nets"].values():
+        for m in members:
+            ref = m.rpartition(".")[0]
+            known.add(ref)
+            known.add(re.sub(r"[AB]$", "", ref))       # VR2A -> VR2
+    checked = 0
+    for rel in DOCS:
+        path = os.path.join(ROOT, rel)
+        if not os.path.exists(path):
+            continue
+        checked += 1
+        seen = {}
+        with open(path) as fh:
+            for lineno, line in enumerate(fh, 1):
+                for tok in DESIG.findall(line):
+                    if tok not in known:
+                        seen.setdefault(tok, lineno)
+        for tok, lineno in sorted(seen.items()):
+            bad("%s:%d names `%s`, which is neither a part nor a net on "
+                "this board" % (rel, lineno, tok))
+    note("%d documents checked for designators the board does not have"
+         % checked)
+
+
 def main():
     if not os.path.exists(PCB):
         print("no board at %s - run gen_pcb_smd.py" % PCB)
@@ -454,6 +507,7 @@ def main():
     check_fab(doc)
     check_assembly(doc)
     check_netlist(doc)
+    check_docs()
     check_lcsc("--online" in sys.argv)
 
     for n in notes:

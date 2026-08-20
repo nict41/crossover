@@ -603,9 +603,17 @@ don't want them — the ESP PCB doesn't have them.
 
 ## Power
 
-Not shown on the original drawings. ±15 V rails, brought in on J1. Every dual
-op-amp needs a 100 nF ceramic from pin 8 to ground and from pin 4 to ground,
-physically close to the IC — C5/C6 (U1), C7/C8 (U2), C9/C10 (U3), C11/C12 (U4).
+Not shown on the original drawings. ±15 V rails, brought in on J1.
+
+This board uses three **quad** MC33079 in SOIC-14, so the supply pins are 4
+(+15 V) and 11 (−15 V) — not the 4 and 8 of the dual op-amps the article
+assumes. Each package gets its own 100 nF ceramic pair, physically close to
+the IC: **C5/C6 (U1), C7/C8 (U2), C9/C10 (U3)**. There is no U4.
+
+`C11`/`C12` are a separate thing — a 10 µF bulk reservoir per rail at the
+power connector, damping the resonance between the supply wiring's
+inductance and the ceramics. See
+[`design-review.md`](design-review.md) for why they are there.
 
 ## Designator mapping to the original figure
 
@@ -616,7 +624,9 @@ without a designator have been given one here:
 |---|---|
 | R10, R11 | the two unlabelled 10 k resistors feeding TP1 |
 | R23, R24 | the two unlabelled 10 k resistors feeding TP2 |
-| C5 – C12 | supply bypass caps (text only: "100nF ceramic … at pins 4 and 8") |
+| C5 – C10 | supply bypass caps (text only: "100nF ceramic … at pins 4 and 8"; this board's quads use pins 4 and 11) |
+| C11, C12 | bulk supply reservoir (not in the original) |
+| C13 – C15 | output DC blocking (not in the original) |
 | J1 | power input (not shown in the original) |
 
 Values are written in decimal form (5.6k, 3.3k, 11k2 → 11.2k) rather than the

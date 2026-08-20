@@ -1116,8 +1116,8 @@ numpy with plain Python in the placer (numpy is still ~3x faster at n=49).
   say. It is a coordination deadlock the per-net rip-up granularity does
   not escape; rip up *regions*, not single nets.
 * **The circuit fixes that were blocked are now ON and shipped.** Output
-  DC blocking (`OUTPUT_CAPS`, `C11`-`C13`) and bulk supply decoupling
-  (`BULK_CAPS`, `C9`/`C10`) default to on in gen_schematic.py; set either
+  DC blocking (`OUTPUT_CAPS`, `C13`-`C15`) and bulk supply decoupling
+  (`BULK_CAPS`, `C11`/`C12`) default to on in gen_schematic.py; set either
   to `0` to build without. History worth keeping: with GND still routed as
   a net, 49 footprints routed clean ~1 try in 80, 52 was 0 in 320, 54 was
   0 in 320, and shrinking the added parts to a third of their area changed
@@ -1266,12 +1266,22 @@ alternating the two versions on the same seed: 25.2/25.6 s before against
 24.9/25.6 s after, verdicts identical. The reason is worth keeping, because
 it is a trap anyone optimising this file can fall into:
 
-    CALLS in a production run: passable 0, astar_py 0, via_ok 11
+    CALLS in a production run: passable 0, astar_py 0, via_ok 0
 
-**`passable()` and `astar_py()` do not execute at all.** `astar()` hands
-every net to `croute.route` unless `ROUTER=py`, so items 1 and 5 above
-tuned the pure-Python fallback that `router.c` replaced. `via_ok` survives
-only because the stitching-via loop calls it directly, 11 times a board.
+**`passable()`, `astar_py()` and `via_ok()` do not execute at all.**
+`astar()` hands every net to `croute.route` unless `ROUTER=py`, so items 1
+and 5 above tuned the pure-Python fallback that `router.c` replaced. That
+line read `via_ok 11` when it was written, because the stitching-via loop
+still called it; `pad_plane_via()` replaced that loop with an exact-geometry
+check and took the last caller with it. Re-measured, the whole
+pure-Python router is now unreachable in production.
+
+Re-counted on the current board, for anyone deciding where to spend
+effort - the same tracing run also names every function that never
+executes, which is how the dead `label_bbox()` was found:
+
+    pad_plane_via 24   plane_stubs 2    path_clearance_ok 25
+    stamp_disc 45772   commit_path 140  pour_connectivity 5   hole_ok 155
 Before optimising anything here, **count the calls in a real run** - the
 Python router is a reference implementation, not the thing that runs.
 
