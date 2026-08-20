@@ -466,9 +466,9 @@ background with a timeout; don't poll them in a tight loop.
 
 ## Current state / open threads
 
-The committed board is **114.3 × 102.9 mm** (`SEED=38 ROUTE_SEED=2`, 83
-footprints, 222 pads, 213 tracks, 130 vias). It verifies clean AND passes
-`validate_fab.py --online`. Utilisation 51%.
+The committed board is **114.3 × 77.5 mm** (`SEED=4 ROUTE_SEED=0`, 83
+footprints, 222 pads, 233 tracks, 151 vias). It verifies clean AND passes
+`validate_fab.py --online`. Utilisation 60%.
 
 Beyond the filter it carries: a master volume, per-band volume, a 47 kΩ
 line input, buffered outputs with build-out resistors, DC blocking and
@@ -481,6 +481,26 @@ LEDs are panel hardware on a loom to `J6`; no audio leaves the board.
 **Width is now set by the panel, not by routing.** Six controls at
 `PANEL_PITCH` come to 114.3 mm and every seed lands there. A knob costs
 20.3 mm of edge whatever the router does.
+
+**And because the width is fixed, the HEIGHT is the whole objective - so
+price it accordingly.** `w` only charges for width past the panel floor,
+which makes the width up to that floor free; at `W_H=60` the anneal did not
+spend it. The right-hand fifth of the board carried 10 of 222 pads while
+the middle ran at 1.7x the average density, and the board was 102.9 mm
+tall. That is structural, not a bad seed: height is a BOUNDING BOX, so only
+the topmost and bottommost parts get any credit for moving and everything
+in between sees pure wirelength cost for spreading sideways.
+
+`W_H=400` makes that trade worth taking. Four seeds routed at each of
+60/150/300/400 - **not monotonic**, 150 is worse than either neighbour on
+both height and DRC count - but 400 produced **114.3 x 77.5 mm, verified
+clean**, against 102.9 mm for the board it replaced. A quarter less board.
+
+Watch the right metric. `WIDTH_LOG=1`'s coefficient of variation got
+*worse* across that change (0.464 to 0.606) because it is normalised on the
+occupied extent: the mass moved right (the two right-hand columns went from
+26 pads to 43) and the left thinned out. Shorter and less even. Height and
+utilisation are the objective; the histogram says where the parts went.
 
 **Route order does real work at this size.** A blind 24-seed sweep found
 nothing; sweeping ROUTE_SEED 1-3 over the five best of those seeds found
@@ -596,6 +616,16 @@ rip-up and has no learned order to start from.) What did it:
 * **The plane pre-filter** (`PLANE_PREFILTER`) — not a speedup of a run,
   but of a SEARCH: it settles in ~1.5 s whether a placement's ground plane
   is reachable at all, so `find_board.py` never routes one that cannot work.
+* **`geom.c`** — the exact copper-to-copper pair scans, compiled. Three
+  of them: the clearance scan and the connectivity scan in `verify()` /
+  `split_nets()`, and the silkscreen-over-copper scan. `cgeom.py` loads it
+  the way `croute.py` loads the router, the Python stays the reference
+  implementation, and `CGEOM_CHECK=1` runs both and asserts they return
+  the same pairs. **Port all the loops, not the ones the profile names.**
+  Doing only the first two bought 7%, because `d_seg_rect` was still being
+  called 175000 times a run from the silk check - which had no bounding-box
+  pre-filter at all and was invisible under `verify()`'s own line in the
+  profile.
 * **The bounding-box pre-filter in `path_clearance_ok`** and **the disc
   cache in `stamp_disc`** — 1.68x on a trial, verdicts unchanged. See
   "Runtime is no longer dominated by the router" above; these were found by

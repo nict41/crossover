@@ -251,7 +251,7 @@ what it does is listed in
 ### SMD board, routed, for JLCPCB fab + assembly
 
 `pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **114.3 ×
-102.9 mm**, two layers, **fully routed**, six front-panel controls on the
+77.5 mm**, two layers, **fully routed**, six front-panel controls on the
 board (a frequency pot and a volume trim per band, plus a master volume),
 trace width matched to purpose (12 mil signal, 16 mil power/ground), 45°
 chamfered corners, every SMD part a real LCSC line item.
@@ -269,7 +269,7 @@ by block, is in
 ![SMD board](pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.png)
 
 ```
-board 114.3 x 102.9 mm | 83 footprints | 222 pads | 213 tracks | 130 vias
+board 114.3 x 77.5 mm | 83 footprints | 222 pads | 233 tracks | 151 vias
 verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
           pads match the schematic exactly
 ```
