@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="360" viewBox="0 0 1000 360">
+  <style>
+    .wire{stroke:#0a7f0a; stroke-width:3; fill:none}
+    .part{fill:#fff; stroke:#333; stroke-width:2}
+    .label{font:14px/1.1 Arial, Helvetica, sans-serif; fill:#000}
+    .val{font:12px/1.1 Arial, Helvetica, sans-serif; fill:#333}
+    .sym{stroke:#333; stroke-width:2; fill:none}
+    .note{font:12px Tahoma, sans-serif; fill:#222}
+  </style>
+
+  <!-- Title -->
+  <text x="20" y="24" class="label">Mute / Soft-start (High-fidelity)</text>
+
+  <!-- Input block -->
+  <rect x="20" y="50" width="120" height="40" class="part"/>
+  <text x="30" y="78" class="label">J6 Input</text>
+
+  <!-- Series resistor R31 -->
+  <g transform="translate(160,60)">
+    <rect x="0" y="-10" width="70" height="20" class="part"/>
+    <text x="8" y="6" class="label">R31</text>
+    <text x="8" y="22" class="val">47k (example)</text>
+  </g>
+
+  <!-- Wire from input to R31 -->
+  <path d="M140 70 L160 70" class="wire" />
+  <path d="M230 70 L260 70" class="wire" />
+
+  <!-- JFET pair (mute) -->
+  <g transform="translate(280,40)">
+    <rect x="0" y="0" width="80" height="80" class="part"/>
+    <text x="8" y="20" class="label">Q1</text>
+    <text x="8" y="40" class="val">JFET (mute)</text>
+    <!-- symbol: gate, source, drain lines -->
+    <line x1="40" y1="30" x2="90" y2="30" class="sym" />
+  </g>
+
+  <g transform="translate(380,40)">
+    <rect x="0" y="0" width="80" height="80" class="part"/>
+    <text x="8" y="20" class="label">Q2</text>
+    <text x="8" y="40" class="val">JFET (mute)</text>
+  </g>
+
+  <!-- Steering diodes block -->
+  <g transform="translate(500,40)">
+    <rect x="0" y="0" width="120" height="80" class="part"/>
+    <text x="8" y="20" class="label">D1..D4</text>
+    <text x="8" y="40" class="val">Steering diodes & gate steering</text>
+    <!-- example diode symbol -->
+    <path d="M20 52 L36 40 L20 28" stroke="#333" fill="none" stroke-width="2" />
+    <line x1="36" y1="40" x2="52" y2="40" stroke="#333" stroke-width="2" />
+  </g>
+
+  <!-- Soft-start RC -->
+  <rect x="640" y="50" width="160" height="80" class="part"/>
+  <text x="652" y="72" class="label">R40 + C16</text>
+  <text x="652" y="92" class="val">soft-start timing</text>
+
+  <!-- LEDs / indicators -->
+  <rect x="820" y="50" width="140" height="80" class="part"/>
+  <text x="836" y="72" class="label">LEDs + R37..R39</text>
+  <text x="836" y="92" class="val">status indicators</text>
+
+  <!-- Wires connecting blocks -->
+  <path d="M300 70 L280 70" class="wire" />
+  <path d="M360 70 L380 70" class="wire" />
+  <path d="M460 70 L500 70" class="wire" />
+  <path d="M620 70 L640 70" class="wire" />
+  <path d="M800 70 L820 70" class="wire" />
+
+  <!-- Ground and notes -->
+  <text x="20" y="160" class="note">Notes:</text>
+  <text x="20" y="180" class="note">• JFETs shunt buffer inputs through series resistor when ON to mute outputs.</text>
+  <text x="20" y="196" class="note">• Steering diodes route panel button presses to each gate; also drive LEDs via resistors.</text>
+  <text x="20" y="212" class="note">• Soft-start RC holds gates low during power-up to prevent pops; C16 and R40 set delay.</text>
+  <text x="20" y="228" class="note">• Use recommended FETs and small series resistors to avoid audible switching artifacts.</text>
+
+  <!-- Part list -->
+  <text x="20" y="260" class="label">Parts (examples): Q1/Q2: J201/J203 JFETs; D1..D4: 1N4148; R31=47k; R37..R39=2k; R40=100k; C16=10uF</text>
+</svg>

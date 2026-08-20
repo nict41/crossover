@@ -245,6 +245,22 @@ high-fidelity schematics from the full JSON and add the resulting PNGs to the
 docs, I can automate that next (it requires the local schematic renderer or
 EasyEDA import steps to be run on your machine).
 
+### High-fidelity diagrams
+
+Embedded high-fidelity vector diagrams for quick reference:
+
+![Mute high-fidelity diagram](docs/subcircuits/images/mute-hi.svg)
+
+![Level pots high-fidelity diagram](docs/subcircuits/images/level-pots-hi.svg)
+
+If you'd prefer these as PNG thumbnails in `README.md`, run:
+
+```bash
+python -m pip install cairosvg
+cairosvg docs/subcircuits/images/mute-hi.svg -o docs/subcircuits/images/mute-hi.png
+cairosvg docs/subcircuits/images/level-pots-hi.svg -o docs/subcircuits/images/level-pots-hi.png
+```
+
 ## Additions to the original drawing
 
 The ESP figures deliberately leave out supply wiring. This schematic adds it so

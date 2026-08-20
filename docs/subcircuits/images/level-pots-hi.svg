@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="380" viewBox="0 0 980 380">
+  <style>
+    .wire{stroke:#0a7f0a; stroke-width:3; fill:none}
+    .part{fill:#fff; stroke:#333; stroke-width:2}
+    .label{font:14px/1.1 Arial, Helvetica, sans-serif; fill:#000}
+    .val{font:12px/1.1 Arial, Helvetica, sans-serif; fill:#333}
+    .note{font:12px Tahoma, sans-serif; fill:#222}
+  </style>
+
+  <text x="20" y="24" class="label">Level Controls (High-fidelity)</text>
+
+  <!-- Master pot -->
+  <g transform="translate(20,40)">
+    <rect x="0" y="0" width="160" height="72" class="part"/>
+    <text x="14" y="26" class="label">VR6 (Master)</text>
+    <text x="14" y="46" class="val">20k audio pot (rheostat)</text>
+  </g>
+
+  <!-- Per-band pots -->
+  <g transform="translate(210,20)">
+    <rect x="0" y="0" width="140" height="72" class="part"/>
+    <text x="12" y="26" class="label">VR3 (High)</text>
+    <text x="12" y="46" class="val">20k dual-gang</text>
+  </g>
+  <g transform="translate(370,20)">
+    <rect x="0" y="0" width="140" height="72" class="part"/>
+    <text x="12" y="26" class="label">VR4 (Mid)</text>
+    <text x="12" y="46" class="val">20k dual-gang</text>
+  </g>
+  <g transform="translate(530,20)">
+    <rect x="0" y="0" width="140" height="72" class="part"/>
+    <text x="12" y="26" class="label">VR5 (Low)</text>
+    <text x="12" y="46" class="val">20k dual-gang</text>
+  </g>
+
+  <!-- Buffer and build-out -->
+  <g transform="translate(20,140)">
+    <rect x="0" y="0" width="220" height="72" class="part"/>
+    <text x="14" y="26" class="label">Buffer Op-amp + R25..R27</text>
+    <text x="14" y="46" class="val">unity follower; build-out resistors per band</text>
+  </g>
+
+  <!-- DC blocking caps -->
+  <g transform="translate(260,140)">
+    <rect x="0" y="0" width="220" height="72" class="part"/>
+    <text x="12" y="26" class="label">C13 / C14 / C15</text>
+    <text x="12" y="46" class="val">Output DC blocking caps</text>
+  </g>
+
+  <!-- Outputs -->
+  <g transform="translate(520,140)">
+    <rect x="0" y="0" width="220" height="72" class="part"/>
+    <text x="14" y="26" class="label">J3 / J4 / J5</text>
+    <text x="14" y="46" class="val">Output terminal blocks</text>
+  </g>
+
+  <!-- Wires -->
+  <path d="M180 76 L210 76" class="wire" />
+  <path d="M350 76 L370 76" class="wire" />
+  <path d="M510 76 L530 76" class="wire" />
+  <path d="M110 176 L260 176" class="wire" />
+  <path d="M380 176 L520 176" class="wire" />
+
+  <!-- Notes -->
+  <text x="20" y="240" class="note">Notes:</text>
+  <text x="20" y="258" class="note">• VRs are wired as rheostats where specified; dual-gang pots track the filter-setting pots.</text>
+  <text x="20" y="274" class="note">• Build-out resistors separate op-amp output from connector to protect against cable capacitance.</text>
+  <text x="20" y="290" class="note">• DC blocking caps remove DC offset before the terminal blocks; choose values for LF roll-off as required.</text>
+  <text x="20" y="306" class="note">• If you need panel-mounted pots, check mechanical footprint and shaft orientation against your front panel.</text>
+
+  <text x="20" y="338" class="label">Parts (examples): VR3..VR6: 20k audio pots; R25..R27: 100R-1k; C13..C15: 10uF (electro) or 4.7uF depending on LF requirements.</text>
+</svg>
