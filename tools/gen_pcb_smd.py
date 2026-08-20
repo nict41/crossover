@@ -202,14 +202,13 @@ POUR_CLEAR = 1.0
 # the placement cache key used to read SEED with its own default ("8")
 # while the placer read another (11), which was self-consistent only by
 # luck - both defaults applied together or not at all.
-# The committed board: SEED=35 ROUTE_SEED=15 on the 4-layer stackup, 0 DRC
-# problems.  Found by find_board.py over 32 seeds and then a route-order
-# sweep on the best two - route order did the last of the work here,
-# taking this placement from 5 problems to 3 to 0.  A bare
+# The committed board on the 4-layer stackup with the two pinned edge rows.
+# Found by find_board.py over 24 seeds and then a route-order sweep.  A
+# bare
 # `python3 tools/gen_pcb_smd.py` has to rebuild the committed artifacts,
 # so the winning pair are the defaults rather than something you have to
 # know to pass on the command line.
-SEED = int(os.environ.get("SEED", 35))
+SEED = int(os.environ.get("SEED", 5))
 
 # Nets carried by the copper pour instead of by traces.  Ground is one:
 # the board already had a GND pour on both layers, and routing GND as a
@@ -2232,7 +2231,7 @@ def path_clearance_ok(net, via_pts, polys):
 # Worth having because the measured clean rate over placements alone is only
 # a couple of percent - the same layout often routes cleanly under one order
 # and not another, and searching that is far cheaper than searching seeds.
-_ROUTE_SEED = int(os.environ.get("ROUTE_SEED", 15))
+_ROUTE_SEED = int(os.environ.get("ROUTE_SEED", 0))
 _ORDER_JITTER = {}
 if _ROUTE_SEED:
     import random as _r
