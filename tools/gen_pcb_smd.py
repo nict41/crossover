@@ -2753,23 +2753,29 @@ def pad_plane_via(p, gnid):
         for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1),
                        (1, 1), (1, -1), (-1, 1), (-1, -1)):
             cands.append((p["x"] + dx * k * step, p["y"] + dy * k * step))
+    why = []
     for vx, vy in cands:
         vx = round(vx / GRID) * GRID
         vy = round(vy / GRID) * GRID
         cx, cy = int(round(vx / GRID)), int(round(vy / GRID))
         if not (1 <= cx < NX - 1 and 1 <= cy < NY - 1):
+            why.append("off-board")
             continue
         if not hole_ok(cx, cy):
+            why.append("drill keepout")
             continue
         # hole to hole is a property of the DRILL, not of the net, so a
         # same-net via already there still has to be cleared.
         if any(math.dist((vx, vy), (ox, oy)) < VIA_DRILL + MIN_HOLE_GAP
                for ox, oy, _ in VIAS):
+            why.append("hole to hole")
             continue
         if any(math.dist((vx, vy), (hx, hy)) < VIA_DRILL / 2 + MOUNT_R + MIN_HOLE_GAP
                for hx, hy in MOUNT_HOLES):
+            why.append("mounting hole")
             continue
         if not path_clearance_ok("GND", [(vx, vy)], []):
+            why.append("clearance")
             continue
         VIAS.append((vx, vy, "GND"))
         stamp_disc(MULTI, vx, vy, VIA_DIL, gnid)
@@ -2781,6 +2787,12 @@ def pad_plane_via(p, gnid):
                   % (p["ref"], p["num"], vx, vy,
                      math.dist((vx, vy), (p["x"], p["y"]))), flush=True)
         return True
+    if PLANE_LOG:
+        import collections as _c
+        print("  plane via %s.%s: no site in %d candidates (%s)"
+              % (p["ref"], p["num"], len(cands),
+                 ", ".join("%s x%d" % kv for kv in _c.Counter(why).most_common())),
+              flush=True)
     return False
 
 
@@ -3543,6 +3555,36 @@ def route_with_ripup():
     ROUTED[:], VIAS[:], fails, occ_b, con_b = best
     OCC[:] = occ_b
     CONTESTED[:] = con_b
+
+    # The LAST word on ground, after the last thing that can break it.
+    #
+    # plane_stubs() runs inside each attempt, but the rip-up loop then
+    # throws that attempt away and keeps a different one, and the stitching
+    # vias go down afterwards - so the ground check that mattered was run
+    # against a board that no longer exists.  It showed: ~20 plane vias
+    # were placed over a run and 6 survived into the artifact, and the two
+    # pads that failed had had a via on them in an earlier round.
+    #
+    # So ask the question once more here, against the copper that is
+    # actually going to be manufactured, and answer it the way a person
+    # would - a via on the pad, straight down to the plane.  pad_plane_via
+    # checks exact geometry, so it does not care how congested the
+    # ROUTER thinks that neighbourhood is.
+    _gnid = NETID["GND"]
+    for _ in range(8):
+        _ok, _missed, _ = pour_connectivity()
+        if _ok:
+            break
+        _fixed = 0
+        for _name in _missed:
+            _ref, _, _num = _name.rpartition(".")
+            _p = next((q for q in pads
+                       if q["ref"] == _ref and q["num"] == _num), None)
+            if _p is not None and pad_plane_via(_p, _gnid):
+                _fixed += 1
+        if not _fixed:
+            break
+
     save_route_order(best_priority)
     return fails
 

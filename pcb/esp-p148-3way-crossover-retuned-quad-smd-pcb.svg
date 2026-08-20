@@ -801,10 +801,16 @@
 <circle cx="335.75" cy="85.25" r="0.6" fill="#0b3d2e"/>
 <circle cx="374.25" cy="93.5" r="1.4" fill="#c9c9c9"/>
 <circle cx="374.25" cy="93.5" r="0.6" fill="#0b3d2e"/>
-<circle cx="288.75" cy="176.25" r="1.4" fill="#c9c9c9"/>
-<circle cx="288.75" cy="176.25" r="0.6" fill="#0b3d2e"/>
+<circle cx="289.25" cy="176.75" r="1.4" fill="#c9c9c9"/>
+<circle cx="289.25" cy="176.75" r="0.6" fill="#0b3d2e"/>
+<circle cx="233.25" cy="189.25" r="1.4" fill="#c9c9c9"/>
+<circle cx="233.25" cy="189.25" r="0.6" fill="#0b3d2e"/>
+<circle cx="280.75" cy="140" r="1.4" fill="#c9c9c9"/>
+<circle cx="280.75" cy="140" r="0.6" fill="#0b3d2e"/>
 <circle cx="251.25" cy="125.25" r="1.4" fill="#c9c9c9"/>
 <circle cx="251.25" cy="125.25" r="0.6" fill="#0b3d2e"/>
+<circle cx="230.25" cy="161.25" r="1.4" fill="#c9c9c9"/>
+<circle cx="230.25" cy="161.25" r="0.6" fill="#0b3d2e"/>
 <circle cx="266.75" cy="111.75" r="1.4" fill="#c9c9c9"/>
 <circle cx="266.75" cy="111.75" r="0.6" fill="#0b3d2e"/>
 <text x="440.15" y="107.65" font-family="DejaVu Sans" font-size="4" fill="#f2f0e6">ESP P148 3-WAY VARIABLE CROSSOVER</text>
