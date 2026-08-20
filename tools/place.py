@@ -398,50 +398,6 @@ class Placer:
                 pen += (d - tgt) ** 2
         return pen
 
-    def compact(self, max_iters=200, step=1.0, verbose=False):
-        """Greedy local compaction: try nudging parts toward the board centre
-        while preserving or improving placement cost. This is a lightweight
-        pass to reduce unused board area without altering the annealer.
-        """
-        moved = False
-        for _ in range(max_iters):
-            any_moved = False
-            x0, y0, x1, y1 = self.extent()
-            cx = (x0 + x1) / 2.0
-            cy = (y0 + y1) / 2.0
-            base_cost = self.full_cost({
-                'ov': 0.0, 'esc': 0.0, 'pesc': 0.0, 'cong': 0.0,
-                'hpwl': 0.0, 'h': 1.0, 'w': 1.0, 'wfloor': 0.0, 'edge': 0.0
-            })
-            for i, part in enumerate(self.parts):
-                if part.group:
-                    continue
-                # direction toward centre
-                dx = -step if self.X[i] > cx else step
-                dy = -step if self.Y[i] > cy else step
-                # try x move
-                oldx, oldy = self.X[i], self.Y[i]
-                self.set_pose(i, oldx + dx, oldy, self.R[i])
-                if (self.overlap_of(i) <= 0 and self.escape_of(i)[0] <= 1e-6):
-                    any_moved = True
-                    moved = True
-                    if verbose:
-                        print('compact: moved part', i, 'dx', dx)
-                else:
-                    self.set_pose(i, oldx, oldy, self.R[i])
-                # try y move
-                self.set_pose(i, oldx, oldy + dy, self.R[i])
-                if (self.overlap_of(i) <= 0 and self.escape_of(i)[0] <= 1e-6):
-                    any_moved = True
-                    moved = True
-                    if verbose:
-                        print('compact: moved part', i, 'dy', dy)
-                else:
-                    self.set_pose(i, oldx, oldy, self.R[i])
-            if not any_moved:
-                break
-        return moved
-
     def _net_rect(self, ni):
         xs, ys = [], []
         for i, k in self.nets[ni]:

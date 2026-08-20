@@ -482,6 +482,59 @@ LEDs are panel hardware on a loom to `J6`; no audio leaves the board.
 `PANEL_PITCH` come to 114.3 mm and every seed lands there. A knob costs
 20.3 mm of edge whatever the router does.
 
+**The empty space on the board is ROUTING space, and squeezing it out
+costs nets.** This is the answer to "there is a 24 x 29 mm hole, use it",
+and it took building the term to find out.
+
+A column-load ("fill") term was added to the placer: divide the width into
+strips, give each part's area to the strips it covers, and price the
+imbalance as a sum of squares. That is a proper surrogate for height -
+board height is really its fullest strip - and unlike `h` it gives EVERY
+part a gradient towards an empty column, not just the topmost and
+bottommost. Mirrored in `anneal.c`, struct layout checked field by field
+(`sizeof` and every offset identical).
+
+Two bugs in it worth not repeating, both found by measuring:
+* **Bucketing on the current extent makes the extent a free variable.**
+  Widening the board widens every strip and lowers the imbalance for free,
+  so at a high weight the anneal pushed the board out to 120.7 mm and paid
+  the `w` penalty to do it. Bucket on `wfloor`, which is fixed.
+* **The outer strips have to be unbounded.** Otherwise a part shoved past
+  the last strip falls outside every strip and contributes no load at all,
+  so the cheapest way to even out the columns is to push parts off the
+  edge.
+
+Then the term itself, measured, and **it does not work**:
+
+| W_FILL | mean height, 4 seeds | mean utilisation |
+|---|---|---|
+| 0 | 80.8 mm | 34.3% |
+| 1000 | 79.1 mm | 34.5% |
+| 4000 | 83.9 mm | 33% |
+| 15000 | 86.4 mm | 32% |
+
+Utilisation is **flat at ~34% whatever the weight** - the term
+redistributes area, it does not densify. And routing it is worse: over 21
+seeds at `W_FILL=1000`, **0 verified clean**, where the same field at 0
+produced `SEED=4`. Spearman rho between board height and DRC problem count
+across that field is **-0.41**: the shorter the board, the more problems.
+The four shortest averaged 24 problems, the four tallest 12.5. `SEED=4`
+itself goes from **1 problem at 77.5 mm to 39 problems at 70.6 mm**.
+
+The mechanism is visible in the cost breakdown, so this is not just
+correlation: compressing the layout took `esc` from 8865 to 23703, and
+escape starvation is exactly the failure that leaves nets unroutable here
+(see the pin-escape note above). The parts are not lazily spread out; the
+gaps between them are the corridors the nets use.
+
+So the term is REVERTED. What survives is `WIDTH_LOG=1`, which now reports
+utilisation and the largest empty rectangle from the placement alone, and
+this entry. **Before trying to fill the empty space again, note that this
+is the fourth time optimising the placement surrogate harder produced
+boards the router rejected** - MOVES=90000, RESTARTS=4, and now W_FILL.
+If the board genuinely needs to be smaller, the lever is more layers or
+finer design rules, not tighter placement.
+
 **And because the width is fixed, the HEIGHT is the whole objective - so
 price it accordingly.** `w` only charges for width past the panel floor,
 which makes the width up to that floor free; at `W_H=60` the anneal did not
