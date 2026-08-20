@@ -270,22 +270,17 @@ what it does is listed in
 
 ### SMD board, routed, for JLCPCB fab + assembly
 
-`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **146.3 ×
-74.7 mm**, two layers, nine front-panel controls on the board (a frequency
-pot and a volume trim per band, a master volume, and a mute button per
-band), trace width matched to purpose (12 mil signal, 16 mil power/ground),
-45° chamfered corners, every SMD part a real LCSC line item.
+`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **141.7 ×
+70.4 mm**, **four layers**, **fully routed**, nine front-panel controls on
+the board (a frequency pot and a volume trim per band, a master volume, and
+a mute button per band), trace width matched to purpose (12 mil signal,
+16 mil power/ground), 45° chamfered corners, every SMD part a real LCSC
+line item.
 
-> **This board does not verify clean and is not orderable as it stands.**
-> Eight nets are left in pieces — including both supply rails — and the
-> ground pour misses three pads: 10 DRC problems. Adding the three panel
-> mute buttons
-> used up the two-layer board's remaining routing slack; ~115 placement
-> seeds and route-order sweeps did not find a clean one, and the levers
-> tried and rejected are listed in
-> [`CLAUDE.md`](CLAUDE.md#the-board-does-not-currently-verify-clean-read-this-first).
-> The board immediately before this change (114.3 × 77.5 mm, no on-board
-> buttons) did verify clean and is in the git history.
+The stackup is L1 signal / **L2 solid GND plane** / L3 signal / L4 signal.
+Two layers could not route this board once the three panel mute buttons
+went into the front row — see
+[`docs/pcb-notes-smd.md`](docs/pcb-notes-smd.md#the-stackup).
 
 Beyond the filter itself it carries buffered outputs with build-out
 resistors, DC blocking and bleeders, a 47 kΩ line input, bulk and per-IC
@@ -303,9 +298,10 @@ by block, is in
 ![SMD board](pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.png)
 
 ```
-board 146.3 x 74.7 mm | 86 footprints | 242 pads | 240 tracks | 155 vias
-board utilisation 54%; largest empty rectangle 24 x 47 mm at (0, 5)
-DRC PROBLEMS (10) - see the warning above
+board 141.7 x 70.4 mm | 86 footprints | 242 pads | 262 tracks | 166 vias
+board utilisation 58%
+verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
+          pads match the schematic exactly
 ```
 
 Sockets on the rear edge; on the front edge, left to right: MASTER,

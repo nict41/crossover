@@ -203,6 +203,13 @@ FAILING A* drains twice as many nodes. `find_board.py --trial-timeout`
 defaults to 420 s, which was tuned on two layers and abandons roughly a
 third of 4-layer trials mid-route; pass 1500 or more.
 
+**And the search's own advice changed.** On two layers the recipe was
+"sweep seeds, then sweep route orders on the near-misses". On four it is
+worth sweeping route orders much HARDER: seeds 0-17 on the winning
+placement span 2 to 13 problems, and the clean board is at 15. A dozen
+route orders on one good placement was worth more than another thirty
+placements.
+
 ## Ground is a plane, and that is a load-bearing decision
 
 `GND` is **not routed**. It is a solid plane on Inner1, poured on the
@@ -664,68 +671,34 @@ background with a timeout; don't poll them in a tight loop.
 
 ## Current state / open threads
 
-### The board does NOT currently verify clean. Read this first.
+### Current board: 4 layers, 141.7 x 70.4 mm, verifies CLEAN
 
-The committed board is `SEED=7 ROUTE_SEED=0`, **146.3 x 74.7 mm**, 86
-footprints, 242 pads, 240 tracks, 155 vias. It has **10 DRC problems**:
-eight nets left in pieces - including **both supply rails** - one
-ground-pour line (`Q3.2`, `U2B.5`, `U3D.12`), and the wasted-area note,
-which is not a defect. It is committed anyway, because the alternative was
-leaving a board in the repo that no longer matches its own schematic - but
-**it is not orderable as it stands** and nothing here should be read as
-saying otherwise.
+`SEED=35 ROUTE_SEED=15`, 86 footprints, 242 pads, 262 tracks, 166 vias,
+utilisation 58%. `verify()` passes on every check and `validate_fab.py`
+passes offline.
 
-Worth noting for whoever picks this up: the capped RANKING run of the same
-seed and route order also scores 10, but fails on *different* nets
-(`MID_MUTE`, `LOW_MUTE` and two filter nets, with the pour missing all
-three JFET sources). Same count, different composition - so the count is a
-fair ranking signal and a poor description of what is wrong. Read the
-list, not the number.
+**How it was found, because the shape of the search is the lesson.** Two
+layers could not do it: ~115 seeds and route-order sweeps bottomed out at
+10 DRC problems on a board 54% utilised. Then, on four layers:
 
-What broke it: the three panel mute buttons (see below). The board before
-them was 114.3 x 77.5 mm with 83 footprints and verified clean.
-
-**What was tried, all measured, none of it enough.** Roughly 115 seeds
-were routed, plus route-order sweeps on the best of them, and the floor
-never came below 10 problems:
-
-| lever | result |
+| stage | best DRC count |
 |---|---|
-| ~115 seeds, ROUTE_SEED=0 | best 10 (SEED=7), second 11 (SEED=99) |
-| ROUTE_SEED 0-3 on the best 6 seeds | best unchanged; SEED=61 16 -> 13 |
-| re-anchoring the LED resistors to their own switch | 69 vs 72 over 4 seeds - noise |
-| `MUTE_LEDS=0` (six nets and ten pads out of the panel row) | 157 vs 137 over 8 seeds - WORSE |
-| `MUTE_Q_NEAR=75` (room around the JFETs) | 84 vs 72 - worse |
-| `W_H=200` / `W_H=60` (taller boards) | 108 / 114 vs 72 and 54 - worse |
-| `CLEAR=0.6` (6 mil, JLCPCB standard) | 106 vs 54 - much worse |
+| 32 seeds, ROUTE_SEED=0 | 5 |
+| + route seeds 0-5 on the best two | 3 |
+| + route seeds 6-17 on the best one | 2 |
+| + production rip-up (6 rounds) on ROUTE_SEED=15 | **0** |
 
-**The failures are at the output-buffer end, not at the buttons.** On the
-best seed the unrouted nets are `MID_MUTE`, `LOW_MUTE` and two filter
-nets, and the pour misses `Q1.2`/`Q2.2`/`Q3.2` - the JFET sources. The
-buttons did not congest the panel row so much as take away the slack that
-the mute cluster around `U3` was living on. `MUTE_LEDS=0` proves the
-point: removing six nets and ten pads from the panel row made the board
-worse, not better.
+**Route order did two thirds of that**, on a placement the seed search had
+already settled. That is the same finding as the note further down - "route
+order does real work at this size" - and it is now the strongest evidence
+for it: seeds 0-17 on ONE placement span 2 to 13 problems.
 
-**The levers NOT yet tried, in the order worth trying them:**
+It also explains why the three textbook routing techniques added at the
+same time all lost (see below). They change HOW every net routes; what
+this board needed was WHICH ORDER they route in.
 
-1. **Four layers.** This is the honest answer to a two-layer board that is
-   35% utilised and still out of channels. It is also the one CLAUDE.md
-   has been pointing at since the fill-term round: "if the board genuinely
-   needs to be smaller, the lever is more layers or finer design rules".
-   Finer rules have now been measured and rejected (`CLEAR=0.6`, above),
-   which leaves layers.
-2. **A thinner signal trace** (8 mil rather than 12) WITHOUT touching
-   `CLEAR`. The two were never separated - `CLEAR=0.6` moved the placement
-   model as well as the routing rule, and that is what made it worse. Trace
-   width feeds `track_pitch` too, so the same care applies, but `SIG_W` and
-   `CLEAR` are not the same experiment and only one of them has been run.
-3. **Negotiated congestion routing**, which was tried once, would not
-   converge, and is documented above with two specific things to fix if it
-   is retried.
-4. **Giving the buttons their own row on a daughterboard** - i.e. undoing
-   this change. Kept last deliberately: it is a real option and the user
-   chose the on-board version knowingly.
+The board is also smaller than the two-layer attempt: 141.7 x 70.4 mm
+against 146.3 x 74.7.
 
 Beyond the filter the board carries: a master volume, per-band volume, a
 47 kΩ line input, buffered outputs with build-out resistors, DC blocking
