@@ -1798,9 +1798,34 @@ def path_clearance_ok(net, via_pts, polys):
         if name == net:
             continue
         others.append(dict(k="pt", hw=VIA_PAD / 2, L={1, 2}, g=(x, y)))
+    # The pairs this must CONSIDER are cand x others - a few hundred
+    # thousand on a routed board - but only a handful of them are anywhere
+    # near each other, and exact segment-to-segment distance is far too
+    # expensive to spend on the rest.  This is the same bounding-box
+    # pre-filter verify() has used since it was the slow one, applied here
+    # too: box-to-box distance is a lower bound on the real gap, so a pair
+    # whose boxes are already CLEAR apart cannot violate CLEAR.  The
+    # survivors still get the identical exact-geometry test, so the verdict
+    # is unchanged - this is a lower bound, not an approximation.
+    #
+    # It matters more here than it does in verify(): plane_stubs() calls
+    # this once per ground stub and the relaxed retry once per candidate
+    # path, which made it the single most expensive function in a run -
+    # more than the compiled router.
+    if not cand or not others:
+        return True
+    ox0, oy0, ox1, oy1, olay = _expanded_boxes(others)
     for c in cand:
-        for o in others:
-            if c["L"] & o["L"] and gap(c, o) < CLEAR - 1e-9:
+        gx0, gy0, gx1, gy1 = _feature_bbox(c)
+        hw = c["hw"]
+        cx0, cy0, cx1, cy1 = gx0 - hw, gy0 - hw, gx1 + hw, gy1 + hw
+        clay = sum(1 << L for L in c["L"])
+        dx = np.maximum(np.maximum(ox0 - cx1, cx0 - ox1), 0.0)
+        dy = np.maximum(np.maximum(oy0 - cy1, cy0 - oy1), 0.0)
+        near = np.nonzero((dx * dx + dy * dy <= CLEAR * CLEAR)
+                          & (olay & clay != 0))[0]
+        for j in near:
+            if gap(c, others[j]) < CLEAR - 1e-9:
                 return False
     return True
 
@@ -1998,6 +2023,35 @@ def gap(f, g):
     else:
         d = math.dist(f["g"], g["g"])
     return d - f["hw"] - g["hw"]
+
+
+def _feature_bbox(f):
+    """Axis-aligned bounds of a feature's geometry, before its half-width."""
+    if f["k"] == "rect":
+        return f["g"]
+    if f["k"] == "seg":
+        (ax, ay), (bx, by) = f["g"]
+        return (min(ax, bx), min(ay, by), max(ax, bx), max(ay, by))
+    return (f["g"][0], f["g"][1], f["g"][0], f["g"][1])
+
+
+def _expanded_boxes(feats):
+    """Each feature's bounding box grown by its own half-width, plus its
+    layer mask, as arrays.
+
+    A feature's real copper - a rectangle, or a segment swept by its trace
+    width - is always contained in this box, so the box-to-box distance is
+    a LOWER BOUND on the copper-to-copper gap.  That is what makes it safe
+    to skip pairs with it."""
+    n = len(feats)
+    x0 = np.empty(n); y0 = np.empty(n); x1 = np.empty(n); y1 = np.empty(n)
+    lay = np.empty(n, dtype=np.int64)
+    for i, f in enumerate(feats):
+        gx0, gy0, gx1, gy1 = _feature_bbox(f)
+        hw = f["hw"]
+        x0[i], y0[i], x1[i], y1[i] = gx0 - hw, gy0 - hw, gx1 + hw, gy1 + hw
+        lay[i] = sum(1 << L for L in f["L"])
+    return x0, y0, x1, y1, lay
 
 
 PAD_POS = {"%s.%s" % (p["ref"], p["num"]): (p["x"], p["y"]) for p in pads}
@@ -2328,16 +2382,6 @@ def plane_stubs():
 # --------------------------------------------------------------------------
 #  exact-geometry features, and the split-net test built on them
 # --------------------------------------------------------------------------
-def _feature_bbox(f):
-    """Axis-aligned bounds of a feature's geometry, before its half-width."""
-    if f["k"] == "rect":
-        return f["g"]
-    if f["k"] == "seg":
-        (ax, ay), (bx, by) = f["g"]
-        return (min(ax, bx), min(ay, by), max(ax, bx), max(ay, by))
-    return (f["g"][0], f["g"][1], f["g"][0], f["g"][1])
-
-
 def _feature_arrays():
     """Every feature's expanded bounding box, net and layer mask, as arrays.
 
