@@ -81,7 +81,36 @@ def problem_count(out):
 # still has to be confirmed by an uncapped production run.  Same bargain as
 # GRID=0.5, and the same rule - never in production, where capping was
 # tried twice and silently broke routable nets.
-SEARCH_MAX_EXPAND = "400000"
+# 150000, not 400000, and it is worth saying why the SMALLER cap is the
+# better ranker as well as the faster one.
+#
+# Measured against the same six seeds whose rip-up-6 ordering is known
+# (1->2 4->3 2->11 3->13 5->15 6->16), Spearman rank correlation against
+# that ground truth:
+#
+#   rip-up 1, cap 150k    4 1 2 3 5 6    rho 0.94    ~21 s
+#   rip-up 1, cap 400k    1 4 5 2 6 3    rho 0.71    ~34 s
+#   rip-up 0, cap 400k    1 5 4 3 6 2    rho 0.43    ~35 s
+#   GRID=0.5, cap 400k    4 1 6 5 3 2    rho 0.37    ~25 s
+#
+# At 150k only the top two swap, and they are 9 against 12 problems - both
+# clearly the leaders either way, and both get confirmed regardless.  Below
+# the top two it is right where 400k is wrong: it puts seed 2 third, where
+# it belongs, while 400k puts it fourth and drops seed 3 to last.
+#
+# The likely reason - a hypothesis, not a measurement - is that a tight cap
+# fails every hard net consistently, so the count reads as "how many nets
+# are hard on this placement".  A looser cap lets some marginal nets
+# through and some not, which is closer to noise.
+#
+# GRID=0.5 was tried here too and rejected: it ranks seed 2, genuinely
+# third, DEAD LAST - the same failure that disqualified rip-up 0 - and it
+# only buys 1.4x, because verify() and the exact-geometry checks do not
+# scale with the routing grid.
+#
+# Still a pessimistic FILTER, and the same rule applies: never in
+# production, and a winner is confirmed uncapped.
+SEARCH_MAX_EXPAND = "150000"
 
 # Rip-up rounds for the RANKING pass.  ONE, and the difference between one
 # and none is the whole reason ranking cheaply works at all.
