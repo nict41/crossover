@@ -49,10 +49,16 @@ so. Per-trial cost, measured:
 
 | config | per trial |
 |---|---|
-| capped, rip-up 0 | 28 s |
-| capped, rip-up 1 | 71 s |
-| capped, rip-up 6 | 201 s |
+| **ranking config (cap 150k, rip-up 1)** | **~21 s** |
+| capped 400k, rip-up 0 | 28 s |
+| capped 400k, rip-up 1 | 34 s |
+| capped 400k, rip-up 6 | 201 s |
 | **uncapped, rip-up 6** | **707 s** |
+
+The 400k/rip-up-1 row was 71 s when it was measured and is 34 s now; the
+`path_clearance_ok` and disc-cache fixes below took 1.68x off every row
+without changing a single verdict, so any older timing in this file is
+high by roughly that factor.
 
 `seeds x route-orders x per-trial / jobs` is the number to check against the
 time available. If it does not fit, cut the field or cheapen the config -
@@ -326,8 +332,51 @@ candidate gets an exact-geometry clearance check before being committed, after
 a bare relaxed retry once produced a real −5 mil via overlap. `via_ok()` stays
 strict even in relaxed mode.
 
-Runtime is dominated by A* in pure Python. What actually helped, and what
-didn't:
+**Runtime is no longer dominated by the router — profile before optimising
+it.** That sentence used to read "Runtime is dominated by A* in pure
+Python", and it stayed in this file long after `router.c` made it false.
+The first profile ever taken of a ranking trial said:
+
+| | cumulative | calls |
+|---|---|---|
+| `croute.route` (compiled) | 18.6 s | 375 |
+| **`path_clearance_ok`** | **32.4 s** | **38** |
+| `plane_stubs` | 33.9 s | 5 (nearly all the above) |
+| `gap` / `d_seg_seg` / `d_pt_seg` | 41.5 s | 3.4M / 4.0M / 16.4M |
+
+The compiled router was **under a quarter** of the run and the exact
+geometry was most of it. Two exact fixes took a trial from 57.3 s to
+34.1 s (1.68x) with **byte-identical verdicts on all three test seeds**:
+
+* **`path_clearance_ok` never got the bounding-box pre-filter.** It compares
+  every candidate segment against every piece of foreign copper - a few
+  hundred thousand pairs - where `verify()` has skipped the far ones since
+  it was the slow one. Box-to-box distance is a lower bound on the real
+  gap, so this is exact. It matters more here than in `verify()`:
+  `plane_stubs()` calls it once per ground stub and the relaxed retry once
+  per candidate path.
+* **`stamp_disc` rebuilt the same disc ~94000 times.** `commit_path()`
+  stamps one per *cell* of every finished trace, and each call allocated
+  two `np.mgrid` coordinate grids to compare against a radius. Every centre
+  is grid-aligned and there are two radii on the board.
+
+Two things measured and NOT kept, both worth not re-trying:
+
+* **Hoisting the closure out of `d_seg_seg` and unrolling `d_seg_rect`.**
+  Sound in principle - 950k closure creations a run - and worth **zero**:
+  27.5/43.6/32.1 s against 27.5/43.4/31.5. After the pre-filter those
+  functions' own tottime is a couple of seconds profiled, which is a
+  fraction of a second real. Reverted rather than keep unreadable code for
+  an unmeasurable gain.
+* **"The ctypes marshalling is copying the whole grid per net."** It is
+  not. `np.ascontiguousarray` on an already-contiguous matching-dtype array
+  returns the *same object*, and `OCC`/`CONTESTED` are already one
+  contiguous `(2, NY, NX)` block passed straight through. What made it look
+  like 16 s of Python was cProfile: a ctypes foreign function gets no frame
+  of its own, so its real C time is billed to the Python frame that called
+  it. **Read a profile of ctypes code with that in mind.**
+
+What helped historically, and what didn't:
 
 * **Works: parallelism.** 4 cores; sweeps run 4 sizes at once
   (`scratchpad/psweep.sh` pattern). Straight ~4x.
@@ -343,10 +392,15 @@ didn't:
   went from 1 failing net to 6 at 300k; 1.2M still cost routes). There is no
   cap that speeds up the hopeless case without also breaking the merely
   difficult one. `MAX_EXPAND` is left effectively disabled.
-* **`GRID=0.5` is a comparative filter only.** ~3x faster and systematically
-  more pessimistic (it reports failures 0.25 routes fine). Useful for ranking
-  two placements against each other, useless for judging one in absolute
-  terms. Production stays at 0.25.
+* **`GRID=0.5` was tried as the ranking config and REJECTED.** The old note
+  here said it was "useful for ranking two placements against each other".
+  Measured against the six seeds with a known rip-up-6 ordering, it is not:
+  it puts seed 2, genuinely third best, **dead last** — the same failure
+  that disqualified rip-up 0 — for a Spearman rho of 0.37 against 0.94 for
+  the committed config. It is also only ~1.4x, not the ~3x folklore said,
+  because `verify()` and the exact-geometry checks do not scale with the
+  routing grid at all; only the router does, and the router is now under
+  half of a trial. Production stays at 0.25, and so does search.
 
 Annealer bugs worth not rediscovering, all of which looked like "the search
 just isn't very good":
@@ -443,25 +497,54 @@ same layout in both - measured head to head on three seeds, the C one gave
 5/14/13 DRC problems where Python gave 19/25/15, so it is not a quality
 regression.
 
-**The search cap has a footprint-count limit.** `MAX_EXPAND=400000` was a
-fair filter at 54 footprints. At 63 it is not: it reported **0 clean out
-of 96** where the best candidate in that same set verifies with a single
-problem when re-run uncapped. More nets means more *failing* A* calls per
-board, and the cap turns "hard" into "impossible" for all of them at once.
-A run is ~46 s uncapped, so at this size just pass `--env MAX_EXPAND=0`
-and skip the filter. Re-check the cap whenever the part count moves.
+**The search cap cannot deliver a VERDICT, only a ranking.**
+`MAX_EXPAND=400000` was a fair filter at 54 footprints. At 63 it is not:
+it reported **0 clean out of 96** where the best candidate in that same
+set verifies with a single problem when re-run uncapped. More nets means
+more *failing* A* calls per board, and the cap turns "hard" into
+"impossible" for all of them at once.
+
+The advice here used to be "pass `--env MAX_EXPAND=0` and skip the
+filter". That is no longer right, and the reason is worth keeping: the cap
+is bad at saying whether a board is clean and *good* at saying which board
+is cleanest, and those are different jobs. `find_board.py` now does both -
+rank every seed capped at 150k, then re-run the best few uncapped - so the
+cap never produces a verdict anybody acts on.
 
 **Search uses a capped router** (`MAX_EXPAND`, set by `find_board.py`, never
 in production). A *failing* A* is far more expensive than a passing one -
 it drains the queue over the whole reachable grid - and a search spends
-most of its time on boards that fail. 400k expansions is ~2x faster for
-almost the same verdict. Like `GRID=0.5` it is a pessimistic filter, so
-confirm any winner with an uncapped run. Capping in *production* was tried
-twice and reverted twice: it silently breaks routable nets.
+most of its time on boards that fail.
+
+The cap is **150000**, and it is worth knowing that the smaller cap is the
+better RANKER as well as the faster one - the opposite of what a cheaper
+filter is supposed to do. Spearman rank correlation against the known
+rip-up-6 ordering of six seeds (`1->2 4->3 2->11 3->13 5->15 6->16`):
+
+| config | ordering | rho | per trial |
+|---|---|---|---|
+| **rip-up 1, cap 150k** | `4 1 2 3 5 6` | **0.94** | **~21 s** |
+| rip-up 1, cap 400k | `1 4 5 2 6 3` | 0.71 | ~34 s |
+| rip-up 0, cap 400k | `1 5 4 3 6 2` | 0.43 | ~35 s |
+| GRID=0.5, cap 400k | `4 1 6 5 3 2` | 0.37 | ~25 s |
+
+At 150k only the top two swap, at 9 problems against 12 - both clearly the
+leaders, and both get confirmed anyway. Below the top two it is right
+where 400k is wrong. The likely reason, a hypothesis rather than a
+measurement: a tight cap fails every hard net consistently, so the count
+reads as "how many nets are hard on this placement", where a looser cap
+lets some marginal nets through and some not, which is closer to noise.
+
+It is still a pessimistic filter, so confirm any winner with an uncapped
+run. Capping in *production* was tried twice and reverted twice: it
+silently breaks routable nets.
 
 **Run times, after the optimisation work** — a full cold run is ~33 s
 (placement ~25 s, routing ~5 s, verify ~3 s); a re-run reusing the cached
-placement is **~4.5 s**. Before: ~25 minutes. What did it:
+placement is **~4.5 s**. Before: ~25 minutes. (Those are *production*
+numbers on the committed board with a learned route order; a SEARCH trial
+on a cold seed is the ~21 s in the table above, because it routes with
+rip-up and has no learned order to start from.) What did it:
 * `router.c` — the grid A* compiled and called via ctypes. Routing was
   ~20 min of every run.
 * `anneal.c` — the placement anneal, once routing stopped being the
@@ -484,6 +567,11 @@ placement is **~4.5 s**. Before: ~25 minutes. What did it:
 * **The plane pre-filter** (`PLANE_PREFILTER`) — not a speedup of a run,
   but of a SEARCH: it settles in ~1.5 s whether a placement's ground plane
   is reachable at all, so `find_board.py` never routes one that cannot work.
+* **The bounding-box pre-filter in `path_clearance_ok`** and **the disc
+  cache in `stamp_disc`** — 1.68x on a trial, verdicts unchanged. See
+  "Runtime is no longer dominated by the router" above; these were found by
+  profiling rather than by reasoning about which part *ought* to be slow,
+  and the part that ought to have been slow was not.
 
 Measured and NOT worth doing: caching the anneal's cost across moves
 (changed the search trajectory and cost a verified board), and replacing
@@ -492,10 +580,11 @@ numpy with plain Python in the placer (numpy is still ~3x faster at n=49).
   1 seed in 24 verified clean at 63 footprints; without it the same part
   count was 0 in 96. `tools/find_board.py` routes candidates in parallel
   and reports which verified - re-run it after any change that moves the
-  layout, and never trust a placement that has not been routed. Pass
-  `--env MAX_EXPAND=0`: the 400k cap is unfair above ~54 footprints (it
-  reported 0/96 where the best candidate verified with one problem
-  uncapped).
+  layout, and never trust a placement that has not been routed. It ranks
+  capped and confirms uncapped by itself now, so the old advice to pass
+  `--env MAX_EXPAND=0` is obsolete: the cap is unfair as a VERDICT above
+  ~54 footprints (0/96 clean where the best verified with one problem
+  uncapped) but is the best RANKER measured.
 * **Do not turn up `MOVES` or `RESTARTS`.** Both are measured, and both get
   *worse* above their committed values (see docs/pcb-notes-smd.md). The
   anneal optimises a surrogate; fitting it harder fits the router less.
