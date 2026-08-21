@@ -343,7 +343,7 @@ verified layout; see the next list for its limitations.
   shapes carry no pre-rendered glyph path, which is normal for generated
   files and expected to work — but it is the one thing that cannot be
   checked without importing.
-* **The board is past JLCPCB's 100 × 100 mm price tier** at 145.8 mm on its
+* **The board is past JLCPCB's 100 × 100 mm price tier** at 149.6 mm on its
   long side. That is set by the nine front-panel controls, not by routing:
   a control costs panel width whatever the router does.
 
@@ -351,8 +351,8 @@ verified layout; see the next list for its limitations.
 
 ### SMD board, routed, for JLCPCB fab + assembly
 
-`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **145.8 ×
-66.5 mm**, **four layers**, **fully routed**, nine front-panel controls on
+`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **149.6 ×
+64.0 mm**, **four layers**, **fully routed**, nine front-panel controls on
 the board (a frequency pot and a volume trim per band, a master volume, and
 a mute button per band), trace width matched to purpose (12 mil signal,
 16 mil power/ground), 45° chamfered corners, every SMD part a real LCSC
@@ -389,7 +389,7 @@ by block, is in
 ![SMD board](pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.png)
 
 ```
-board 145.8 x 66.5 mm | 86 footprints | 242 pads | 218 tracks | 145 vias
+board 149.6 x 64.0 mm | 86 footprints | 242 pads | 231 tracks | 162 vias
 verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
           pads match the schematic exactly
 ```

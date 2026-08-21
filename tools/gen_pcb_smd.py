@@ -209,7 +209,7 @@ POUR_CLEAR = 1.0
 # `python3 tools/gen_pcb_smd.py` has to rebuild the committed artifacts,
 # so the winning pair are the defaults rather than something you have to
 # know to pass on the command line.
-SEED = int(os.environ.get("SEED", 1))
+SEED = int(os.environ.get("SEED", 20))
 
 # Nets carried by the copper pour instead of by traces.  Ground is one:
 # the board already had a GND pour on both layers, and routing GND as a
@@ -679,9 +679,22 @@ def fp_soic14(pkg_ref, sections, x, y, net_of):
 
 
 def fp_elec(ref, x, y, net_of, value):
+    """SMD aluminium electrolytic, D5 x L5.4 mm - KNSCHA RVT, LCSC C2858858.
+
+    Land pattern from that part's own datasheet ("Recommended Land Size",
+    size 5): pads X = 1.6 mm wide by Y = 3.0 mm long with a = 1.4 mm
+    between them, so 3.0 mm centre to centre.  Drawn on the 0.5-unit grid
+    as 6.5 x 12.0 units at +/-6.0, which lands the gap at 1.397 mm.
+
+    It was 2.03 x 2.54 mm pads on 4.32 mm centres - 1.3 mm too far apart,
+    which is more than the whole terminal is long.  The can's leads would
+    not have reached its own pads.  Nothing could catch it: a footprint is
+    self-consistent whatever its dimensions, and every clearance and
+    connectivity check passes on a part that cannot be soldered.
+    """
     _m = fp_begin()
-    for i, dx in enumerate((-8.5, 8.5)):
-        pad_rect(ref, i + 1, x + dx, y, net_of(ref, i + 1), 8.0, 10.0)
+    for i, dx in enumerate((-6.0, 6.0)):
+        pad_rect(ref, i + 1, x + dx, y, net_of(ref, i + 1), 6.5, 12.0)
     n, r = 20, 10.0
     track([(x + r * math.cos(2 * math.pi * i / n),
             y + r * math.sin(2 * math.pi * i / n)) for i in range(n + 1)],
@@ -738,12 +751,24 @@ def fp_term(ref, x, y, net_of, n=2, names=None):
 
 
 def fp_pot(pkg_ref, gang_a, gang_b, x, y, net_of):
-    """Board-mount 9 mm dual-gang pot.
+    """Board-mount 9 mm dual-gang pot: Alps RK097121T / RK097122T.
 
-    Six terminals in two rows of three on 0.2 in (5.08 mm) centres - the
-    near-universal 9 mm dual pattern (Alps RK09K12, RV09 dual and the many
-    equivalents).  Real parts are on 5.00 mm; the 0.08 mm/pitch difference is
-    absorbed by the 1.2 mm holes.  VERIFY against your pot's datasheet.
+    Geometry from the Alps RK097 catalogue's own PCB hole drawing (the
+    "1轴2联 带锁紧装置" row): SIX ø1 mm holes on a 2.5 mm grid - three per
+    gang at 2.5 mm, the two gangs 2.5 mm apart - in a body 9.5 mm wide.
+
+    This footprint was wrong until that drawing was read, and wrong in the
+    way that scraps a board rather than the way a checker catches: it drew
+    three pins at 5.08 mm and the gangs 5.08 mm apart, so BOTH pitches were
+    double and the part would not have fitted its own holes.  Nothing in
+    the DRC could see it, because a footprint is self-consistent whatever
+    its dimensions.
+    
+    It is the same error that was already found and fixed once here, on the
+    single-gang footprint, which had been copied FROM this one.  Fixing the
+    copy and leaving the original is a lesson in its own right: when a
+    hand-drawn dimension turns out wrong, check everything that shares its
+    provenance, not just the part that reported the symptom.
     No locating-boss holes are drawn - see the note beside POT_BOSSES.
 
     Body width here (52 units) is NOT the same number as the single-gang
@@ -760,17 +785,21 @@ def fp_pot(pkg_ref, gang_a, gang_b, x, y, net_of):
     since no verified *dual*-gang drawing was found either way.
     """
     _m = fp_begin()
-    for i, dx in enumerate((-20.0, 0.0, 20.0)):
+    # 2.5 mm BOTH WAYS - three pins per gang at 2.5 mm, and the two gangs
+    # 2.5 mm apart.  Drawn at 2.54 (10 units) so the pads land on the
+    # routing grid, the same 0.04 mm/pitch slop the single-gang footprint
+    # already absorbs in its 1.2 mm holes.
+    for i, dx in enumerate((-10.0, 0.0, 10.0)):
         pad_tht(gang_a, i + 1, x + dx, y, net_of(gang_a, i + 1), dia=7.0, hole=4.7)
-        pad_tht(gang_b, i + 1, x + dx, y + 20.0, net_of(gang_b, i + 1),
+        pad_tht(gang_b, i + 1, x + dx, y + 10.0, net_of(gang_b, i + 1),
                 dia=7.0, hole=4.7)
-    # body bottom y+35, not y+40: the dual-gang body depth is an
-    # extrapolation either way (no verified dual-gang drawing found), and
-    # y+40 was deep enough to push the outline off the board edge at the
-    # pot row's verified-clean position.  It only has to enclose the two
-    # pad rows (deepest pad edge is y+23.5), so trimming it is free -
-    # and far better than moving the pots, which broke their pin escapes.
-    bx0, by0, bx1, by1 = x - 26, y - 8, x + 26, y + 35
+    # Same 9.5 mm WIDTH as the single-gang part, 2.5 mm deeper.  The
+    # datasheet front view gives 9.5 mm for both, and the side views differ
+    # by exactly 2.5 mm overall (20.75 single, 23.25 dual) - which is the
+    # gang spacing, not extra width.  This used to be 52 units wide on the
+    # reasoning that a 5.08 mm pin pitch made it "a physically bigger
+    # part"; the pitch was wrong, so the width was too.
+    bx0, by0, bx1, by1 = x - 18.5, y - 8, x + 18.5, y + 30
     silk_rect(bx0, by0, bx1, by1)
     flay = by0 - 3
     ftext = "HIGH/MID" if pkg_ref == "VR1" else "MID/LOW"
@@ -2476,7 +2505,7 @@ def path_clearance_ok(net, via_pts, polys):
 # Worth having because the measured clean rate over placements alone is only
 # a couple of percent - the same layout often routes cleanly under one order
 # and not another, and searching that is far cheaper than searching seeds.
-_ROUTE_SEED = int(os.environ.get("ROUTE_SEED", 0))
+_ROUTE_SEED = int(os.environ.get("ROUTE_SEED", 2))
 _ORDER_JITTER = {}
 if _ROUTE_SEED:
     import random as _r

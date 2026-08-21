@@ -64,3 +64,29 @@ either — the requirement is local and physical, so it belongs in the cost
 model, not in a checker.
 **Touched the placement?** Yes. Re-searched; `SEED=1 ROUTE_SEED=0`,
 145.8 × 66.5 mm, clean.
+
+### 2026-08-21 — two hand-drawn footprints were wrong, from supplied datasheets
+**Question:** do the hand-drawn footprints match the real parts? Five
+datasheets were supplied: Alps RK097, RV09, ST MC33079, KNSCHA RVT 10 µF
+(C2858858), CIXI MAIXU MX350-3.5 terminal block.
+**Method:** read each mechanical drawing and compared with the emitted
+geometry in `tools/gen_pcb_smd.py`.
+**Result:**
+* `fp_pot` (dual-gang, `VR1`/`VR2`) — drew 3 pins at **5.08 mm** with the
+  gangs **5.08 mm** apart. Real: **six ø1 mm holes on a 2.5 mm grid**,
+  three per gang at 2.5 mm, gangs 2.5 mm apart. Both pitches double. The
+  body was 52 units wide on the same wrong reasoning; real is the same
+  9.5 mm as the single-gang, 2.5 mm deeper.
+* `fp_elec` — drew 2.03 × 2.54 mm pads on **4.32 mm** centres. Real
+  (KNSCHA "Recommended Land Size", size 5): **1.6 × 3.0 mm on 3.0 mm
+  centres**, gap 1.4 mm. Pads 1.3 mm too far apart.
+* `fp_soic14` — **correct.** 1.27 mm pitch; pads inside IPC tolerance for
+  E = 6.0 mm nominal.
+* `fp_term` — **correct enough.** 3.50 mm real against 3.556 drawn, ø1.00
+  real against 1.09 drawn; both inside the slack a ø0.8 mm pin leaves.
+**Decision:** both fixed. Note for anyone tempted to trust the checkers
+here: a footprint is self-consistent whatever its dimensions, so every
+geometric check passes on a part that cannot be soldered. This class of
+defect can only be found outside the repository.
+**Touched the placement?** Yes — both footprints shrank. Re-searched;
+`SEED=20 ROUTE_SEED=2`, 149.6 × 64.0 mm, clean at production settings.

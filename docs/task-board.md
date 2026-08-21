@@ -22,19 +22,17 @@ These cannot be closed by an agent. They need the parts in hand or a
 mechanical drawing. See the top of this file's companion discussion in
 `README.md` ("Of the routed board").
 
-* **Confirm the dual-gang pot footprint.** `fp_pot` in `tools/gen_pcb_smd.py`
-  draws a 5.08 mm pin pitch; real 9 mm dual-gang parts are commonly
-  2.50 mm. No verified mechanical drawing has ever been found for it, and
-  LCSC's footprint API answers 403. **Needs: the exact part number and its
-  drawing.** Highest-value open item — if this is wrong, the board is
-  scrap.
-* **Confirm the SOIC-14 land pattern** (`fp_soic14`): 1.27 mm pitch,
-  1.52 × 0.64 mm pads, rows 5.33 mm apart. Check against onsemi's
-  recommended pattern for the MC33079.
-* **Confirm the electrolytic land pattern** (`fp_elec`): pads 2.03 × 2.54 mm
-  on 4.32 mm centres, for a D5 × L5.4 mm can (LCSC C2858858).
-* **Confirm the screw terminals** (`fp_term`): 3.556 mm pitch, 2.03 mm pads,
-  1.09 mm holes. Depends which part is actually bought.
+* ~~Confirm the dual-gang pot footprint.~~ **DONE** — and it was wrong by
+  2× in both axes. Fixed from the Alps RK097 catalogue drawing. See
+  `docs/decisions.md`.
+* ~~Confirm the SOIC-14 land pattern.~~ **DONE** — correct.
+* ~~Confirm the electrolytic land pattern.~~ **DONE** — and it was wrong;
+  pads were 1.3 mm too far apart. Fixed from the KNSCHA datasheet.
+* ~~Confirm the screw terminals.~~ **DONE** — 3.50 mm real against 3.556
+  drawn, inside the slack a ø0.8 mm pin leaves in a ø1.09 mm hole.
+* **Confirm the pot's locating bosses.** The RK097 drawing shows the PCB
+  hole pattern but this board drills no boss holes. If the parts bought
+  have bosses, they need holes — check before soldering.
 * **Measure the shaft and plunger heights above the board** and add them to
   `docs/panel-drilling.md`. That file deliberately omits them today,
   because inventing the one dimension nobody can check is worse than

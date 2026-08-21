@@ -105,6 +105,43 @@ the build instead of shipping quietly. If you add a variant-specific feature
 (as the volume pots are), teach `signal_map()` to normalise it rather than
 disabling the check.
 
+## Two hand-drawn footprints were wrong, and no checker could have said so
+
+The user supplied datasheets. Two of the five footprints they covered did
+not match the parts:
+
+* **The dual-gang pot** (`fp_pot`, `VR1`/`VR2`) drew three pins at
+  5.08 mm with the gangs 5.08 mm apart. The Alps RK097 catalogue's own PCB
+  hole drawing gives **six ø1 mm holes on a 2.5 mm grid** - three per gang
+  at 2.5 mm, the gangs 2.5 mm apart. **Both pitches were double**: the part
+  would not have fitted its own holes. The body was wrong for the same
+  reason - it is the same 9.5 mm width as the single-gang part, 2.5 mm
+  deeper, not the "physically bigger part" the comment claimed.
+* **The electrolytic** (`fp_elec`) drew 2.03 x 2.54 mm pads on **4.32 mm**
+  centres. KNSCHA's datasheet for the actual part gives 1.6 x 3.0 mm on
+  **3.0 mm** centres. The pads were 1.3 mm too far apart - more than the
+  whole terminal is long - so the leads would not have reached them.
+
+Confirmed correct by the same datasheets, for the record: the SO-14
+(1.27 mm pitch, pads inside IPC tolerance for E = 6.0 mm), and the
+MX350-3.5 terminal block (3.50 mm pitch against 3.556 drawn, ø1.0 mm holes
+against 1.09 - both inside the slack a 0.8 mm pin leaves).
+
+**Neither error was findable from inside this repository.** A footprint is
+self-consistent whatever its dimensions: every clearance, connectivity,
+courtyard and fab check passes on a part that cannot be soldered, because
+they all measure the drawing against itself. This is the one class of
+defect where the only source of truth is outside the tree, and it is worth
+knowing that the checks that catch everything else are structurally blind
+to it.
+
+**And the provenance mattered more than the symptom.** The single-gang
+footprint was fixed once already, when it was found to be "copied from the
+dual-gang one, 5.08 mm where the real RK097 is 2.5 mm". The copy was
+corrected and the original left alone - and the original had the same
+error. When a hand-entered dimension turns out wrong, re-check everything
+that shares its provenance, not just the part that reported the symptom.
+
 ## Every part inboard of every screw, and what that cost
 
 A mounting hole should sit OUTBOARD of the components, so the board is
@@ -911,9 +948,9 @@ job: run it with a timeout and don't poll it in a tight loop.
 
 ## Current state / open threads
 
-### Current board: 4 layers, 145.8 x 66.5 mm, two pinned rows, verifies CLEAN
+### Current board: 4 layers, 149.6 x 64.0 mm, two pinned rows, verifies CLEAN
 
-`SEED=1 ROUTE_SEED=0`, 86 footprints, 242 pads, 218 tracks, 145 vias,
+`SEED=20 ROUTE_SEED=2`, 86 footprints, 242 pads, 231 tracks, 162 vias,
 61% utilised. `verify()` passes every check and `validate_fab.py` passes
 offline, including the LCSC stock query.
 
