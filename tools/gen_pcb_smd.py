@@ -22,6 +22,7 @@ that pad centres land exactly on the routing grid.
 import json
 import math
 import os
+import re
 from heapq import heappush, heappop
 
 import numpy as np
@@ -800,7 +801,12 @@ def fp_pot_single(ref, x, y, net_of, label):
     silk(bx0, flay, label, LABEL_SIZE)
     silk_ref(bx0, flay - 8, ref, LABEL_SIZE)
     fp_end(ref, _m, x, y)
-    part_record(ref, "10k log", x, y, False, "POT-9MM-SINGLE")
+    # The VALUE comes from the netlist, not from here.  It was the literal
+    # "10k log" for every single-gang pot, which is right for VR3-VR5 and
+    # wrong for VR6: the master volume is a 50k, as the schematic and both
+    # circuit documents say.  Nothing caught it because a hand-soldered
+    # part's value reaches no check - it is not in the BOM the fab is sent.
+    part_record(ref, VALUE.get(ref, "10k log"), x, y, False, "POT-9MM-SINGLE")
 
 
 def fp_switch_ra(ref, x, y, net_of, label):
@@ -2265,16 +2271,19 @@ def commit_path(net, nid, runs, via_pts, polys):
     if keep is None:
         return False
     # Occupancy is about to change: increment the occupancy version so any
-    # cached answers that include `OCC_VERSION` become stale.  Also clear
-    # the VIA memo.  The GAP cache is NOT cleared here — it keys on feature
+    # cached answers that include `OCC_VERSION` become stale, and clear the
+    # VIA memo.  The GAP cache is NOT cleared here - it keys on feature
     # OBJECT IDENTITY (id()), and only build_features() replaces those
-    # objects.  The path-clear cache IS invalidated because ROUTED/VIAS
-    # changed; the next path_clearance_ok call rebuilds from scratch.
-    # The old incremental append did np.concatenate per commit, copying
-    # the entire growing array each time — O(N²) over a board's commits.
-    # The rebuild is O(N) per path_clearance_ok call, which is called
-    # once per accepted net or stub (a few dozen times per board), and
-    # N ~ 700 features: under 1 ms per rebuild, negligible.
+    # objects.
+    #
+    # There is no path-clear cache to invalidate: path_clearance_ok()
+    # rebuilds its `others` list per call.  It is called once per accepted
+    # net or stub - a few dozen times a board, against ~700 features - so
+    # the rebuild is well under a millisecond and a cache would buy
+    # nothing.  (An incremental-append branch used to sit here doing an
+    # np.concatenate per commit, copying the whole growing array each
+    # time; it was O(N^2) over a board and, by the end, dead code against
+    # a cache nothing populated.)
     global OCC_VERSION
     OCC_VERSION += 1
     VIA_MEMO.clear()
@@ -2288,10 +2297,6 @@ def commit_path(net, nid, runs, via_pts, polys):
             stamp_disc(GRID_LAYER[c[0]], c[1] * GRID, c[2] * GRID, own_dil, nid)
     for layer, pts in polys:
         ROUTED.append((layer, pts, net))
-    # path_clearance_ok() rebuilds its `others` list per call, so there is
-    # nothing to invalidate here.  The incremental-append branch that used
-    # to live here was dead code against a cache nothing populated, and it
-    # was left with a `try:` and no handler.
     return True
 
 
@@ -4199,8 +4204,7 @@ for ref, info in PARTS.items():
 
 
 def sortkey(r):
-    import re as _re
-    m = _re.match(r"([A-Za-z]+)(\d+)([A-Za-z]*)", r)
+    m = re.match(r"([A-Za-z]+)(\d+)([A-Za-z]*)", r)
     return (m.group(1), int(m.group(2)), m.group(3)) if m else (r, 0, "")
 
 
@@ -4222,6 +4226,90 @@ for ref, info in sorted(PARTS.items()):
                   info["rot"]))
 with open(os.path.join(bomdir, "jlcpcb-cpl-retuned-quad-smd.csv"), "w") as f:
     f.write("\n".join(cpl) + "\n")
+
+
+# ---- the parts table, generated -----------------------------------------
+# This lived in docs/pcb-notes-smd.md as a hand-written table and rotted
+# exactly as you would expect: it still listed two MC33079 after the output
+# buffers added a third, C5-C8 after the third package added C9/C10, and one
+# 10uF designator after six more appeared - alongside a part number that had
+# since gone end-of-life.  It is the same "hand-maintained second copy"
+# that this project already refuses to keep for footprint geometry.
+#
+# So it comes out of the BOM that the fab will actually be sent.  The
+# COMMENTARY - why the tuning caps are two 33nF, which extended lines are
+# avoidable - stays in pcb-notes-smd.md, where a human writes it.
+def _ref_ranges(refs):
+    """R1,R2,R3,R7 -> 'R1-R3, R7'; keeps a long designator list readable."""
+    out, i = [], 0
+    keyed = sorted(refs, key=sortkey)
+    while i < len(keyed):
+        j = i
+        pre, num = re.match(r"([A-Za-z]+)(\d+)", keyed[i]).groups()
+        while (j + 1 < len(keyed)
+               and re.match(r"([A-Za-z]+)(\d+)$", keyed[j + 1])
+               and re.match(r"([A-Za-z]+)(\d+)", keyed[j + 1]).group(1) == pre
+               and int(re.match(r"([A-Za-z]+)(\d+)", keyed[j + 1]).group(2))
+               == int(re.match(r"([A-Za-z]+)(\d+)", keyed[j]).group(2)) + 1):
+            j += 1
+        out.append(keyed[i] if j == i else
+                   "%s, %s" % (keyed[i], keyed[j]) if j == i + 1 else
+                   "%s-%s" % (keyed[i], keyed[j]))
+        i = j + 1
+    return ", ".join(out)
+
+
+_hand = sorted((r for r, i in PARTS.items() if not i["assembled"]), key=sortkey)
+_pt = ["# Parts",
+       "",
+       "Generated by `tools/gen_pcb_smd.py` from the BOM the fab is sent, so",
+       "it cannot drift from the board. Stock is the figure recorded when each",
+       "part was last looked up; `python3 tools/validate_fab.py --online`",
+       "queries the live number and **fails** if a part no longer resolves.",
+       "",
+       "## Machine-assembled (%d of %d footprints)"
+       % (sum(len(_r) for _r in bom.values()), len(FP_SPANS)),
+       "",
+       "| Value | Designators | Package | LCSC | JLC library | Stock at lookup |",
+       "|---|---|---|---|---|---|"]
+for (_val, _pkg, _lcsc, _lib), _refs in sorted(bom.items(), key=lambda kv: kv[0][1]):
+    _stk = LCSC.get(_val, ("", "", "", 0))[3]
+    _pt.append("| %s | %s | %s | `%s` | %s | %s |"
+               % (_val, _ref_ranges(_refs), _pkg, _lcsc,
+                  "**basic**" if _lib == "basic" else _lib,
+                  "{:,}".format(_stk).replace(",", " ") if _stk else "-"))
+_pt += ["",
+        "## Hand-soldered (%d footprints)" % len(_hand),
+        "",
+        "JLCPCB does not assemble through-hole parts. Every one of these is",
+        "edge or panel hardware, so none of it is fiddly.",
+        "",
+        "| Designator | What it is | Value / package |",
+        "|---|---|---|"]
+_ROLE = {"J1": "Power input, +15 V / GND / -15 V",
+         "J2": "Line input", "J3": "HIGH output", "J4": "MID output",
+         "J5": "LOW output", "J6": "Panel-LED header (optional)",
+         "TP1": "Test point, HIGH/MID null", "TP2": "Test point, MID/LOW null"}
+_ROLE.update({"VR3": "HIGH band volume", "VR4": "MID band volume",
+              "VR5": "LOW band volume", "VR6": "Master volume",
+              "VR1": "HIGH/MID crossover frequency",
+              "VR2": "MID/LOW crossover frequency",
+              "SW1": "HIGH mute button", "SW2": "MID mute button",
+              "SW3": "LOW mute button"})
+for _r in _hand:
+    # For a connector or test point the "value" IS the package, so printing
+    # both just says it twice.
+    _v, _k = PARTS[_r]["value"], PARTS[_r]["pkg"]
+    _pt.append("| `%s` | %s | %s |"
+               % (_r, _ROLE.get(_r, _r), _k if _v in (_k, _r) else
+                  "%s, %s" % (_v, _k)))
+_pt += ["",
+        "Commentary - why the tuning capacitors are two 33 nF in parallel, and",
+        "which extended-library lines are worth avoiding - is in",
+        "[`pcb-notes-smd.md`](pcb-notes-smd.md#parts).",
+        ""]
+with open(os.path.join(ROOT, "docs", "parts.md"), "w") as f:
+    f.write("\n".join(_pt))
 
 
 # ---- front-panel drilling ------------------------------------------------

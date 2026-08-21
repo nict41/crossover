@@ -329,27 +329,35 @@ it leave the pad in a slightly different direction.
 
 ## Parts
 
-Every part was looked up live against the JLCPCB parts API. Stock figures are
-from that lookup and will drift — **re-check before ordering**.
+**The parts table is generated: [`parts.md`](parts.md).** Every line, both
+the 69 machine-assembled footprints and the 17 you solder yourself, comes
+out of the BOM the fab is actually sent, so it cannot drift from the board.
 
-| Value | Designators | Package | LCSC | Library | Stock at lookup |
-|---|---|---|---|---|---|
-| MC33079 | U1, U2 | SOIC-14 | C9376 | extended | 25 307 |
-| 33nF PPS ±2% 50V | C1, C2, C3A, C3B, C4A, C4B | 1210 | C569866 | extended | 2 001 |
-| 100nF X7R 50V | C5–C8 | 0805 | C49678 | **basic** | 14 609 213 |
-| 10µF 50V | C0 | SMD D5×L5.4 | C46550416 | extended | 288 863 |
-| 100R 1% | R9, R19, R22 | 0805 | C17408 | **basic** | 7 430 702 |
-| 4.7k 1% | R7, R8 | 0805 | C17673 | **basic** | 6 989 256 |
-| 5.6k 1% | R2, R4, R5, R6, R12, R14, R15, R16, R20, R21 | 0805 | C4382 | **basic** | 787 448 |
-| 10k 1% | R1, R10, R11, R23, R24 | 0805 | C17414 | **basic** | 34 645 450 |
-| 11k 1% | R3, R13 | 0805 | C17429 | extended | 78 383 |
-| 13k 1% | R17, R18 | 0805 | C2933304 | extended | 213 066 |
+It used to be a hand-written table here, and it rotted exactly as you would
+expect. It still listed two MC33079 after the output buffers added a third,
+`C5`–`C8` after the third package added `C9`/`C10`, and a single 10 µF
+designator after six more appeared — next to a part number that had since
+gone end-of-life. That is the same "hand-maintained second copy" this
+project already refuses to keep for footprint geometry, and it failed the
+same way.
 
-Five extended part types (JLCPCB charges a one-off fee per extended type).
-Two are avoidable if you care: **R3/R13 could be 12k** (basic, C17444) at a cost
-of 0.14 dB in the summed response. **R17/R18 cannot** — 12k would push filter 2's
-top end to 201 Hz, above filter 1's 195 Hz minimum, which re-creates the range
-overlap the retune existed to remove.
+What stays here is the part of it a generator cannot write:
+
+**Extended vs basic.** JLCPCB charges a one-off fee per *extended* part
+type, so the count matters more than the quantity. Two of them are
+avoidable if you care: **`R3`/`R13` could be 12k** (basic, C17444) at a cost
+of 0.14 dB in the summed response. **`R17`/`R18` cannot** — 12k would push
+filter 2's top end to 201 Hz, above filter 1's 195 Hz minimum, which
+re-creates the range overlap the retune existed to remove.
+
+**The thinnest line is the 33 nF.** `C569866` runs a couple of thousand in
+stock against six per board — about 330 boards' worth, fine for a build and
+worth checking before a batch. It is also the one part where a substitution
+is least welcome: see the next section.
+
+**Stock figures drift.** `python3 tools/validate_fab.py --online` queries
+the live numbers, and now *fails* rather than warns if a part number no
+longer resolves at all.
 
 ### Why the tuning caps are two 33nF in parallel
 
@@ -1067,13 +1075,19 @@ thinks it wrote:
   objects by gId, so duplicates get silently merged), and non-numeric or
   NaN coordinates.
 * **Fabrication** — trace width, silkscreen line width and text height,
-  drill diameters, annular rings, hole-to-hole spacing, board size against
-  the price tiers.
+  drill diameters, annular rings, hole-to-hole spacing, the board material
+  left around every hole, and board size against the price tiers.
 * **Assembly** — BOM and CPL column names, BOM/CPL agreement on which parts
   are placed, every assembled part having an LCSC number, and every CPL
   coordinate landing on the board.
 * **Stock** — with `--online`, that each LCSC part still exists and has
-  enough stock to matter.
+  enough stock to matter. A part number that returns *no* search results
+  fails the run outright: that is an end-of-lifed line, not a stock-out,
+  and it makes the board unbuildable while every geometric check passes.
+* **Documentation** — every designator written in backticks across the six
+  markdown files must be a real part or net on this board. Designator rot
+  is silent otherwise: nothing about the copper is wrong when a document
+  names a capacitor that moved three revisions ago.
 
 Two real defects came out of writing it, neither of which any geometric
 check would ever have flagged:
@@ -1128,14 +1142,19 @@ master is the wrong control architecture for preamp duty.
   the strongest argument for the rip-up-and-reroute work below: the
   surrogate exists only because routing was too slow to consult.
 * **Utilisation is well under 100 %.** Some of that gap is genuine routing
-  headroom that a two-layer board needs, and some of it is the placement
+  headroom that any board needs, and some of it is the placement
   search stopping at a local minimum. The wasted-area check reports the
   largest empty rectangle on every run; a big one is a hint that another
   seed or a longer `MOVES` budget may do better, not proof that the parts
   could simply be pushed together.
-* **On-board pots cost area.** Six 9 mm-class pots (two dual-gang, four
-  single-gang) and their knob spacing take room wiring pads did not. Still
-  inside JLCPCB's 100 × 100 mm price tier, so fabrication cost is unchanged.
+* **On-board controls cost area, and they are what sets the width.** Six
+  9 mm-class pots (two dual-gang, four single-gang) plus three mute buttons,
+  at a knob pitch fingers rather than routing dictate, come to 146.3 mm of
+  panel before the router is consulted at all. That puts the board **past
+  JLCPCB's 100 × 100 mm price tier**, at 156.2 mm on its long side — still a
+  standard order, just not at the cheapest rate. (This entry claimed the
+  opposite for a long time, from back when the row was six controls and the
+  board fitted the tier.)
 * **The 10 µF input coupling cap is an aluminium electrolytic**, as in the ESP
   original. It sees no DC bias, which is normal for this position but not ideal;
   substitute a film part on the through-hole build if it bothers you.

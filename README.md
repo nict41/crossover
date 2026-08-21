@@ -20,12 +20,17 @@ are drawn:
 | Stock ESP P148 | 680 Hz – 4.8 kHz | 68 – 480 Hz | 4 × NE5532 dual | `esp-p148-3way-state-variable-crossover.json` |
 | Retuned | 195 Hz – 1.03 kHz | 71 – 180 Hz | 4 × NE5532 dual | `esp-p148-3way-crossover-retuned-200hz-1khz.json` |
 | Retuned, quad | 195 Hz – 1.03 kHz | 71 – 180 Hz | 2 × MC33079 quad | `esp-p148-3way-crossover-retuned-quad.json` |
-| Retuned, quad, **SMD** | 195 Hz – 1.03 kHz | 73 – 186 Hz | 2 × MC33079 SOIC-14 | `esp-p148-3way-crossover-retuned-quad-smd.json` |
+| Retuned, quad, **SMD** | 195 Hz – 1.03 kHz | 73 – 186 Hz | 3 × MC33079 SOIC-14 | `esp-p148-3way-crossover-retuned-quad-smd.json` |
 
-The quad variant is electrically identical to the retuned one — it just packs
-the same eight sections into two 14-pin quads instead of four duals, which also
-halves the bypass caps (8 → 4). One quad per filter, so the sections sharing a
-package are the ones already coupled by design.
+The **Retuned, quad** variant is electrically identical to the retuned one —
+it just packs the same eight sections into two 14-pin quads instead of four
+duals, which also halves the bypass caps (8 → 4). One quad per filter, so the
+sections sharing a package are the ones already coupled by design.
+
+The **SMD** variant is the one in `pcb/`, and it is not only a repackaging:
+it adds a third quad (`U3`) for the output buffers, plus the volume controls,
+the muting and the output DC blocking. That is why it lists three MC33079
+where the through-hole quad variant lists two.
 
 ![Schematic preview](schematic/esp-p148-3way-crossover-retuned-200hz-1khz.png)
 
@@ -40,9 +45,11 @@ EasyEDA Pro can read it via **File → Import → EasyEDA Std**.
 1. Open <https://easyeda.com/editor> and go to **File → Open → EasyEDA…**
 2. Choose `pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json`.
 
-It opens as a complete two-layer board: routed, ground-poured, with real
-LCSC part numbers already attached to every assembled component. Nothing
-needs assigning before you can look at it or order it.
+It opens as a complete **four-layer** board: routed, with a solid ground
+plane on Inner1 and a ground pour on the other three, and real LCSC part
+numbers already attached to every assembled component. Nothing needs
+assigning before you can look at it or order it — but do rebuild the copper
+areas first, for the reason in the next section.
 
 ### The schematic
 
@@ -261,6 +268,12 @@ what it does is listed in
 
 ## Known limitations
 
+### Of the schematics
+
+These apply to the four `schematic/` variants. **None of them applies to the
+routed board** — it has real footprints, real LCSC part numbers and a
+verified layout; see the next list for its limitations.
+
 * **Op-amps are drawn as separate sections** (U1A/U1B, U2A/U2B, …) rather than
   as multi-part components, so the BOM lists eight NE5532s where you only need
   four dual packages. Before PCB layout, merge each pair onto one DIP-8/SOIC-8
@@ -270,10 +283,26 @@ what it does is listed in
   VR2A, VR2B). Both gangs of a pot must track reasonably well.
 * **VR3–VR6 are single-gang audio-taper pots** — three band trims and a
   master. They are passive attenuators, not part of any filter.
-* **Footprints are placeholders.** Assign real ones from the EasyEDA/LCSC
-  library for your parts (axial vs. 0805, pot body, etc.).
+* **Footprints are placeholders** in the schematics. Assign real ones from the
+  EasyEDA/LCSC library for your parts (axial vs. 0805, pot body, etc.).
 * One deliberate wire crossing per filter, where the low-pass feedback rail
   crosses the high-pass rail. Crossings without a junction dot do not connect.
+
+### Of the routed board
+
+* **Nothing here has been built or measured.** It is verified against its own
+  netlist and its own geometry, and that is a different claim.
+* **Three footprints are hand-drawn and unconfirmed against a datasheet** —
+  SOIC-14, the 10 µF electrolytic, and the dual-gang pot body. The pot's
+  locating-boss holes are absent rather than guessed: a hole in the wrong
+  place is a re-order, a missing one is a hand drill.
+* **Whether the silkscreen renders after import is untested.** Our `TEXT`
+  shapes carry no pre-rendered glyph path, which is normal for generated
+  files and expected to work — but it is the one thing that cannot be
+  checked without importing.
+* **The board is past JLCPCB's 100 × 100 mm price tier** at 156.2 mm on its
+  long side. That is set by the nine front-panel controls, not by routing:
+  a control costs panel width whatever the router does.
 
 ## PCB
 
@@ -355,8 +384,18 @@ before ordering**. Export Gerbers, BOM *and* CPL from EasyEDA rather than using
 the CPL in this repo — a CPL's origin has to match the Gerbers, and only EasyEDA
 knows that at export time.
 
-JLCPCB won't assemble through-hole parts, so the pots, power, I/O and test
-points are yours to solder — but there is no off-board pot wiring any more.
+JLCPCB won't assemble through-hole parts. **69 of the 86 footprints are
+machine-placed**; the 17 you solder yourself are all through-hole and all of
+them are edge or panel hardware:
+
+* `VR1`–`VR6` — the six pots
+* `SW1`–`SW3` — the three mute buttons
+* `J1`–`J5` — power in, line in, and the three outputs
+* `J6` — the optional panel-LED header
+* `TP1`, `TP2` — the two test points
+
+There is no off-board pot or switch wiring any more: every control is an
+edge-mount part on the board itself.
 
 ## Getting the most out of it
 

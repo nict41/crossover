@@ -130,8 +130,8 @@ board, and made it strictly worse; and giving the board more room made it
 worse again, for the reason this repo keeps rediscovering.
 
 The fix was not in the router at all. **Ground stopped being routed.** The
-board has always carried a GND pour on both layers, but nothing verified
-it, so ground was *also* drawn as an ordinary net — the largest net on the
+board has always carried a GND pour on every signal layer, but nothing
+verified it, so ground was *also* drawn as an ordinary net — the largest net on the
 board, and `route_order()` sends supply rails first, so it claimed the
 best channels before a single signal net got a turn. The board was paying
 for ground twice and spending its best routing resource on the payment.
@@ -302,26 +302,41 @@ interconnect.
 
 ## 8. Assembly and mechanical
 
-* **`U1`/`U2` pin-1 orientation is unverified against JLCPCB's convention.**
-  The SOIC-14 is a hand-drawn footprint. Check pin 1 in the assembly
-  preview before paying — this is the classic way an assembled board comes
-  back useless.
+* **`U1`/`U2`/`U3` pin-1 orientation is unverified against JLCPCB's
+  convention.** The SOIC-14 is a hand-drawn footprint. Check pin 1 in the
+  assembly preview before paying — this is the classic way an assembled
+  board comes back useless. The same goes for the polarity of `D1`–`D4`
+  and the seven electrolytics.
 * **The pots have no locating-boss holes.** There is no verified dual-gang
   mechanical drawing to place them from, and shipping a hole in the wrong
   place is a re-order where a missing one is a hand drill. Check your parts:
   if yours have bosses, drill for them before soldering, or the pots will
   not sit flat.
-* **The pots are board-mount with shafts perpendicular to the PCB**, so
-  the board mounts *parallel to and behind* the front panel, with shafts
-  through it. If you were planning to mount the board horizontally on the
-  chassis floor, you need right-angle pots instead and the footprint
-  changes.
-* **`C569866` (33 nF) had 2001 in stock** and the board uses 6. That is
-  about 330 boards' worth — fine for you, but check before a batch.
-* **`C46550416` (10 µF) did not come back from an LCSC search** even
-  though its part page resolves. Confirm it is still orderable — the board
-  now uses **five** of them (`C9`/`C10` bulk, `C11`–`C13` output blocking),
-  so it is no longer a part you can shrug off if it has gone.
+* **The controls are right-angle parts on the front edge**, so the board
+  lies **flat in the enclosure, perpendicular to the panel**, with shafts
+  and plungers coming out of the board's edge and through the panel. (This
+  entry used to say the opposite — that the shafts stand perpendicular to
+  the PCB and the board mounts behind the panel — which stopped being true
+  when the controls became edge-mount parts and nothing caught it. The
+  hole positions are in
+  [`panel-drilling.md`](panel-drilling.md), generated from the placement.)
+* **The four mounting holes are no longer at fixed corners.** They start
+  3.56 mm in and move as far as they must to clear the pinned edge rows,
+  so the set is not symmetric. Drill from `panel-drilling.md`, not from
+  the corners. **Status: FIXED** — they used to sit 0.69 mm from the board
+  edge, which passes every fab limit and cracks when the screw is
+  tightened.
+* **`C569866` (33 nF) has 2001 in stock** and the board uses 6. That is
+  about 330 boards' worth — fine for one build, worth checking before a
+  batch. It is the thinnest line in the BOM.
+* **A dead part number is now a build failure, not a note.** `C46550416`
+  (10 µF) covered seven designators and returned *zero* LCSC search
+  results — an end-of-lifed number, not a temporary stock-out — while
+  every geometric check passed, because nothing about the copper was
+  wrong. Replaced with `C2858858` (KNSCHA 10 µF 50 V, same D5×L5.4 mm
+  package, 50 000 in stock), and `validate_fab.py --online` now *fails* on
+  a part it cannot find rather than printing a note under thirty lines of
+  healthy stock figures.
 
 ---
 

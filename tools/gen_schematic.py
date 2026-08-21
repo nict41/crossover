@@ -1019,7 +1019,10 @@ def draw(cfg):
     # ---------------- master volume -------------------------------------
     if cfg.get("master_vol"):
         mx = 880
-        pot("VR6", "50k log", mx, 1260, package="RK097-AUDIO-10K")
+        # 50k, and the package string has to say so: it read
+        # RK097-AUDIO-10K here for as long as VR6 has existed, which is the
+        # same family but the wrong track.  VR3-VR5 really are 10k.
+        pot("VR6", "50k log", mx, 1260, package="RK097-AUDIO-50K")
         w((mx - 30, 1260), (mx - 70, 1260))
         netlabel("INPUT_PRE", mx - 70, 1260, anchor="end", dx=-4, dy=3)
         w((mx + 30, 1260), (mx + 70, 1260))
@@ -1634,6 +1637,9 @@ def write_bom(filename="bom.csv"):
         "10k log": "3 x single-gang 10k audio/log-taper pots (VR3 HIGH, VR4 MID, "
                    "VR5 LOW); wired as an attenuator between the filter output "
                    "and its terminal block, not as a rheostat",
+        "50k log": "1 x single-gang 50k audio/log-taper pot (VR6 MASTER), "
+                   "ahead of the input buffer so it sets how hard the whole "
+                   "filter is driven, not just the output level",
     }
     out = ["Qty,Value,Package,Designators,Notes"]
     for qty, val, pkg, refs in rows:
