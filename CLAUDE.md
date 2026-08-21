@@ -105,6 +105,46 @@ the build instead of shipping quietly. If you add a variant-specific feature
 (as the volume pots are), teach `signal_map()` to normalise it rather than
 disabling the check.
 
+## The busiest parts had the least room - ESC_CAP was the reason
+
+**Measured on the board before this change:** parts with six or more pins
+sat a mean **2.32 mm** from their nearest neighbour, while parts with two
+or fewer sat **3.32 mm**. `U3`, a 14-pin SOIC, had **1.02 mm**. The parts
+with the most to route had the least room to route it in - exactly
+backwards.
+
+The cause is one number. `ESC_CAP` bounds how many track pitches of clear
+depth a part side may ask for, and it was **4**: a SOIC-14 face with seven
+pins queuing to get out scored the same as a face with four, so past that
+point a part could not ask for more room however busy it was.
+
+A/B over sixteen seeds, ranking config, same panel width:
+
+| ESC_CAP | mean DRC | clean of 16 | mean height |
+|---|---|---|---|
+| 4 | 7.9 | 0 | 73.0 mm |
+| **7** | **5.2** | **2** | **73.0 mm** |
+| 10 | 5.1 | 1 | 73.2 mm |
+
+A third fewer defects and the first clean boards in the field, **for no
+extra board** - the height is identical, because this does not ask for
+more space, it moves the space already there towards the parts that need
+it. 10 is no better on defects and starts to cost height.
+
+On the committed board the imbalance is essentially gone: **3.14 mm for
+the high-pin parts against 3.34 mm for the low-pin ones**, where it was
+2.32 against 3.32.
+
+**This is not W_FILL, which was measured and rejected twice.** W_FILL
+priced column AREA and tried to equalise it, which fought the pinned rows
+and collapsed the search field. This prices escape depth per part
+weighted by that part's own pin count - the thing routing actually
+consumes. Worth keeping the distinction: "spread the parts out" failed
+twice, and "give the busy parts room" worked first time.
+
+The other half of the idea was already in place: `seed()` has always laid
+parts down in descending pin order, after the pinned edge rows.
+
 ## Two hand-drawn footprints were wrong, and no checker could have said so
 
 The user supplied datasheets. Two of the five footprints they covered did
@@ -948,10 +988,10 @@ job: run it with a timeout and don't poll it in a tight loop.
 
 ## Current state / open threads
 
-### Current board: 4 layers, 149.6 x 64.0 mm, two pinned rows, verifies CLEAN
+### Current board: 4 layers, 147.3 x 68.3 mm, two pinned rows, verifies CLEAN
 
-`SEED=20 ROUTE_SEED=2`, 86 footprints, 242 pads, 231 tracks, 162 vias,
-61% utilised. `verify()` passes every check and `validate_fab.py` passes
+`SEED=41 ROUTE_SEED=5`, 86 footprints, 242 pads, 238 tracks, 179 vias,
+57% utilised. `verify()` passes every check and `validate_fab.py` passes
 offline, including the LCSC stock query.
 
 It replaced a 151.6 x 68.1 mm board that was 8% smaller and had 0.69 mm of

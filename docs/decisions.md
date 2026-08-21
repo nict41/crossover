@@ -90,3 +90,31 @@ geometric check passes on a part that cannot be soldered. This class of
 defect can only be found outside the repository.
 **Touched the placement?** Yes — both footprints shrank. Re-searched;
 `SEED=20 ROUTE_SEED=2`, 149.6 × 64.0 mm, clean at production settings.
+
+### 2026-08-21 — the busiest parts had the least room (ESC_CAP 4 -> 7)
+**Question:** are high-connection parts getting the space their routing
+needs?
+**Method:** measured pad-box gap to nearest neighbour per part on the
+committed board, grouped by pin count; then A/B'd `ESC_CAP` over 16 seeds
+at the ranking config.
+**Result:** before, parts with >=6 pins sat a mean **2.32 mm** from their
+nearest neighbour and parts with <=2 pins **3.32 mm** - backwards. `U3`
+(14 pins) had 1.02 mm. `ESC_CAP` caps a side's escape demand at that many
+track pitches, and it was 4, so a 7-pin SOIC face asked for no more than a
+4-pin one.
+
+| ESC_CAP | mean DRC | clean of 16 | mean height |
+|---|---|---|---|
+| 4 | 7.9 | 0 | 73.0 mm |
+| 7 | 5.2 | 2 | 73.0 mm |
+| 10 | 5.1 | 1 | 73.2 mm |
+
+On the committed board the gap is now **3.14 mm** high-pin against
+**3.34 mm** low-pin - the imbalance is essentially gone.
+**Decision:** kept, `ESC_CAP=7`. Distinct from W_FILL (rejected twice):
+that priced column AREA, this prices escape depth weighted by pin count.
+**Touched the placement?** Yes. Re-searched; `SEED=41 ROUTE_SEED=5`,
+147.3 x 68.3 mm, clean with no quality flags. Costs 5% area against the
+board it replaces (2.3 mm narrower, 4.3 mm deeper). `SEED=39 ROUTE_SEED=6`
+is the strictly-no-growth alternative: 145.3 x 65.8 mm, defect-free, high
+-pin gap 2.88 mm, but it trips the wasted-rectangle quality note.

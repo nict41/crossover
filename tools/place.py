@@ -187,7 +187,34 @@ class Placer:
         # (TP1 and TP2 both came back unreachable that way, on a board
         # where every IC pin routed fine).  Any side with pads on it needs
         # somewhere to go, whether it has one pad or seven.
-        cap = float(os.environ.get("ESC_CAP", 4))
+        # 7, not 4.  The cap says how many track pitches of clear depth a
+        # part side may ask for, so at 4 a SOIC-14 face with seven pins
+        # queuing to get out scores the same as a face with four - the
+        # busiest parts on the board stop being able to ask for more room
+        # than a middling one.  Measured on the committed board, that is
+        # exactly what happened: parts with six or more pins sat a mean
+        # 2.32 mm from their nearest neighbour while parts with two or
+        # fewer sat 3.32 mm.  The parts with the most to route had the
+        # least room to route it in.
+        #
+        # A/B over sixteen seeds, ranking config, same panel width:
+        #
+        #   ESC_CAP   mean DRC   clean boards   mean height
+        #   4          7.9        0 of 16        73.0 mm
+        #   7          5.2        2 of 16        73.0 mm
+        #   10         5.1        1 of 16        73.2 mm
+        #
+        # A third fewer defects and the first clean boards in the field,
+        # for no extra board: height is unchanged, because this does not
+        # ask for more space, it redistributes the space already there
+        # towards the parts that need it.  10 is no better on defects and
+        # starts to cost height, so 7 is where it stops paying.
+        #
+        # NOT to be confused with W_FILL, which priced column AREA and was
+        # measured and rejected twice - see the entries in CLAUDE.md.  This
+        # prices escape depth per part, weighted by that part's own pin
+        # count, which is the thing routing actually consumes.
+        cap = float(os.environ.get("ESC_CAP", 7))
         floor = float(os.environ.get("ESC_FLOOR", 1))
         self.need = []
         for p in parts:
