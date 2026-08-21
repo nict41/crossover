@@ -59,6 +59,14 @@ MIN_HOLE_GAP = 0.50             # hole edge to hole edge
 # fab limit: 0.3 mm of FR4 beside an M3 screw is what cracks when someone
 # tightens it.  1.0 mm is the mechanical minimum worth shipping, and the
 # generator aims well past it (MOUNT_INSET leaves 1.96 mm).
+#
+# gen_pcb_smd.MOUNT_EDGE_MIN holds the same number, and the duplication is
+# DELIBERATE.  This script validates the artifact and imports nothing from
+# the generator, so it cannot be talked into agreeing with a bug by sharing
+# the generator's own constants - the same reason verify() re-derives its
+# geometry instead of reusing the router's bookkeeping.  If the two ever
+# disagree, the generator ships a board this script rejects, which is the
+# safe direction for them to fail in.
 MIN_HOLE_EDGE = 1.00
 MIN_SILK_W = 0.15               # printable silkscreen line width
 MIN_SILK_H = 0.80               # legible silkscreen text height
@@ -539,6 +547,53 @@ def check_docs():
          % checked)
 
 
+def check_generated_docs():
+    """The generated documents in git match the board in git.
+
+    docs/parts.md and docs/panel-drilling.md are written by
+    gen_pcb_smd.py, which means they are only correct if someone
+    remembered to commit them alongside the board.  They are not in
+    check_docs()'s designator sweep - they cannot rot, they are generated -
+    but they CAN be stale, which is a different failure and needs a
+    different check: does what is on disk still describe the board that is
+    on disk.
+
+    Checked against the BOM and the PCB rather than by regenerating, so
+    this stays a validator and not a second generator.
+    """
+    parts_md = os.path.join(ROOT, "docs", "parts.md")
+    if not os.path.exists(parts_md):
+        bad("docs/parts.md is missing - run gen_pcb_smd.py without SWEEP=1")
+        return
+    text = open(parts_md).read()
+    for row in csv.DictReader(open(BOM)):
+        code = row.get("LCSC Part #", "").strip()
+        if code and code not in text:
+            bad("docs/parts.md does not mention %s (%s), which is in the "
+                "BOM - regenerate it" % (code, row.get("Comment")))
+    for code in re.findall(r"`(C\d{4,})`", text):
+        if code not in open(BOM).read():
+            bad("docs/parts.md lists %s, which is not in the BOM - "
+                "regenerate it" % code)
+    note("docs/parts.md agrees with the BOM on every LCSC part number")
+
+
+def check_panel_doc(doc):
+    """The panel drawing quotes the board size; it must be this board's."""
+    panel = os.path.join(ROOT, "docs", "panel-drilling.md")
+    if not os.path.exists(panel):
+        bad("docs/panel-drilling.md is missing - run gen_pcb_smd.py")
+        return
+    bb = doc.get("BBox", {})
+    want = "%.1f mm wide x %.1f mm deep" % (bb.get("width", 0) * MM,
+                                            bb.get("height", 0) * MM)
+    if want not in open(panel).read():
+        bad("docs/panel-drilling.md does not quote this board's size (%s) - "
+            "it was generated from a different layout" % want)
+    else:
+        note("docs/panel-drilling.md was generated from this board")
+
+
 def main():
     if not os.path.exists(PCB):
         print("no board at %s - run gen_pcb_smd.py" % PCB)
@@ -549,6 +604,8 @@ def main():
     check_assembly(doc)
     check_netlist(doc)
     check_docs()
+    check_generated_docs()
+    check_panel_doc(doc)
     check_lcsc("--online" in sys.argv)
 
     for n in notes:

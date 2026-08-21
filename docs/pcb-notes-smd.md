@@ -1085,9 +1085,17 @@ thinks it wrote:
   fails the run outright: that is an end-of-lifed line, not a stock-out,
   and it makes the board unbuildable while every geometric check passes.
 * **Documentation** — every designator written in backticks across the six
-  markdown files must be a real part or net on this board. Designator rot
-  is silent otherwise: nothing about the copper is wrong when a document
-  names a capacitor that moved three revisions ago.
+  hand-written markdown files must be a real part or net on this board.
+  Designator rot is silent otherwise: nothing about the copper is wrong
+  when a document names a capacitor that moved three revisions ago.
+* **The generated documents are current.** `parts.md` and
+  `panel-drilling.md` are written by the generator, so they cannot rot —
+  but they can be *stale*, if someone regenerated the board and did not
+  commit them. That is a different failure and gets a different check:
+  `parts.md` must name every LCSC part in the BOM and no others, and
+  `panel-drilling.md` must quote this board's dimensions. Checked against
+  the artifacts rather than by regenerating, so the validator stays a
+  validator and does not become a second generator.
 
 Two real defects came out of writing it, neither of which any geometric
 check would ever have flagged:

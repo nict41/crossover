@@ -93,6 +93,35 @@ the build instead of shipping quietly. If you add a variant-specific feature
 (as the volume pots are), teach `signal_map()` to normalise it rather than
 disabling the check.
 
+## Two checkers, and why they must not share code
+
+`gen_pcb_smd.verify()` checks the board it just built. `validate_fab.py`
+checks the FILE, imports nothing from the generator, and re-derives every
+constant it needs. That duplication is deliberate and is the same
+principle as `verify()` re-deriving geometry rather than reusing the
+router's bookkeeping: a checker that shares the generator's constants can
+be talked into agreeing with the generator's bug. `MOUNT_EDGE_MIN` and
+`MIN_HOLE_EDGE` hold the same 1.0 mm in the two files for exactly this
+reason. If they ever disagree, the generator ships a board `validate_fab`
+rejects — the safe direction.
+
+`validate_fab.py` also checks two things that are not about copper at all,
+because both are ways a correct board still fails to get built:
+
+* **A part number that returns no LCSC results fails the run.** Not a
+  warning: no results is an end-of-lifed line, not a stock-out, and it
+  makes the board unbuildable while every geometric check passes.
+* **Designators named in the docs must exist.** Prose rot breaks no check
+  that looks at copper, so nothing caught three documents naming the bulk
+  capacitors by their pre-output-buffer designators. Only tokens in
+  `backticks` are checked, because the docs legitimately discuss
+  designators from the original ESP article in plain prose.
+* **The GENERATED docs must be current**, which is a different question
+  from whether they are right. `parts.md` and `panel-drilling.md` cannot
+  rot - they are written by the generator - but they can be left
+  uncommitted after a regeneration, so they are checked against the BOM
+  and the board rather than regenerated.
+
 ## The verification philosophy — read this before "fixing" a DRC failure
 
 `gen_pcb_smd.py` routes the board and then checks it with **exact geometry that

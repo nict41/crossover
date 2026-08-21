@@ -1597,7 +1597,14 @@ for _ref in sorted(POSE):
 # test each against exact geometry, take the first that passes, and fail
 # loudly rather than shipping one that does not.
 MOUNT_EDGE_MIN = 1.00 / 0.254         # mm of FR4 left outside the hole
-MOUNT_WALK_MAX = 40.0                 # how far in a hole may be pushed
+# How far from its nominal corner a hole may be pushed.  60 units is
+# 15 mm, which is a long way for a "corner" hole and still much better than
+# the alternative: this is a hard failure, so too small a window turns a
+# usable placement into no board at all.  At 40 it did exactly that to the
+# reference Python placer's layout.  The committed board finds its four
+# holes within 37 units, so widening the window changes nothing about it -
+# checked, byte-identical.
+MOUNT_WALK_MAX = 60.0
 
 
 def _hole_clear(hx, hy):
