@@ -115,6 +115,8 @@ docs/        circuit-notes.md      — how the circuit works, design equations
              design-review.md      — what could still go wrong
              panel-drilling.md     — GENERATED: front-panel hole positions
              parts.md              — GENERATED: the BOM, plus what you solder
+             task-board.md         — open work, and what serialises
+             decisions.md          — append-only log of what was measured
              subcircuits/          — GENERATED: one diagram per function block
              crossover-ranges.svg  — tuning-range diagram (+ .png)
              netlist.txt           — netlist extracted back out of the drawing
@@ -136,6 +138,22 @@ sim/         GENERATED: the ngspice deck (crossover.net, models.lib,
 `place.py`, `router.c` and `geom.c` each have a Python reference
 implementation beside the compiled one (`PLACER=py`, `ROUTER=py`,
 `CGEOM=py`), so every compiled path can be checked against readable code.
+
+## Contributing (human or agent)
+
+[`AGENTS.md`](AGENTS.md) is the one-page contract — it matters here more
+than in most repositories, because almost everything in `schematic/`,
+`pcb/`, `bom/`, `sim/` and several files in `docs/` is **generated**, and
+editing the output instead of the generator is silently discarded.
+
+```sh
+python3 tools/check_all.py     # the gate: regenerate, verify, validate
+```
+
+Open work is in [`docs/task-board.md`](docs/task-board.md), marked by
+whether it forces a board re-search (and so can only be done one at a
+time). Measurements — kept *and* rejected — go in
+[`docs/decisions.md`](docs/decisions.md).
 
 ## Regenerating
 

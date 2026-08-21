@@ -1,5 +1,17 @@
 # Project context for agents
 
+> **Working on this repo? Read [`AGENTS.md`](AGENTS.md) first.** It is one
+> page and it is the contract: never edit a generated file, run
+> `python3 tools/check_all.py` before committing, never weaken a check,
+> measure the artifact rather than the diff, and log what you measured in
+> [`docs/decisions.md`](docs/decisions.md). Open work, marked by whether it
+> serialises on the board search, is in
+> [`docs/task-board.md`](docs/task-board.md).
+>
+> This file is the *reasoning* behind those rules — long, and worth reading
+> in full before making a judgement call, but not a prerequisite for a
+> small change.
+
 ESP Project 148 3-way state-variable crossover, redrawn as EasyEDA-importable
 schematics plus a fully routed SMD PCB. Everything in `schematic/`, `pcb/`,
 `bom/` and most of `docs/` is **generated** — never hand-edit those; edit the

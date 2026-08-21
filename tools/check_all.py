@@ -114,6 +114,8 @@ def main():
         return 1
 
     print("\nOK - the tree is consistent and the board verifies.")
+    print("   Before committing: append what you measured to "
+          "docs/decisions.md (AGENTS.md rule 5).")
     if not online:
         print("   (re-run with --online before ordering, to check LCSC stock)")
     return 0
