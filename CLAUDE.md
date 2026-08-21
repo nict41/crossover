@@ -93,6 +93,76 @@ the build instead of shipping quietly. If you add a variant-specific feature
 (as the volume pots are), teach `signal_map()` to normalise it rather than
 disabling the check.
 
+## Every part inboard of every screw, and what that cost
+
+A mounting hole should sit OUTBOARD of the components, so the board is
+supported beyond the parts rather than under them. It was not: the corner
+holes walked inward to clear the pinned panel row and left `VR6`
+cantilevered **10.7 mm past the bottom-left screw** - the master volume
+knob, the one control that gets leaned on, hanging off an unsupported
+corner.
+
+The fix is a wider left/right margin than front/rear (`EDGE_X`), sized as
+`CLEAR + 2*MOUNT_R + MOUNT_EDGE_MIN` beyond the outermost part. That makes
+the strip the holes live in empty **by construction**, so a hole there
+cannot collide with anything and only ever has to walk in Y. `verify()`
+now asserts it rather than trusting it, because a future change to
+`EDGE_X`, `MOUNT_X` or the panel row should find out from a checker and
+not from a cracked corner.
+
+Two things this round taught:
+
+* **A generator must not aim at the checker's limit.** `MOUNT_X` was set
+  to exactly `MOUNT_R + MOUNT_EDGE_MIN`, and `validate_fab` promptly
+  reported "1.00 mm, under the 1.00 mm minimum" on rounding. The generator
+  now targets 1.2 mm against the checker's 1.0, the same way `CLEAR` is
+  8 mil against JLCPCB's 5.
+* **The placer was reserving keepout where the holes are NOT.**
+  `fixed_boxes` still inset the reserved corners by `MOUNT_INSET - EDGE`,
+  i.e. 9 units INSIDE the part extent - four phantom obstacles pushing
+  parts away from corners that no longer had holes in them. Fixing that is
+  what made the board smaller: 156.2 x 71.4 became 145.8 x 66.5, **13%
+  less area**, while adding a 6+ mm mounting margin.
+
+**The rear row is grouped too**: line in, then LOW / MID / HIGH together in
+the panel's own order, then power at the far end. The outputs used to be
+split by the power block, which put mains-side wiring in the middle of the
+audio-side wiring.
+
+## The input network needed a constraint, not a checker
+
+`N160_280` - the input buffer's non-inverting pin - sits at 47 kOhm to
+ground, the highest impedance in the signal path, and it is ahead of every
+bit of gain in the box. Left to the cost model it spanned **49 mm**, with
+`R1` in the opposite corner from the op-amp it biases; `INPUT`, the master
+volume's wiper, spanned **73 mm**. Both routed perfectly well and no
+geometric check had anything to say about them, which is precisely the
+point: the requirement is local, physical and invisible to wirelength
+alone, so it belongs in `near` (as `INPUT_NEAR`) alongside the bypass caps
+and the mute chain. After: **9.2 mm and 18.4 mm**.
+
+Found by looking at the rendered board, not by a check. Worth remembering
+that the render is a real instrument - it is how the sprawled input
+network, the split output terminals and the cantilevered knob were all
+noticed, and none of the three was a DRC problem.
+
+## The supply rails are thick enough, with numbers
+
+Asked and measured, so it does not have to be re-derived: 16 mil power
+traces, 1 oz copper, external layer.
+
+| | +15V | -15V |
+|---|---|---|
+| routed length | 216 mm | 141 mm |
+| end-to-end resistance | 261 mOhm | 170 mOhm |
+| current drawn | 48 mA | 30 mA |
+| voltage drop | **12 mV** | **5 mV** |
+
+IPC-2221 gives **1244 mA** for a 16 mil external trace at a 10 C rise, so
+the rails run at 4% of their rating - a **26x** margin. Widening them buys
+nothing measurable; the widths are set by pad proportion, as the note below
+says, and that remains the only reason to change them.
+
 ## The circuit is simulated, from the same netlist as the board
 
 `tools/gen_spice.py` emits an ngspice deck from
@@ -829,10 +899,10 @@ job: run it with a timeout and don't poll it in a tight loop.
 
 ## Current state / open threads
 
-### Current board: 4 layers, 156.2 x 71.4 mm, two pinned rows, verifies CLEAN
+### Current board: 4 layers, 145.8 x 66.5 mm, two pinned rows, verifies CLEAN
 
-`SEED=7 ROUTE_SEED=1`, 86 footprints, 242 pads, 217 tracks, 148 vias,
-56% utilised. `verify()` passes every check and `validate_fab.py` passes
+`SEED=1 ROUTE_SEED=0`, 86 footprints, 242 pads, 218 tracks, 145 vias,
+61% utilised. `verify()` passes every check and `validate_fab.py` passes
 offline, including the LCSC stock query.
 
 It replaced a 151.6 x 68.1 mm board that was 8% smaller and had 0.69 mm of
@@ -915,8 +985,11 @@ Two details that were wrong on the first attempt:
   now checks it at 1.00 mm, which is deliberately well above what JLCPCB
   will build. Nothing checked it before, which is how 0.69 mm survived.
 
-Cost, measured: the winning board goes from 151.6 x 68.1 to 156.2 x 71.4,
-8% more area. The seeds that place smaller (`SEED=20` at 146.8 x 66.5) are
+Cost, measured at the time: the winning board went from 151.6 x 68.1 to
+156.2 x 71.4, 8% more area. (It has since come back down to 145.8 x 66.5 -
+see "Every part inboard of every screw" below, which widened the margins
+again and yet found a SMALLER board, because the same round stopped the
+placer reserving four corner regions for holes that were no longer there.) The seeds that place smaller (`SEED=20` at 146.8 x 66.5) are
 stuck at 5-7 DRC problems across every route order, which is the signature
 of a structural problem no rerouting opens. The board was already past the
 100 mm price tier, so the area costs nothing at the fab and buys a hole you
@@ -1167,7 +1240,7 @@ The older figures here said 33 s cold / 4.5 s warm and were wrong in both
 directions. Cold was quoted as "placement ~25 s" long after `anneal.c`
 took the anneal to under two seconds - the sentence survived the change it
 described. Warm has genuinely got dearer, from 4.5 s to 7.5 s, and that is
-the ground fanout doing what it was built to do: 148 vias and 217 tracks
+the ground fanout doing what it was built to do: 145 vias and 218 tracks
 where the board before it had fewer of each. Routing is now four fifths
 of a warm run, so *that* is where the next second lives, not in placement.
 

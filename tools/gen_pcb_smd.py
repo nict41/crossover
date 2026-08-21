@@ -209,7 +209,7 @@ POUR_CLEAR = 1.0
 # `python3 tools/gen_pcb_smd.py` has to rebuild the committed artifacts,
 # so the winning pair are the defaults rather than something you have to
 # know to pass on the command line.
-SEED = int(os.environ.get("SEED", 7))
+SEED = int(os.environ.get("SEED", 1))
 
 # Nets carried by the copper pour instead of by traces.  Ground is one:
 # the board already had a GND pour on both layers, and routing GND as a
@@ -1079,7 +1079,14 @@ SWITCH_LABEL = {"SW1": "MUTE HI", "SW2": "MUTE MID", "SW3": "MUTE LO"}
 # the largest gap left - mid-board, which is also the shortest average
 # distance from the power terminal to the three ICs, and a long way from
 # the input.
-REAR = ["J2", "J5", "J1", "J4", "J3"]
+# Left to right: line in, the three outputs together, power.  The outputs
+# used to be split by the power block (IN, LOW, PWR, MID, HIGH), which put
+# the mains-side wiring in the middle of the audio-side wiring and made
+# three amplifier looms fan out around it.  Grouped, they read LOW -> MID
+# -> HIGH, the same order the front panel uses, and power sits at the far
+# end from the input where its loom cannot run alongside the one signal
+# that has no gain in front of it yet.
+REAR = ["J2", "J5", "J4", "J3", "J1"]
 POT_GANGS = {"VR1": ("VR1A", "VR1B"), "VR2": ("VR2A", "VR2B")}
 POT_LABEL = {"VR3": "HIGH VOL", "VR4": "MID VOL", "VR5": "LOW VOL",
              "VR6": "MASTER"}
@@ -1248,9 +1255,10 @@ PANEL_Y = {r: _PANEL_FRONT - GEOM[r][0]["box"][3] for r in PANEL}
 # depth is not set here - it is a rigid group, and the anneal slides it in
 # until the parts between the two rows stop it.  Board height stays an
 # OUTPUT; what is fixed is that nothing may be outside either row.
-REAR_X = {"J2": PANEL_X["VR6"], "J5": PANEL_X["VR5"],
-          "J1": (PANEL_X["VR5"] + PANEL_X["VR2"]) / 2,
-          "J4": PANEL_X["VR4"], "J3": PANEL_X["VR3"]}
+REAR_X = {"J2": PANEL_X["VR6"],                     # line in, far left
+          "J5": PANEL_X["VR2"], "J4": PANEL_X["VR4"],  # LOW, MID, HIGH -
+          "J3": PANEL_X["VR1"],                        # adjacent, in order
+          "J1": PANEL_X["VR3"]}                        # power, far right
 _REAR_BACK = min(GEOM[r][0]["box"][1] for r in REAR)
 REAR_Y = {r: -170.0 + (_REAR_BACK - GEOM[r][0]["box"][1]) for r in REAR}
 
@@ -1333,8 +1341,27 @@ MUTE_NEAR = ([("Q%d" % (k + 1), "U3", "%s_MUTE" % nm, MUTE_Q_NEAR)
                 ("C16", "D2", "MUTE_SS", 60.0),
                 ("D4", "R40", "MUTE_SS", 40.0)])
 
-PLACER = place.Placer(_parts, seed=SEED,
-                      track_pitch=MAX_W + CLEAR, near=BYPASS_NEAR + MUTE_NEAR,
+# The input network is the one place on this board where a long trace is
+# an AUDIO problem rather than a routing one, and nothing in the cost model
+# can see it.  `N160_280` - the input buffer's non-inverting pin - sits at
+# 47 kOhm to ground, the highest impedance in the signal path, and it is
+# ahead of every bit of gain in the box, so anything it picks up arrives
+# amplified.  `INPUT` is the master volume's wiper, up to 12.5 kOhm of
+# source impedance, and equally unshielded.
+#
+# Left free, the search spread them: measured on the board this replaces,
+# `N160_280` spanned 49 mm and `INPUT` 73 mm, with `R1` in the opposite
+# corner from the op-amp it biases.  Both route perfectly well and no
+# geometric check has anything to say about them - which is exactly why
+# they need a constraint rather than a checker.  Same mechanism as the
+# bypass caps, for the same reason: the requirement is local, physical,
+# and invisible to wirelength alone.
+INPUT_NEAR = [("R1", "U1", "N160_280", 25.0),
+              ("C0", "U1", "N160_280", 30.0),
+              ("C0", "VR6", "INPUT", 45.0)]
+
+PLACER = place.Placer(_parts, seed=SEED, track_pitch=MAX_W + CLEAR,
+                      near=BYPASS_NEAR + MUTE_NEAR + INPUT_NEAR,
                       plane_nets=PLANE_NETS)
 
 # The panel row: fixed pitch, fixed order, all on one line.
@@ -1529,9 +1556,19 @@ def run_placement(rng_seed):
     PLACER.seed()
     PLACER.anneal(moves=MOVES // 3, w=WEIGHTS, report=PLACE_LOG)
     x0, y0, x1, y1 = PLACER.extent()
+    # Where the holes will actually be.  In X they sit OUTSIDE the parts by
+    # construction - the board is widened to make room for them - so the
+    # reserved box is centred `CLEAR + MOUNT_R` beyond each end of the
+    # layout, not inset from a corner.  It used to be inset by
+    # `MOUNT_INSET - EDGE` = 9 units INSIDE the part extent, which reserved
+    # four corner regions for holes that are no longer there and pushed
+    # parts away from a phantom obstacle.  In Y they are still inset,
+    # because the two pinned rows run the full width and the holes have to
+    # live among them.
+    _mx = CLEAR + MOUNT_R
     PLACER.fixed_boxes = [
         (cx - MOUNT_KEEP, cy - MOUNT_KEEP, cx + MOUNT_KEEP, cy + MOUNT_KEEP)
-        for cx in (x0 - EDGE + MOUNT_INSET, x1 + EDGE - MOUNT_INSET)
+        for cx in (x0 - _mx, x1 + _mx)
         for cy in (y0 - EDGE + MOUNT_INSET, y1 + EDGE - MOUNT_INSET)]
     return PLACER.anneal(moves=MOVES, w=WEIGHTS, report=PLACE_LOG)
 
@@ -1574,26 +1611,48 @@ else:
     AFTER = _best[2]
     POSE = PLACER.result()
     _save_pose(POSE, BEFORE, AFTER)
+# The left and right margins are wider than the front and rear ones, and
+# for a mechanical reason rather than an electrical one: a mounting hole
+# has to sit OUTBOARD of every component, so that the board is supported
+# beyond the parts rather than under them.  Before this, the corner holes
+# walked inward to clear the panel row and left `VR6` cantilevered 10.7 mm
+# past the bottom-left screw - the master volume knob hanging off an
+# unsupported corner, which is where a knob gets leaned on.
+#
+# Width needed beyond the outermost part, working outwards:
+#     CLEAR              hole keepout to the part
+#     2 * MOUNT_R        across the hole
+#     MOUNT_EDGE_MIN     board material outside it
+# Everything left and right of the parts is therefore empty by
+# construction, so the holes cannot collide with anything and the "walk"
+# below only ever has to move them in Y.
 _bx1 = max(POSE[r][0] + GEOM[r][POSE[r][2]]["box"][2] for r in POSE)
 _by1 = max(POSE[r][1] + GEOM[r][POSE[r][2]]["box"][3] for r in POSE)
 
 # THE BOARD SIZE, at last: whatever the arrangement turned out to need, plus
 # an edge margin, rounded up to a whole unit so the outline lands on the
 # routing grid.
-BW = math.ceil(_bx1 + 2 * EDGE)
+# 1.2 mm of FR4 outside each hole, against validate_fab.py's 1.0 mm floor.
+# A generator that aims exactly at the checker's limit trips it on
+# rounding - this one did, reporting "1.00 mm, under the 1.00 mm minimum" -
+# and more to the point a limit is not a target.  Same reason CLEAR is
+# 8 mil against JLCPCB's 5.
+MOUNT_EDGE_MIN = 1.20 / 0.254
+EDGE_X = max(EDGE, CLEAR + 2 * MOUNT_R + MOUNT_EDGE_MIN)
+BW = math.ceil(_bx1 + 2 * EDGE_X)
 BH = math.ceil(_by1 + 2 * EDGE)
 # ---- commit the placement: draw every part where the search put it -------
 PLACED_BOX = {}          # ref -> courtyard box in board coordinates
 for _ref in sorted(POSE):
     _x, _y, _rot = POSE[_ref]
-    xf_push(_x + EDGE, _y + EDGE, _rot)
+    xf_push(_x + EDGE_X, _y + EDGE, _rot)
     try:
         drawer(_ref)()
     finally:
         xf_pop()
     _b = GEOM[_ref][_rot]["box"]
-    placed.append((_x + EDGE + _b[0], _y + EDGE + _b[1],
-                   _x + EDGE + _b[2], _y + EDGE + _b[3]))
+    placed.append((_x + EDGE_X + _b[0], _y + EDGE + _b[1],
+                   _x + EDGE_X + _b[2], _y + EDGE + _b[3]))
     PLACED_BOX[_ref] = placed[-1]
 
 
@@ -1616,7 +1675,6 @@ for _ref in sorted(POSE):
 # Same shape of fix as pad_plane_via() - offer a ladder of real positions,
 # test each against exact geometry, take the first that passes, and fail
 # loudly rather than shipping one that does not.
-MOUNT_EDGE_MIN = 1.00 / 0.254         # mm of FR4 left outside the hole
 # How far from its nominal corner a hole may be pushed.  60 units is
 # 15 mm, which is a long way for a "corner" hole and still much better than
 # the alternative: this is a hard failure, so too small a window turns a
@@ -1668,8 +1726,15 @@ def _place_mount_hole(cx, cy):
         % (cx, cy, MOUNT_WALK_MAX))
 
 
+# X is FIXED, as far out as the board-material rule allows, and only Y is
+# allowed to move.  EDGE_X guarantees that strip is empty of components,
+# so a hole there is clear of everything horizontally by construction -
+# which is the point: every part is inboard of every screw.  Y still walks,
+# because the front and rear rows run the full width and a hole has to find
+# its way past them.
+MOUNT_X = MOUNT_R + MOUNT_EDGE_MIN
 MOUNT_HOLES, _MOUNT_WALK = [], []
-for _cx in (MOUNT_INSET, BW - MOUNT_INSET):
+for _cx in (MOUNT_X, BW - MOUNT_X):
     for _cy in (MOUNT_INSET, BH - MOUNT_INSET):
         _hx, _hy, _walk = _place_mount_hole(_cx, _cy)
         MOUNT_HOLES.append((_hx, _hy))
@@ -2411,7 +2476,7 @@ def path_clearance_ok(net, via_pts, polys):
 # Worth having because the measured clean rate over placements alone is only
 # a couple of percent - the same layout often routes cleanly under one order
 # and not another, and searching that is far cheaper than searching seeds.
-_ROUTE_SEED = int(os.environ.get("ROUTE_SEED", 1))
+_ROUTE_SEED = int(os.environ.get("ROUTE_SEED", 0))
 _ORDER_JITTER = {}
 if _ROUTE_SEED:
     import random as _r
@@ -3986,6 +4051,21 @@ def verify():
                 problems.append("%s (%s) is %.1f mil from the hole at "
                                 "%g,%g" % (f["tag"], f["net"], (d - f["hw"]) * 10,
                                            hx, hy))
+    # -- every component inboard of every mounting screw, horizontally.
+    #    EDGE_X is supposed to make this true by construction; checking it
+    #    is how a future change to EDGE_X, MOUNT_X or the panel row finds
+    #    out it broke the guarantee, rather than a knob on an unsupported
+    #    corner finding out for it.
+    if MOUNT_HOLES:
+        _hx0 = min(h[0] for h in MOUNT_HOLES)
+        _hx1 = max(h[0] for h in MOUNT_HOLES)
+        for _ref, _b in sorted(PLACED_BOX.items()):
+            if _b[0] < _hx0 or _b[2] > _hx1:
+                problems.append(
+                    "%s reaches x %.1f-%.1f mm, outside the mounting holes "
+                    "at %.1f and %.1f mm - that corner is unsupported"
+                    % (_ref, _b[0] * 0.254, _b[2] * 0.254,
+                       _hx0 * 0.254, _hx1 * 0.254))
     # -- everything inside the board
     for p in pads:
         if not (2 < p["x"] < BW - 2 and 2 < p["y"] < BH - 2):
@@ -4407,10 +4487,13 @@ _pd += ["",
         "",
         "%.1f mm diameter (M3 clearance), measured from the same left edge and"
         % (MOUNT_R * 2 * 0.254),
-        "from the REAR edge. They start at %.2f mm in from each corner and move"
+        "from the REAR edge. **X is fixed** at %.2f mm from each side: the board"
+        % (MOUNT_X * 0.254),
+        "is widened so that strip contains no components, which is what puts",
+        "every part inboard of every screw. Y starts %.2f mm in and moves only"
         % (MOUNT_INSET * 0.254),
-        "only as far as they must to clear the pinned edge rows, so the four are",
-        "not necessarily symmetric - use these numbers, not the corners.",
+        "as far as it must to clear the two pinned rows, so the two on one side",
+        "may not match the two on the other - use these numbers, not the corners.",
         "",
         "| X from left | Y from rear | Board material outside it |",
         "|---|---|---|"]
