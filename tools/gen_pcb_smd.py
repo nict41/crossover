@@ -208,7 +208,7 @@ POUR_CLEAR = 1.0
 # `python3 tools/gen_pcb_smd.py` has to rebuild the committed artifacts,
 # so the winning pair are the defaults rather than something you have to
 # know to pass on the command line.
-SEED = int(os.environ.get("SEED", 5))
+SEED = int(os.environ.get("SEED", 7))
 
 # Nets carried by the copper pour instead of by traces.  Ground is one:
 # the board already had a GND pour on both layers, and routing GND as a
@@ -249,6 +249,11 @@ def gid():
 
 
 shapes, pads, placed = [], [], []
+REPORT = []            # 'note:' lines under the board line
+
+
+def d_pt_rect(px, py, r):
+    return math.hypot(max(r[0] - px, 0, px - r[2]), max(r[1] - py, 0, py - r[3]))
 PARTS = {}
 
 LCSC = {                              # verified live against the JLCPCB API
@@ -1108,9 +1113,18 @@ CHIPS = {r: ("1210" if VALUE[r] == "33nF" else "0805")
 # Board-edge clearance for parts, and how far in from the corner each
 # mounting hole sits.
 EDGE = 5.0
-MOUNT_R = 12.6 / 2
+MOUNT_R = 12.6 / 2                    # 3.2 mm hole, i.e. clearance for M3
 BOSS_R = 4.5
-MOUNT_INSET = 9.0
+# 14 units = 3.56 mm from each edge, which leaves 1.96 mm of FR4 between
+# the hole and the board outline.  It was 9.0, giving 0.69 mm - inside
+# every fab limit (JLCPCB wants 0.3 mm hole-to-outline) and wrong anyway:
+# 0.69 mm of FR4 is what cracks when someone tightens an M3 screw, and a
+# 7 mm washer or standoff centred 2.29 mm in overhangs the board by
+# 1.2 mm on two sides, so it cannot sit flat.  This is the failure mode
+# design-review.md exists for - passes every automated check, breaks in
+# the hand.  Env-settable so the trade can be re-measured; it is in
+# _place_key(), so changing it invalidates the cached placement.
+MOUNT_INSET = float(os.environ.get("MOUNT_INSET", 14.0))
 MOUNT_KEEP = MOUNT_R + CLEAR + MAX_W / 2
 
 
@@ -1542,9 +1556,6 @@ _by1 = max(POSE[r][1] + GEOM[r][POSE[r][2]]["box"][3] for r in POSE)
 # routing grid.
 BW = math.ceil(_bx1 + 2 * EDGE)
 BH = math.ceil(_by1 + 2 * EDGE)
-MOUNT_HOLES = [(MOUNT_INSET, MOUNT_INSET), (BW - MOUNT_INSET, MOUNT_INSET),
-               (MOUNT_INSET, BH - MOUNT_INSET), (BW - MOUNT_INSET, BH - MOUNT_INSET)]
-
 # ---- commit the placement: draw every part where the search put it -------
 PLACED_BOX = {}          # ref -> courtyard box in board coordinates
 for _ref in sorted(POSE):
@@ -1558,6 +1569,82 @@ for _ref in sorted(POSE):
     placed.append((_x + EDGE + _b[0], _y + EDGE + _b[1],
                    _x + EDGE + _b[2], _y + EDGE + _b[3]))
     PLACED_BOX[_ref] = placed[-1]
+
+
+# ---- mounting holes: a corner is a WISH, not a position ------------------
+# The four holes used to be pinned at a fixed inset from each corner, which
+# works only for as long as nothing else wants that corner.  Something
+# does: the rear row's outermost terminal blocks sit at the panel row's
+# outermost x, hard against the same corners, and they are PINNED - they
+# cannot move out of the way.  Raising the inset far enough to leave
+# sensible board material around an M3 hole drove the hole straight into
+# J3.2 or J2.1 on every seed tried, which reads as a routing failure and is
+# not one.
+#
+# So the position is an OUTPUT, like the board size.  Each hole starts at
+# its nominal corner inset and, if that collides, walks in along the
+# diagonal until it clears every pad and every courtyard.  The board-edge
+# material rule is a floor a candidate may never break: moving a hole
+# further in is always allowed, moving it back out is not.
+#
+# Same shape of fix as pad_plane_via() - offer a ladder of real positions,
+# test each against exact geometry, take the first that passes, and fail
+# loudly rather than shipping one that does not.
+MOUNT_EDGE_MIN = 1.00 / 0.254         # mm of FR4 left outside the hole
+MOUNT_WALK_MAX = 40.0                 # how far in a hole may be pushed
+
+
+def _hole_clear(hx, hy):
+    """Does a mounting hole at (hx, hy) clear every pad and courtyard?"""
+    if min(hx, BW - hx, hy, BH - hy) - MOUNT_R < MOUNT_EDGE_MIN:
+        return False
+    for _p in pads:
+        if (d_pt_rect(hx, hy, (_p["x"] - _p["w"] / 2, _p["y"] - _p["h"] / 2,
+                               _p["x"] + _p["w"] / 2, _p["y"] + _p["h"] / 2))
+                - MOUNT_R < CLEAR):
+            return False
+    for _b in placed:
+        if d_pt_rect(hx, hy, _b) < MOUNT_R:
+            return False
+    return True
+
+
+def _place_mount_hole(cx, cy):
+    """Nominal corner (cx, cy); nearest clear position to it.
+
+    Searching a REGION rather than walking a line, because the useful
+    escape direction is not the diagonal.  A hole trapped by the rear row
+    wants to move either along the edge, into the gap between two terminal
+    blocks, or straight inward past the row - and the diagonal does
+    neither, it slides along the row into the next terminal.  Candidates
+    are ordered by distance from the nominal corner, so the hole moves as
+    little as the geometry allows.
+    """
+    step = 1.0
+    n = int(MOUNT_WALK_MAX / step)
+    cands = sorted(((dx * dx + dy * dy, cx + dx * step, cy + dy * step)
+                    for dx in range(-n, n + 1) for dy in range(-n, n + 1)),
+                   key=lambda c: (c[0], c[1], c[2]))
+    for d2, hx, hy in cands:
+        if _hole_clear(hx, hy):
+            return hx, hy, math.sqrt(d2) * step
+    raise SystemExit(
+        "no clear position for the mounting hole near (%.1f, %.1f) within "
+        "%.0f units: nothing in that corner clears the pads and courtyards. "
+        "That is a PLACEMENT problem, not a routing one - try another SEED."
+        % (cx, cy, MOUNT_WALK_MAX))
+
+
+MOUNT_HOLES, _MOUNT_WALK = [], []
+for _cx in (MOUNT_INSET, BW - MOUNT_INSET):
+    for _cy in (MOUNT_INSET, BH - MOUNT_INSET):
+        _hx, _hy, _walk = _place_mount_hole(_cx, _cy)
+        MOUNT_HOLES.append((_hx, _hy))
+        _MOUNT_WALK.append(_walk)
+if any(_MOUNT_WALK):
+    REPORT.append("mounting holes moved %s units from the nominal corner to "
+                  "clear the edge rows"
+                  % ", ".join("%.1f" % _w for _w in _MOUNT_WALK))
 
 # NO locating-boss holes are drilled.  They used to be, at a position that
 # was openly a guess - no verified dual-gang drawing was ever found, and
@@ -2446,10 +2533,6 @@ def d_seg_seg(a, b, c, d):
                d_pt_seg(b[0], b[1], c[0], c[1], d[0], d[1]),
                d_pt_seg(c[0], c[1], a[0], a[1], b[0], b[1]),
                d_pt_seg(d[0], d[1], a[0], a[1], b[0], b[1]))
-
-
-def d_pt_rect(px, py, r):
-    return math.hypot(max(r[0] - px, 0, px - r[2]), max(r[1] - py, 0, py - r[3]))
 
 
 def d_seg_rect(a, b, r):
@@ -3839,7 +3922,6 @@ FAILED = route_with_ripup()
 build_features()
 
 
-REPORT = []
 
 
 def verify():
@@ -4140,6 +4222,90 @@ for ref, info in sorted(PARTS.items()):
                   info["rot"]))
 with open(os.path.join(bomdir, "jlcpcb-cpl-retuned-quad-smd.csv"), "w") as f:
     f.write("\n".join(cpl) + "\n")
+
+
+# ---- front-panel drilling ------------------------------------------------
+# The board mounts flat, perpendicular to the front panel, with nine shafts
+# and plungers passing through it.  Their spacing is not uniform - knobs sit
+# at PANEL_PITCH and buttons at SWITCH_PITCH - and it moves whenever either
+# is retuned, so anyone drilling a panel from the PCB preview is measuring
+# a picture.  Emit the real numbers instead, from the same placement the
+# copper came from.
+#
+# X only.  How far the shaft axis sits ABOVE the board is a datasheet
+# number for the specific pot and button, and this project's pot body is
+# explicitly an unverified hand-drawn footprint - so stating a height here
+# would be inventing the one dimension that cannot be checked.  The
+# horizontal spacing is the hard part and is exact; the vertical offset is
+# one number the builder sets once for the whole row.
+_PANEL_ROLE = dict(POT_LABEL)
+_PANEL_ROLE.update(SWITCH_LABEL)
+_PANEL_ROLE.setdefault("VR1", "HIGH/MID freq")
+_PANEL_ROLE.setdefault("VR2", "MID/LOW freq")
+_panel_rows = []
+for _ref in PANEL_ORDER:
+    _info = PARTS.get(_ref) or PARTS.get(_ref + "A")
+    if not _info:
+        continue
+    _is_sw = _ref in SWITCH_LABEL
+    _panel_rows.append((_ref, _PANEL_ROLE.get(_ref, _ref),
+                        _info["x"] * 0.254,
+                        "6 mm shaft" if not _is_sw else "2.8 mm plunger",
+                        "7.0" if not _is_sw else "4.0"))
+_pd = ["# Front-panel drilling",
+       "",
+       "Generated by `tools/gen_pcb_smd.py` from the placement that produced",
+       "the copper - regenerate the board and this file follows it.",
+       "",
+       "Board is **%.1f mm wide x %.1f mm deep**, mounted flat and"
+       % (BW * 0.254, BH * 0.254),
+       "perpendicular to the panel, controls along the front edge.",
+       "",
+       "All X are measured **from the left-hand edge of the board**, looking",
+       "at the front panel from the front, with the board's left edge aligned",
+       "to the panel's reference point. Left to right the row reads MASTER,",
+       "then LOW -> HIGH, each mute button beside the volume trim it mutes.",
+       "",
+       "| Designator | Control | X from left edge | Passes through | Suggested hole |",
+       "|---|---|---|---|---|"]
+for _r, _role, _x, _thru, _dia in _panel_rows:
+    _pd.append("| `%s` | %s | **%.1f mm** | %s | %s mm |" % (_r, _role, _x, _thru, _dia))
+_pd += ["",
+        "Centre-to-centre spacing, in order: " +
+        ", ".join("%.1f" % (_panel_rows[_i + 1][2] - _panel_rows[_i][2])
+                  for _i in range(len(_panel_rows) - 1)) + " mm.",
+        "",
+        "Two pitches, deliberately: %.1f mm between two knobs "
+        "(`PANEL_PITCH`, a human-factors" % (PANEL_PITCH * 0.254),
+        "number - a knob for a 6 mm shaft is 15-20 mm across), and %.1f mm "
+        "wherever a" % (SWITCH_PITCH * 0.254),
+        "button is one of the pair (`SWITCH_PITCH`) - a 2.8 mm plunger does not",
+        "need a knob's worth of panel.",
+        "",
+        "**The height of each axis above the board is not given here.** It is a",
+        "datasheet number for the specific pot and push-switch, and this board's",
+        "pot body is an unverified hand-drawn footprint (see",
+        "[`pcb-notes-smd.md`](pcb-notes-smd.md)). Measure it once from the real",
+        "parts; it is the same offset for the whole row.",
+        "",
+        "## Mounting holes",
+        "",
+        "%.1f mm diameter (M3 clearance), measured from the same left edge and"
+        % (MOUNT_R * 2 * 0.254),
+        "from the REAR edge. They start at %.2f mm in from each corner and move"
+        % (MOUNT_INSET * 0.254),
+        "only as far as they must to clear the pinned edge rows, so the four are",
+        "not necessarily symmetric - use these numbers, not the corners.",
+        "",
+        "| X from left | Y from rear | Board material outside it |",
+        "|---|---|---|"]
+for _hx, _hy in sorted(MOUNT_HOLES):
+    _pd.append("| %.2f mm | %.2f mm | %.2f mm |"
+               % (_hx * 0.254, _hy * 0.254,
+                  (min(_hx, BW - _hx, _hy, BH - _hy) - MOUNT_R) * 0.254))
+_pd += [""]
+with open(os.path.join(ROOT, "docs", "panel-drilling.md"), "w") as f:
+    f.write("\n".join(_pd))
 
 
 # ---- preview -------------------------------------------------------------

@@ -106,15 +106,24 @@ pcb/         the routed SMD board (+ .svg / .png preview)
 docs/        circuit-notes.md      — how the circuit works, design equations
              pcb-notes-smd.md      — the board: layout, routing, verification
              design-review.md      — what could still go wrong
+             panel-drilling.md     — GENERATED: front-panel hole positions
+             subcircuits/          — GENERATED: one diagram per function block
              crossover-ranges.svg  — tuning-range diagram (+ .png)
              netlist.txt           — netlist extracted back out of the drawing
-bom/         one bom-*.csv per variant
+bom/         one bom-*.csv per variant, plus the JLCPCB BOM and CPL
 tools/       gen_schematic.py     — generates the schematics
              gen_pcb_smd.py       — SMD PCB, routed + verified
              gen_range_diagram.py — generates the range diagram
              validate_fab.py      — EasyEDA import + JLCPCB limit checks
              find_board.py        — searches seeds/route orders for a clean board
+             place.py / anneal.c / canneal.py   — the placement anneal
+             router.c / croute.py               — the grid maze router
+             geom.c  / cgeom.py                 — the exact-geometry checks
 ```
+
+`place.py`, `router.c` and `geom.c` each have a Python reference
+implementation beside the compiled one (`PLACER=py`, `ROUTER=py`,
+`CGEOM=py`), so every compiled path can be checked against readable code.
 
 ## Regenerating
 
@@ -270,8 +279,8 @@ what it does is listed in
 
 ### SMD board, routed, for JLCPCB fab + assembly
 
-`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **151.6 ×
-68.1 mm**, **four layers**, **fully routed**, nine front-panel controls on
+`pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.json` — **156.2 ×
+71.4 mm**, **four layers**, **fully routed**, nine front-panel controls on
 the board (a frequency pot and a volume trim per band, a master volume, and
 a mute button per band), trace width matched to purpose (12 mil signal,
 16 mil power/ground), 45° chamfered corners, every SMD part a real LCSC
@@ -308,7 +317,7 @@ by block, is in
 ![SMD board](pcb/esp-p148-3way-crossover-retuned-quad-smd-pcb.png)
 
 ```
-board 151.6 x 68.1 mm | 86 footprints | 242 pads | 227 tracks | 154 vias
+board 156.2 x 71.4 mm | 86 footprints | 242 pads | 217 tracks | 148 vias
 verified: all nets connected, all clearances >= 8 mil, no unrouted nets,
           pads match the schematic exactly
 ```
@@ -325,6 +334,13 @@ audio-taper pots (Alps RK097 pattern) wired as attenuators; the frequency
 pots are the standard 9 mm dual-gang pattern. Both **need checking against
 your parts' datasheets** — there are no locating-boss holes, deliberately;
 see the notes.
+
+**Drilling the panel:** [`docs/panel-drilling.md`](docs/panel-drilling.md)
+is generated from the same placement as the copper, and gives the X of every
+shaft and plunger from the board's left edge, the two pitches the row uses,
+and where the four mounting holes actually ended up. Regenerate the board
+and that file follows it, so it cannot drift from the part positions the way
+a measured-off-the-preview drawing would.
 
 Routing is checked by geometry that doesn't reuse the router's own bookkeeping:
 exact pairwise clearance between every copper feature, union-find connectivity

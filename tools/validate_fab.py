@@ -54,6 +54,12 @@ MIN_CLEAR = 0.127               # 5 mil
 MIN_DRILL = 0.20                # smallest via drill
 MIN_ANNULAR = 0.13              # pad radius beyond the drill
 MIN_HOLE_GAP = 0.50             # hole edge to hole edge
+# Board material left between a hole and the board outline.  JLCPCB will
+# fabricate down to about 0.3 mm here, which is why this is not simply the
+# fab limit: 0.3 mm of FR4 beside an M3 screw is what cracks when someone
+# tightens it.  1.0 mm is the mechanical minimum worth shipping, and the
+# generator aims well past it (MOUNT_INSET leaves 1.96 mm).
+MIN_HOLE_EDGE = 1.00
 MIN_SILK_W = 0.15               # printable silkscreen line width
 MIN_SILK_H = 0.80               # legible silkscreen text height
 MIN_EDGE_CU = 0.20              # copper to board outline
@@ -288,11 +294,46 @@ def check_fab(doc):
         note("board exceeds the %.0f x %.0f mm price tier on its long side "
              "(%.1f mm) - still fabricable, just not at the cheapest rate"
              % (PRICE_TIER, PRICE_TIER, max(w, h)))
+    # Handed to check_hole_edges(), which asks the other half of the hole
+    # question: this function checks drills and annular rings, that one
+    # checks the FR4 left around them.
+    return holes
 
 
 # =========================================================================
 #  assembly data
 # =========================================================================
+def check_hole_edges(doc, holes):
+    """Board material between every hole and the board outline.
+
+    Nothing checked this, and the mounting holes sat 0.69 mm from the edge
+    for a long time as a result - inside every fab limit and mechanically
+    wrong.  The DRC in gen_pcb_smd.py checks COPPER against the holes; this
+    is the other side of the same question, the FR4 itself.
+    """
+    # `holes` carries millimetres already (check_fab converts on the way in),
+    # so the BBox has to be converted to match rather than the other way
+    # round - mixing the two units is how a check ends up measuring
+    # something else entirely.
+    bb = doc.get("BBox") or {}
+    x0, y0 = bb.get("x", 0) * MM, bb.get("y", 0) * MM
+    x1 = x0 + bb.get("width", 0) * MM
+    y1 = y0 + bb.get("height", 0) * MM
+    worst = None
+    for hx, hy, drill, what, _net in holes:
+        r = drill / 2.0
+        m = min(hx - x0, x1 - hx, hy - y0, y1 - hy) - r
+        if worst is None or m < worst[0]:
+            worst = (m, what)
+        if m < MIN_HOLE_EDGE:
+            bad("%s leaves %.2f mm of board between it and the outline, "
+                "under the %.2f mm minimum - that corner cracks when the "
+                "screw is tightened" % (what, m, MIN_HOLE_EDGE))
+    if worst:
+        note("closest hole to the board edge: %.2f mm of material (%s)"
+             % worst)
+
+
 def check_assembly(doc):
     if not (os.path.exists(BOM) and os.path.exists(CPL)):
         bad("BOM or CPL missing - run gen_pcb_smd.py without SWEEP=1")
@@ -504,7 +545,7 @@ def main():
         return 2
     doc = json.load(open(PCB))
     check_import(doc)
-    check_fab(doc)
+    check_hole_edges(doc, check_fab(doc))
     check_assembly(doc)
     check_netlist(doc)
     check_docs()

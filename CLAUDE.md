@@ -748,11 +748,15 @@ job: run it with a timeout and don't poll it in a tight loop.
 
 ## Current state / open threads
 
-### Current board: 4 layers, 151.6 x 68.1 mm, two pinned rows, verifies CLEAN
+### Current board: 4 layers, 156.2 x 71.4 mm, two pinned rows, verifies CLEAN
 
-`SEED=5 ROUTE_SEED=1`, 86 footprints, 242 pads, 227 tracks, 154 vias,
-60% utilised. `verify()` passes every check and `validate_fab.py` passes
-offline.
+`SEED=7 ROUTE_SEED=1`, 86 footprints, 242 pads, 217 tracks, 148 vias,
+56% utilised. `verify()` passes every check and `validate_fab.py` passes
+offline, including the LCSC stock query.
+
+It replaced a 151.6 x 68.1 mm board that was 8% smaller and had 0.69 mm of
+FR4 between each M3 hole and the board edge. See "A corner is a wish"
+below for why that trade went the way it did.
 
 **Ground is FANNED OUT, not repaired, and that is the load-bearing change.**
 Every SMD ground pad gets its own via to the plane before a single signal
@@ -791,6 +795,51 @@ it worth taking is that a pour pocket is made by the PLACEMENT and no
 route order touches it, while an unrouted net is exactly what route order
 fixes: the same twelve orders span 2 to 10 problems. It converts a
 stubborn failure into a tractable one.
+
+**A corner is a WISH, not a position - the mounting holes are an output
+now.** They were pinned at a fixed inset from each board corner, and the
+inset was 9 units: 0.69 mm of FR4 between an M3 hole and the board edge.
+That is inside every fab limit JLCPCB publishes (they will route down to
+about 0.3 mm) and mechanically wrong anyway - 0.69 mm is what cracks when
+someone tightens the screw, and a 7 mm washer centred 2.29 mm in overhangs
+the board by 1.2 mm on two sides and cannot sit flat. Exactly the failure
+class `docs/design-review.md` exists for: passes every automated check,
+breaks in the hand.
+
+Raising the inset to 14 units (1.96 mm of material, no washer overhang) is
+one line, and it did not work, for a reason worth keeping. **The corners
+are already spoken for.** The rear row's outermost terminal blocks sit at
+the panel row's outermost x, hard against the same corners, and they are
+PINNED - the placer cannot move them out of the way. Every seed tried came
+back with `J3.2 (GND) is 41.5 mil from the hole` or the same thing at
+`J2.1`, which reads like a routing failure and is nothing of the kind.
+
+So the hole position stops being an input. Each hole starts at its nominal
+corner and takes the nearest position that clears every pad and every
+courtyard, with the board-edge material rule as a floor it may never break.
+Same shape as `pad_plane_via()`: a ladder of real candidates, each tested
+against exact geometry, first one that passes wins, and a loud failure
+rather than a bad hole if none does.
+
+Two details that were wrong on the first attempt:
+
+* **Walking the diagonal is the wrong search.** A hole trapped by the rear
+  row wants to move ALONG the edge, into the gap between two terminal
+  blocks, or straight inward past the row. The diagonal does neither - it
+  slides along the row into the next terminal - and it gave up after 40
+  units on a board with plenty of room. Search the corner REGION, ordered
+  by distance from the nominal position, so the hole moves as little as the
+  geometry allows.
+* **`MIN_HOLE_EDGE` is a MECHANICAL limit, not a fab one.** `validate_fab`
+  now checks it at 1.00 mm, which is deliberately well above what JLCPCB
+  will build. Nothing checked it before, which is how 0.69 mm survived.
+
+Cost, measured: the winning board goes from 151.6 x 68.1 to 156.2 x 71.4,
+8% more area. The seeds that place smaller (`SEED=20` at 146.8 x 66.5) are
+stuck at 5-7 DRC problems across every route order, which is the signature
+of a structural problem no rerouting opens. The board was already past the
+100 mm price tier, so the area costs nothing at the fab and buys a hole you
+can actually screw into.
 
 **The two pinned edge rows cost height - but 2 mm, not 14.** The first
 clean board with the rows in was 84.8 mm tall against 70.4 for the board
@@ -1037,8 +1086,8 @@ The older figures here said 33 s cold / 4.5 s warm and were wrong in both
 directions. Cold was quoted as "placement ~25 s" long after `anneal.c`
 took the anneal to under two seconds - the sentence survived the change it
 described. Warm has genuinely got dearer, from 4.5 s to 7.5 s, and that is
-the ground fanout doing what it was built to do: 154 vias and 227 tracks
-where the board it replaced had fewer of each. Routing is now four fifths
+the ground fanout doing what it was built to do: 148 vias and 217 tracks
+where the board before it had fewer of each. Routing is now four fifths
 of a warm run, so *that* is where the next second lives, not in placement.
 
 (These are *production* numbers on the committed board with a learned route
