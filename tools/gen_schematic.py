@@ -327,7 +327,17 @@ def capacitor(ref, value, x, y, vertical=False, polar=False, label_side=1,
     LIB(x, y, a, sub)
 
 
-def pot(ref, value, x, y, package="POT-ALPHA-16MM"):
+# VR1/VR2 are 9 mm DUAL-gang pots - six terminals in two rows of three on
+# 5.00 mm centres, the RK09K12 / RV09 pattern that tools/gen_pcb_smd.py's
+# fp_pot() draws.  They were inheriting pot()'s default of
+# "POT-ALPHA-16MM", a 16 mm part, which is a different component with a
+# different pin arrangement: the schematic said one thing and the board
+# drew another, and nothing compares the two package strings.  Anyone
+# ordering from the schematic would have bought the wrong pots.
+POT_DUAL = "POT-9MM-DUAL"
+
+
+def pot(ref, value, x, y, package=POT_DUAL):
     """Horizontal potentiometer: 1 = left end, 2 = wiper (below), 3 = right end."""
     a = attrs_of([("package", package), ("nameAlias", "Value"),
                   ("Value", value), ("spicePre", "R"),
@@ -635,7 +645,7 @@ def draw(cfg):
     note(450, 535, "Set Q", anchor="end")
 
     # first integrator U2A
-    pot("VR1A", "20k", 800, 300)
+    pot("VR1A", "20k", 800, 300, package=POT_DUAL)
     w((720, 300), (770, 300))
     w((800, 330), (800, 360), (870, 360), (870, 300))
     w((830, 300), (870, 300))
@@ -653,7 +663,7 @@ def draw(cfg):
     w((1180, 300), (1180, 460), (590, 460))         # BP1 rail back to R4
 
     # second integrator U2B
-    pot("VR1B", "20k", 1250, 300)
+    pot("VR1B", "20k", 1250, 300, package=POT_DUAL)
     w((1180, 300), (1220, 300))
     w((1250, 330), (1250, 360), (1320, 360), (1320, 300))
     w((1280, 300), (1320, 300))
@@ -712,7 +722,7 @@ def draw(cfg):
     gnd(490, 580 + OY)
     note(450, 535 + OY, "Set Q", anchor="end")
 
-    pot("VR2A", "20k", 800, 300 + OY)
+    pot("VR2A", "20k", 800, 300 + OY, package=POT_DUAL)
     w((720, 300 + OY), (770, 300 + OY))
     w((800, 330 + OY), (800, 360 + OY), (870, 360 + OY), (870, 300 + OY))
     w((830, 300 + OY), (870, 300 + OY))
@@ -729,7 +739,7 @@ def draw(cfg):
     w((1130, 300 + OY), (1180, 300 + OY))
     w((1180, 300 + OY), (1180, 460 + OY), (590, 460 + OY))
 
-    pot("VR2B", "20k", 1250, 300 + OY)
+    pot("VR2B", "20k", 1250, 300 + OY, package=POT_DUAL)
     w((1180, 300 + OY), (1220, 300 + OY))
     w((1250, 330 + OY), (1250, 360 + OY), (1320, 360 + OY), (1320, 300 + OY))
     w((1280, 300 + OY), (1320, 300 + OY))

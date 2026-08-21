@@ -39,7 +39,7 @@
   },
   "VR1A": {
    "value": "20k",
-   "package": "POT-ALPHA-16MM"
+   "package": "POT-9MM-DUAL"
   },
   "R7": {
    "value": "4.7k",
@@ -55,7 +55,7 @@
   },
   "VR1B": {
    "value": "20k",
-   "package": "POT-ALPHA-16MM"
+   "package": "POT-9MM-DUAL"
   },
   "R8": {
    "value": "4.7k",
@@ -107,7 +107,7 @@
   },
   "VR2A": {
    "value": "20k",
-   "package": "POT-ALPHA-16MM"
+   "package": "POT-9MM-DUAL"
   },
   "R17": {
    "value": "13k",
@@ -127,7 +127,7 @@
   },
   "VR2B": {
    "value": "20k",
-   "package": "POT-ALPHA-16MM"
+   "package": "POT-9MM-DUAL"
   },
   "R18": {
    "value": "13k",
