@@ -1,0 +1,2 @@
+* J112 corner: Vgs(off) = -1.0 V, Rds(on) = 50 ohm
+.model JFET NJF(Vto=-1 Beta=0.01 Lambda=1e-4 Rd=1 Rs=1 Cgs=7p Cgd=5p Is=1e-14)

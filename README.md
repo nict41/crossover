@@ -114,6 +114,7 @@ docs/        circuit-notes.md      — how the circuit works, design equations
              pcb-notes-smd.md      — the board: layout, routing, verification
              design-review.md      — what could still go wrong
              panel-drilling.md     — GENERATED: front-panel hole positions
+             parts.md              — GENERATED: the BOM, plus what you solder
              subcircuits/          — GENERATED: one diagram per function block
              crossover-ranges.svg  — tuning-range diagram (+ .png)
              netlist.txt           — netlist extracted back out of the drawing
@@ -123,9 +124,13 @@ tools/       gen_schematic.py     — generates the schematics
              gen_range_diagram.py — generates the range diagram
              validate_fab.py      — EasyEDA import + JLCPCB limit checks
              find_board.py        — searches seeds/route orders for a clean board
+             gen_spice.py         — SPICE deck, from the same netlist as the board
+             run_sim.py           — runs the circuit-verification suite
              place.py / anneal.c / canneal.py   — the placement anneal
              router.c / croute.py               — the grid maze router
              geom.c  / cgeom.py                 — the exact-geometry checks
+sim/         GENERATED: the ngspice deck (crossover.net, models.lib,
+             jfet-*.lib). Analysis decks and their results are not committed.
 ```
 
 `place.py`, `router.c` and `geom.c` each have a Python reference
@@ -142,7 +147,14 @@ python3 tools/gen_schematic.py      # schematics, previews, netlists, BOMs
 python3 tools/gen_pcb_smd.py        # SMD board (routed; needs numpy)
 python3 tools/gen_range_diagram.py  # docs/crossover-ranges.svg + .png
 python3 tools/validate_fab.py --online   # EasyEDA import + JLCPCB limits
+python3 tools/gen_spice.py && python3 tools/run_sim.py   # circuit simulation
 ```
+
+`gen_spice.py` builds the ngspice deck from the **same netlist JSON the
+board is built from**, so the thing that gets simulated cannot drift from
+the thing that gets manufactured. `run_sim.py` then measures the crossover
+points, the summed response, the DC at each output terminal, and the mute
+chain. It needs `ngspice` (`apt install ngspice`).
 
 `gen_pcb_smd.py` reads the netlist JSON that `gen_schematic.py` writes, so the
 board cannot drift from the schematic — run them in that order.
@@ -291,7 +303,20 @@ verified layout; see the next list for its limitations.
 ### Of the routed board
 
 * **Nothing here has been built or measured.** It is verified against its own
-  netlist and its own geometry, and that is a different claim.
+  netlist, its own geometry, and — since the simulation work — its own
+  behaviour in ngspice. All three are different claims from "it works on a
+  bench".
+* **The simulation cannot predict THD.** The op-amp is a behavioural
+  macromodel with no device-level nonlinearity, so the distortion floor it
+  reports is a measurement artefact. It is good for topology questions —
+  does a device conduct when it should not, where do the crossover points
+  land, what DC reaches the output — and useless for a distortion figure.
+* **Winding both frequency knobs together collapses the mid band.** The
+  two ranges deliberately do not overlap (73–186 Hz and 195 Hz–1.03 kHz),
+  but they are *adjacent*: set both to the near end and the mid band is
+  9 Hz wide, peaks 11.7 dB down, and the summed response has a 3.6 dB
+  hole. Nothing prevents it and nothing on the panel warns about it —
+  keep the two knobs apart.
 * **Three footprints are hand-drawn and unconfirmed against a datasheet** —
   SOIC-14, the 10 µF electrolytic, and the dual-gang pot body. The pot's
   locating-boss holes are absent rather than guessed: a hole in the wrong

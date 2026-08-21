@@ -93,6 +93,58 @@ the build instead of shipping quietly. If you add a variant-specific feature
 (as the volume pots are), teach `signal_map()` to normalise it rather than
 disabling the check.
 
+## The circuit is simulated, from the same netlist as the board
+
+`tools/gen_spice.py` emits an ngspice deck from
+`docs/netlist-*.json` - the same file `gen_pcb_smd.py` reads. A
+hand-typed SPICE netlist would be exactly the hand-maintained second copy
+this project has already been bitten by twice (the parts table, the
+footprint geometry), so the devices are generated and only the *physics*
+- what an MC33079, a J112 and a 1N4148 do - is written by hand in
+`models.lib`. `tools/run_sim.py` runs the suite and prints the numbers.
+
+**It found a real defect that no geometric check could see**, and it
+changed a part number: see docs/design-review.md §8. Summary - the mute
+JFET's gate rests at the -15 V rail while its drain carries the signal,
+so a negative peak lifts the channel towards the gate. A worst-case J111
+(Vgs(off) = -10 V) stops being off around -5 V peak and reaches 11 % THD,
+*below* the op-amp clipping ceiling. `MMBFJ112` is the same die family in
+the same SOT-23 with the same pinout and is specified -1.0 to -5.0 V, so
+the swap cost **no layout change at all** - same board size, same track
+and via count - and 4 dB of mute depth.
+
+Three modelling traps, all of which looked like circuit faults:
+
+* **`Gname n+ n- VALUE={...}` is PSpice syntax.** ngspice honours it only
+  in compatibility mode, and silently contributes nothing otherwise. Every
+  op-amp output sat at zero and the AC sweep came back flat at 1e-16 in
+  all three bands - which reads as a completely broken circuit. Use `B`
+  sources, which are native.
+* **An output clamp written as `min(max(V(n1), V(vee)+1.5), V(vcc)-1.5)`
+  INVERTS at low supply.** With both rails at 0 the window becomes
+  [+1.5, -1.5] and the expression pins the output at -1.5 V, which put a
+  1.4 V spike on every output during the supply ramp and looked exactly
+  like the muting failing. Scale by the rails instead
+  (`0.9*V(vee)` .. `0.9*V(vcc)`), which cannot invert because
+  `V(vee) <= 0 <= V(vcc)` always.
+* **`alter` on a device silently did nothing** in the form used, so a
+  "settled" measurement was taken 0.4 s into a 2.5 s soft start and
+  reported a 44 dB mute that was really the JFET still half on. Preset the
+  node with `.ic` and *check the node in the output* rather than trusting
+  that the override applied.
+
+**The soft start is 2.5 s, not 10 s**, and hand arithmetic got that wrong:
+`R40` is 1 MΩ into `C16` 10 µF, but while `MUTE_SS` sits above the gates
+all three steering diodes conduct and put `R34`/`R35`/`R36` in parallel
+with it. 1 MΩ ÷ 4 = 250 kΩ. Measured unmute is 0.06-0.9 s.
+
+**What the simulation cannot do**: predict THD. The op-amp is a
+behavioural macromodel with no device-level nonlinearity, so its
+distortion floor is an artefact of the measurement. It is good for
+topology - a device conducting when it should not, where the crossover
+points land, what DC reaches a terminal - and that is what it was used
+for.
+
 ## Two checkers, and why they must not share code
 
 `gen_pcb_smd.verify()` checks the board it just built. `validate_fab.py`

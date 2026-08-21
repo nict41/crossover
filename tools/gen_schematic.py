@@ -958,7 +958,13 @@ def draw(cfg):
                          dy=-10)
                 # The shunt itself, drain on the buffer input, source to
                 # ground, gate on this band's mute line.
-                jfet("Q%d" % (1 + k), "MMBFJ111", bx - 110, oy + 40)
+                # J112 rather than J111: same family, same SOT-23, same
+                # pinout, but specified Vgs(off) -1.0 to -5.0 V instead of
+                # -3.0 to -10.0.  The gate rests at -15 V when unmuted, so
+                # a worst-case J111 stops being off on negative signal
+                # peaks around -5 V and distorts hard.  Simulated, and the
+                # numbers are in tools/gen_pcb_smd.py's LCSC table.
+                jfet("Q%d" % (1 + k), "MMBFJ112", bx - 110, oy + 40)
                 w((bx - 92, oy), (bx - 92, oy - 20))
                 w((bx - 92, oy + 80), (bx - 92, oy + 100))
                 gnd(bx - 92, oy + 100)

@@ -1,0 +1,66 @@
+* Device models for the P148 crossover simulation.
+* Hand-written - this is the physics, not the topology.  Everything else
+* in sim/ comes out of the netlist the board is built from.
+
+* ---------------------------------------------------------------------
+*  MC33079 section.  A behavioural macromodel, not a vendor one: the
+*  parameters below are the datasheet's typical figures, and the point is
+*  to get the things that actually matter for THIS circuit right -
+*  open-loop gain and bandwidth (they set how well the integrators
+*  integrate), slew rate and output clipping (they set what happens at
+*  level), input bias current (it sets the DC offset the output blocking
+*  caps have to deal with).
+*
+*    Aol   110 dB          GBW   16 MHz        SR   7 V/us
+*    Ib    0.4 uA typ      Vos   0.5 mV typ    Rout 37 ohm
+*
+*  gm and C1 set GBW = gm/(2*pi*C1); gm*R1 sets Aol; the limit() on the
+*  transconductor's output current sets the slew rate, SR = Ilim/C1.
+* ---------------------------------------------------------------------
+*  Written with B sources throughout.  `Gname n+ n- VALUE={...}` is
+*  PSpice syntax that ngspice only honours in compatibility mode - without
+*  it the transconductor contributes nothing, every op-amp output sits at
+*  zero, and the AC sweep comes back numerically flat at 1e-16 in all
+*  three bands.  That looks exactly like a broken CIRCUIT and is a broken
+*  MODEL, so: B sources, which are native.
+.subckt OPAMP inp inn out vcc vee
+Rin  inp inn 100meg
+Ibp  inp 0   400n
+Ibn  inn 0   400n
+* gm = 1 mA/V into R1 = 316 Meg  ->  Aol = 110 dB
+* gm / (2*pi*C1) = 16 MHz GBW;  Ilim / C1 = 7 V/us slew
+* Vos folded into the expression rather than a series source, so no node
+* hangs off a single element.
+Bgm  0 n1 I = max(min(1m*(V(inp) + 0.5m - V(inn)), 70u), -70u)
+R1   n1 0 316meg
+C1   n1 0 9.95p
+* Output: unity buffer clamped to 90% of each live rail (about +/-13.5 V
+* on +/-15, which is the datasheet swing), and - importantly for the
+* power-up analysis - a clamp that DEGRADES CORRECTLY as the rails come
+* up.  Written as V(vee)+1.5 / V(vcc)-1.5 it inverts at low supply: with
+* both rails at 0 the window becomes [+1.5, -1.5] and min(max(x,1.5),-1.5)
+* pins the output at -1.5 V, which put a 1.4 V spike on every output
+* during the supply ramp and looked exactly like the muting failing.  It
+* was the model.  Scaling by the rails cannot invert, because
+* V(vee) <= 0 <= V(vcc) always.
+Bo   n2 0 V = min(max(V(n1), 0.9*V(vee)), 0.9*V(vcc))
+Rout n2 out 37
+.ends OPAMP
+
+* ---------------------------------------------------------------------
+*  J111 N-JFET, as a set of datasheet CORNERS rather than one model.
+*  The part is specified Vgs(off) = -3.0 to -10 V and Rds(on) <= 30 ohm,
+*  and that spread is the whole question for a JFET mute: the gate sits at
+*  a fixed -15 V when off, so a part at the -10 V end has far less margin
+*  against signal peaks than one at -3 V.
+*
+*  Beta is chosen per corner to land Rds(on) on the 30 ohm limit:
+*  for small Vds, gds = 2*Beta*|Vto|, so Beta = 1/(2*30*|Vto|).
+*  Ciss ~ 12 pF and Crss ~ 5 pF from the datasheet.
+* ---------------------------------------------------------------------
+.model JFET_M3  NJF(Vto=-3  Beta=5.56m Lambda=1e-4 Rd=1 Rs=1 Cgs=7p Cgd=5p Is=1e-14)
+.model JFET_M5  NJF(Vto=-5  Beta=3.33m Lambda=1e-4 Rd=1 Rs=1 Cgs=7p Cgd=5p Is=1e-14)
+.model JFET_M10 NJF(Vto=-10 Beta=1.67m Lambda=1e-4 Rd=1 Rs=1 Cgs=7p Cgd=5p Is=1e-14)
+
+.model D1N4148 D(Is=2.52n Rs=0.568 N=1.752 Cjo=4p M=0.4 tt=20n Bv=100 Ibv=0.1u)
+.model DLED    D(Is=1e-20 N=1.6 Rs=5)

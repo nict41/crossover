@@ -24,7 +24,7 @@ queries the live number and **fails** if a part no longer resolves.
 | 10uF | C0, C11-C16 | CASE-D5xL5.4 | `C2858858` | extended | 50 240 |
 | 1N4148W | D1-D4 | SOD-123 | `C22374707` | extended | 6 100 |
 | MC33079 | U1-U3 | SOIC-14 | `C9376` | extended | 25 307 |
-| MMBFJ111 | Q1-Q3 | SOT-23 | `C274688` | extended | 8 900 |
+| MMBFJ112 | Q1-Q3 | SOT-23 | `C258195` | extended | 18 545 |
 
 ## Hand-soldered (17 footprints)
 

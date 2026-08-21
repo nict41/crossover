@@ -282,7 +282,27 @@ LCSC = {                              # verified live against the JLCPCB API
     # against 4 per board - fine for a personal build, worth re-checking
     # before a batch, and validate_fab --online prints the live figure.
     "1N4148W": ("C22374707", "SOD-123", "extended", 6100),
-    "MMBFJ111": ("C274688", "SOT-23", "extended", 8900),
+    # J112, not J111 - and the difference is the whole mute design.
+    # Both are the same family in the same SOT-23 with the same pinout, so
+    # this costs no layout change at all.  They differ in how hard they are
+    # to turn OFF: J111 is specified Vgs(off) -3.0 to -10.0 V, J112 -1.0 to
+    # -5.0 V.  The gate sits at the -15 V rail when a band is unmuted and
+    # the drain carries the signal, so a negative signal peak lifts the
+    # channel towards the gate: Vgs(eff) = -15 - Vpeak.  At -5 V peak that
+    # is -10 V, exactly the J111's worst-case turn-off voltage, and a
+    # worst-case part starts conducting on peaks.  SIMULATED, at 5 kHz:
+    #
+    #   HIGH pk    J111 (-10 V corner)    J112 (-5 V corner)
+    #   3.7 V      0.010 %                0.021 %
+    #   4.6 V      2.277 %                0.006 %
+    #   6.4 V      11.245 %               0.004 %
+    #
+    # and it happens BELOW the op-amp clipping ceiling, so the circuit
+    # distorts before it runs out of headroom.  The cost is mute depth,
+    # because J112 allows 50 ohm of Rds(on) against J111's 30: -45.7 dB
+    # instead of -49.9 dB.  Four decibels off an already-modest mute, to
+    # remove an 11 % distortion failure.  See docs/design-review.md.
+    "MMBFJ112": ("C258195", "SOT-23", "extended", 18545),
     "11k":     ("C17429", "0805", "extended", 78383),
     "13k":     ("C2933304", "0805", "extended", 213066),
     "33nF":    ("C569866", "1210", "extended", 2001),
@@ -1000,7 +1020,7 @@ SOIC_SECTIONS = {"U1": U1S, "U2": U2S, "U3": U3S}
 # from the value, because a JFET and a diode are both "not a resistor" and
 # guessing between them by designator prefix is how C0 nearly became an
 # 0805 (see ELECTRO).
-JFETS = sorted(r for r in VALUE if VALUE[r] == "MMBFJ111")
+JFETS = sorted(r for r in VALUE if VALUE[r] == "MMBFJ112")
 DIODES = sorted(r for r in VALUE if VALUE[r] == "1N4148W")
 # The LED loom, and only if the schematic was built with the indicators
 # (MUTE_LEDS=0 drops R37-R39 and J6 and parallels the button's second pole

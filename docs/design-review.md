@@ -300,7 +300,70 @@ interconnect.
 
 ---
 
-## 8. Assembly and mechanical
+## 8. The mute JFET stops being off before the circuit runs out of headroom
+
+**Severity: high. Status: FIXED, by a part change that costs no layout.**
+
+`Q1`-`Q3` shunt each buffer input to ground. When a band is unmuted the
+gate sits at the −15 V rail and the drain carries the signal, so a
+*negative* signal peak lifts the channel towards the gate: the effective
+gate-source voltage is `−15 − Vpeak`. At −5 V peak that is −10 V, which is
+exactly the J111's worst-case Vgs(off) — a part at that end of the spread
+starts conducting on peaks.
+
+Simulated, at 5 kHz, THD at the `HIGH` output with the band unmuted:
+
+| signal at the output | J111, Vgs(off) = −10 V | J112, Vgs(off) = −5 V |
+|---|---|---|
+| 3.7 V pk | 0.016 % | 0.021 % |
+| 4.6 V pk | **2.28 %** | 0.006 % |
+| 5.5 V pk | **7.27 %** | 0.035 % |
+| 6.4 V pk | **11.24 %** | 0.004 % |
+
+The article puts op-amp clipping around 3.5 V RMS ≈ 5 V peak, so **this
+happens below the clipping ceiling**: the circuit would distort before it
+ran out of headroom, and only on some units.
+
+**The fix is `MMBFJ112` in place of `MMBFJ111`.** Same family, same
+SOT-23, same pinout — the board is byte-for-byte the same size with the
+same track and via count. J112 is specified Vgs(off) −1.0 to −5.0 V
+instead of −3.0 to −10.0, so −15 V on the gate holds it off past any
+signal the rails can produce.
+
+It costs mute depth, because J112 allows 50 Ω of Rds(on) against J111's
+30 Ω: **−45.7 dB instead of −49.9 dB**, against `R31`'s 10 kΩ. Four
+decibels off an already-modest mute, to remove an 11 % distortion failure.
+
+Reproduce with `python3 tools/gen_spice.py && python3 tools/run_sim.py`.
+
+## 9. The power-down mute is late, and was described as fast
+
+**Severity: low. Status: documented, not fixed — see below.**
+
+`docs/circuit-notes.md` said `D4` "re-mutes fast when the rails collapse".
+Simulated, it does not: the gate is referenced to the −15 V rail, so it can
+only reach the JFET's turn-on threshold once the rail has already fallen
+that far. Rail voltage at which the mute actually engages:
+
+| corner | mutes at | rail already lost |
+|---|---|---|
+| J111 −10 V | −9.3 V | 38 % |
+| J111 −3 V | −2.0 V | 87 % |
+| J112 −5 V | −3.9 V | 74 % |
+| J112 −1 V | −0.3 V | 98 % |
+
+Both parts are late at their easy-to-pinch corner, so this is not
+something the J112 swap introduced — it is how a rail-referenced gate
+behaves. **The power-up mute is the one that matters and it works**
+(−45.7 dB while the rails settle, releasing after 0.06–0.9 s); the
+power-down protection that actually does the work is the output coupling
+caps, not the JFETs.
+
+Not fixed because fixing it properly means detecting the rail falling —
+a comparator or a supply-sense circuit — which is a new subsystem for a
+transient the coupling caps already block the DC part of.
+
+## 10. Assembly and mechanical
 
 * **`U1`/`U2`/`U3` pin-1 orientation is unverified against JLCPCB's
   convention.** The SOIC-14 is a hand-drawn footprint. Check pin 1 in the

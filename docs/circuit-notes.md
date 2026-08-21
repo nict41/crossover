@@ -132,7 +132,7 @@ it will oscillate into the three sections sharing its supply pins.
 
 | Part | Value | Job |
 |---|---|---|
-| `Q1`, `Q2`, `Q3` | MMBFJ111 JFET | Shunts one buffer input to ground = that band muted |
+| `Q1`, `Q2`, `Q3` | MMBFJ112 JFET | Shunts one buffer input to ground = that band muted |
 | `R31`, `R32`, `R33` | 10 kΩ | Series resistor the JFET shunts against |
 | `R34`, `R35`, `R36` | 1 MΩ | Gate pulldown to −15 V — this is what **un**mutes |
 | `D1`, `D2`, `D3` | 1N4148W | Steering, so one button pulls only its own gate |
@@ -142,14 +142,35 @@ it will oscillate into the three sections sharing its supply pins.
 | `SW1`, `SW2`, `SW3` | PS-22E05 | The mute buttons themselves, on the board in the panel row |
 | `J6` | 4-pin header | Optional LED loom: `LD1`–`LD3` + GND |
 
-A J111 is a **depletion-mode** JFET: it conducts at Vgs = 0. That is the
+A J112 is a **depletion-mode** JFET: it conducts at Vgs = 0. That is the
 whole trick — with the rails still coming up, every gate sits near 0 V and
 every band is muted, for free, with no logic and no relay. `R40`/`C16` then
-walk `MUTE_SS` down to −15 V over about two seconds, the 1 MΩ pulldowns
-pinch the JFETs off, and the outputs come alive after the filter has stopped
-lurching. `D4` does the reverse on the way down: as −15 V collapses it drags
-`MUTE_SS` up and mutes everything while the rails are still falling, which
-is the messier of the two transients.
+walk `MUTE_SS` down to −15 V, the 1 MΩ pulldowns pinch the JFETs off, and
+the outputs come alive after the filter has stopped lurching.
+
+**The soft-start time constant is 2.5 s, not 10 s.** `R40` is 1 MΩ and
+`C16` is 10 µF, which looks like 10 s — but while `MUTE_SS` is above the
+gate voltage all three steering diodes conduct, putting `R34`, `R35` and
+`R36` in parallel with `R40`. 1 MΩ ÷ 4 = 250 kΩ, and 250 kΩ × 10 µF =
+2.5 s. Measured in simulation, the bands come up **0.06 to 0.9 s** after
+power-on depending on where the JFET falls in its Vgs(off) spread.
+
+**Why J112 and not J111.** The gate rests at −15 V when a band is unmuted
+and the drain carries the signal, so a negative signal peak lifts the
+channel towards the gate. A worst-case J111 (Vgs(off) = −10 V) stops being
+off around −5 V peak and distorts hard — 11 % THD at 6.4 V — *below* the
+op-amp clipping ceiling. The J112 is the same die family in the same
+SOT-23 with the same pinout but is specified −1.0 to −5.0 V, so −15 V
+holds it off past anything the rails can produce. See
+[`design-review.md`](design-review.md) §8 for the measured numbers.
+
+`D4` works the other way on the way down: as −15 V collapses it drags
+`MUTE_SS` up with it. **This is not a fast re-mute**, and this file used to
+claim it was. The gate is referenced to the rail, so the mute can only
+engage once the rail has fallen far enough to turn the JFET on — measured,
+that is with 74–98 % of the rail already gone. The power-up mute is the one
+that protects tweeters, and it works; on the way down the output coupling
+caps are what actually block the DC. See `design-review.md` §9.
 
 There are therefore **two independent ways** a band gets muted, and they
 meet at the same gate. The soft start pulls all three gates up together
@@ -229,10 +250,11 @@ divider off −15 V:
 Vg = -15 * Rc / (Rc + 1 MΩ)
 ```
 
-A J111 conducts until Vgs reaches Vgs(off), which is −3 V for the most
-easily pinched device in the spec spread. Solving gives **Rc < 250 kΩ**;
-for a typical −5 V device, **Rc < 500 kΩ**. A wiping contact with a film on
-it measures ohms to kilohms — three to five orders of magnitude of margin.
+A J112 conducts until Vgs reaches Vgs(off), which is −1 V for the most
+easily pinched device in the spec spread. Solving gives **Rc < 71 kΩ**;
+for a typical −3 V device, **Rc < 250 kΩ**. A wiping contact with a film on
+it measures ohms to kilohms — still three to four orders of magnitude of
+margin, though less than the J111 gave.
 The dry circuit is safe *because the load is 1 MΩ*, not because the contact
 is a good one.
 

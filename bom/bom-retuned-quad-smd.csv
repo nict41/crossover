@@ -19,7 +19,7 @@ Qty,Value,Package,Designators,Notes
 3,2.2k,R_AXIAL-0.4,"R37, R38, R39",""
 4,1N4148W,SOD-123,"D1, D2, D3, D4",""
 12,MC33079,SOIC-14,"U1A, U1B, U1C, U1D, U2A, U2B, U2C, U2D, U3A, U3B, U3C, U3D","Quad op-amp packages, each drawn as four sections: U1 = filter 1, U2 = filter 2, U3 = output buffers (U3D spare, terminated). Any standard quad pinout fits: OPA1644, OPA4134, LME49740, TL074 - and a FET-input one removes the bias-current offset R1 develops"
-3,MMBFJ111,SOT-23,"Q1, Q2, Q3",""
+3,MMBFJ112,SOT-23,"Q1, Q2, Q3",""
 3,DPDT LOCK,SW-PS22E05,"SW1, SW2, SW3","G-Switch PS-22E05 (LCSC C2848949) right-angle push-lock DPDT, one per band, in the panel row. Pole A grounds the JFET gate; pole B switches that band's LED feed. Check the frame lugs are isolated from the contacts before ordering - the board grounds them"
 1,IN,TB-2P-5.08,"J2","Signal input"
 1,HIGH,TB-2P-5.08,"J3","Output terminal block to the treble amplifier"
