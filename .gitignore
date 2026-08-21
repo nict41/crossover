@@ -12,3 +12,4 @@ tools/_geom.so
 sim/*.sp
 sim/*.txt
 sim/mkdeck.py
+sim/*.cir

@@ -615,6 +615,29 @@ per package, where the quad genuinely has fewer pins and fewer bypass caps.
   separation between the two crossover points matters, being able to measure
   each one exactly is worth four resistors.
 
+## Setting it up: the mid band is always the quiet one
+
+The MID output is the *product* of filter 1's low-pass and filter 2's
+high-pass, so its peak never quite reaches unity — the two rolloffs
+overlap in the middle. How much you lose depends entirely on how far apart
+you set the two frequency knobs. Simulated band peaks, referred to the
+input:
+
+| knobs | HIGH | MID | LOW | summed ripple |
+|---|---|---|---|---|
+| widest (72 Hz / 1022 Hz) | −0.2 dB | **−1.4 dB** | −0.5 dB | 0.09 dB |
+| middle (105 Hz / 309 Hz) | | **−4.9 dB** | | 0.84 dB |
+| closest (184 Hz / 195 Hz) | | **−11.7 dB** | | 3.61 dB |
+
+That is not a fault and there is nothing to fix: it is what a cascaded
+3-way does, and `VR3`–`VR5` exist to trim the three bands back into
+balance. But it is worth knowing before you decide a driver is faulty,
+and it is the reason to **keep the two frequency knobs well apart**. At
+the closest setting the mid band is 9 Hz wide, nearly 12 dB down, and the
+summed response has a 3.6 dB hole in it.
+
+Reproduce with `python3 tools/gen_spice.py && python3 tools/run_sim.py`.
+
 ## Test points
 
 TP1 and TP2 each sum that filter's high-pass and low-pass outputs through two

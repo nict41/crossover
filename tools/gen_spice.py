@@ -325,10 +325,6 @@ def main():
                         ".model JFET NJF(Vto=%g Beta=%g Lambda=1e-4 Rd=1 "
                         "Rs=1 Cgs=7p Cgd=5p Is=1e-14)\n"
                         % (part.upper(), vto, rds, vto, beta))
-    # Keep the old short names as aliases so existing decks still run.
-    for tag, src in (("m3", "j111-m3"), ("m5", "j111-m5"), ("m10", "j111-m10")):
-        with open(os.path.join(OUT, "jfet-%s.lib" % tag), "w") as f:
-            f.write(open(os.path.join(OUT, "jfet-%s.lib" % src)).read())
     print("wrote sim/crossover.net (%d devices) and sim/models.lib"
           % sum(1 for r in pins if not r.startswith(("J", "TP"))))
 
