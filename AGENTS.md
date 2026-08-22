@@ -11,6 +11,26 @@ board is drawn or typed by hand.
 
 ---
 
+## Rule zero: start on the branch as it actually is
+
+A session's working copy is a **fresh clone at whatever revision the
+session was pinned to**, which can be many commits behind the branch. It
+is not a revert and nothing has been lost — but if you start editing
+without checking, you will silently rebuild work that is already pushed
+and then fight a conflict to land it.
+
+```sh
+git fetch origin claude/variable-crossover-diagram-0nodxz
+git reset --hard origin/claude/variable-crossover-diagram-0nodxz
+git log --oneline -3          # sanity-check against the remote
+```
+
+Do that first, every time, before you read anything or run the gate. If
+`git status` shows generated files dirty at that point, you are on a stale
+tree, not looking at someone's uncommitted work.
+
+---
+
 ## The five rules
 
 **1. Never edit a generated file.** Everything under `schematic/`, `pcb/`,
