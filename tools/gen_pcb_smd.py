@@ -1566,7 +1566,20 @@ def _place_key():
     # changed every placement on the board, and the next run happily
     # reported "reusing the cached layout" and re-routed the old one.  Both
     # placers are hashed because either can be the one in use.
-    for _src in ("place.py", "anneal.c", "canneal.py"):
+    # gen_pcb_smd.py is in here too, and it is not paranoia.  A parallel
+    # batch reported SEED=15 as a 194.6 x 66.5 mm board with 5 DRC
+    # problems; re-run alone with the cache cleared, the identical trial
+    # gives 145.3 x 62.2 mm and 2.  Six cold-cache runs in a row are
+    # byte-identical, so the placer is deterministic and the cache had
+    # served a pose computed by code that no longer existed.  GEOM covers
+    # footprint geometry, but everything else this file decides before the
+    # anneal runs - the pinned rows, the edge margins, the mounting-hole
+    # keepouts, which parts are grouped - was outside the key.
+    #
+    # It costs a re-placement whenever this file is edited.  That is a few
+    # seconds; the alternative is routing a layout from a different
+    # codebase and believing the number.
+    for _src in ("place.py", "anneal.c", "canneal.py", "gen_pcb_smd.py"):
         try:
             with open(os.path.join(HERE, _src), "rb") as _f:
                 h.update(_f.read())

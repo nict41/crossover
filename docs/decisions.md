@@ -309,3 +309,33 @@ calibrated against the old one) and use a full-width seed field — 12
 seeds against the incumbent's 24 is not a fair budget.
 **Touched the placement?** Net zero. `check_all.py` passes with a cold
 cache: `SEED=17`, 149.6 x 63.5 mm, verifies clean.
+
+### 2026-08-23 — a stale placement cache reported a board that did not exist
+**Question:** a parallel route-order batch reported `SEED=15` as
+**194.6 x 66.5 mm with 5 DRC problems** on two of four trials, and
+145.3 x 62.2 mm on the other two. Same seed. Same code. Which is real?
+**Method:** re-ran the two odd trials alone with `.place-cache` cleared,
+and ran six cold-cache placement-only trials of the same seed back to
+back.
+**Result:** the six isolated runs are byte-identical (145.3 x 62.2 every
+time), so the placer is deterministic — this is NOT the set-iteration
+non-determinism this file documents. Re-run with the cache cleared,
+`RS21` gives **145.3 x 62.2 and 2 problems** instead of 194.6 x 66.5 and
+5. The cache had served a pose computed by code that no longer existed,
+and the run printed "reusing the cached layout" and routed it.
+
+The new trigger is worth knowing: **the container image ships a
+`.place-cache` directory** (entries dated days before this session), and
+the repo is re-cloned at a pinned revision on every reprovision, so a
+fresh session can start with a cache full of poses from code that is no
+longer in the tree.
+**Decision:** `_place_key()` now hashes `gen_pcb_smd.py` as well as
+`place.py`, `anneal.c` and `canneal.py`. `GEOM` covered footprint
+geometry, but everything else that file decides before the anneal runs —
+pinned rows, edge margins, mounting-hole keepouts, which parts are
+grouped — was outside the key. Costs a re-placement whenever the file is
+edited, which is a few seconds; the alternative is routing a layout from
+a different codebase and believing the number. Third time a cache has
+served a stale answer here.
+**Touched the placement?** No. `check_all.py` passes with the cache
+cleared: `SEED=17`, 149.6 x 63.5 mm, verifies clean, no drift.
