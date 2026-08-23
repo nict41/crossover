@@ -701,7 +701,7 @@ class Placer:
           off    do nothing
           flip   only the 180-degree turn, in place, two-pad parts only
           nudge  the same turn, but also tried a track pitch away in each
-                 direction (the default - see below)
+                 direction - MEASURED AND REJECTED, see below
           all    every angle the part is allowed, for every ungrouped part
 
         `nudge` exists because of what stops `flip`. Audited on a shipped
@@ -716,6 +716,20 @@ class Placer:
         to the cost model, no change to `anneal.c` and no check weakened,
         is to let the part step aside: a part that cannot turn where it
         stands can very often turn a track pitch to the left.
+
+        It does exactly that, and it routes WORSE. Thirteen seeds, ranking
+        config, against `flip`: 96 problems to 91, better on 3 seeds,
+        worse on 6, tied on 3 - and `SEED=17`, the board this project
+        ships, goes from 2 problems to 5. It accepts 25-98 moves a board
+        where `flip` accepts 5-9, which is the tell: this is no longer a
+        polish, it is a second greedy search over POSITION, and position
+        is what the anneal has already spent 60000 moves on. Turning a
+        part in place is nearly free geometrically and can be taken on the
+        surrogate; moving it is not, and cannot. Sixth time that trade has
+        been lost here.
+
+        So the workaround does not work, and the finding stands: the thing
+        to fix is the courtyard, not the pass that trips over it.
 
         "all" is the obvious generalisation and is NOT the default; which
         one to run is measured, not reasoned about, because the two are not
@@ -755,7 +769,7 @@ class Placer:
         with half-perimeter alone is what picks that up.
 
         Returns how many parts were turned."""
-        mode = mode or os.environ.get("POLISH", "nudge")
+        mode = mode or os.environ.get("POLISH", "flip")
         if mode == "off":
             return 0
         # One track pitch, snapped to the routing grid: the smallest step

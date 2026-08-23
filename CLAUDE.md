@@ -261,6 +261,25 @@ courtyard is asymmetric by about a label's height, and turning the part
 pushes that box into a neighbour. The wire gets shorter and the placement
 becomes illegal.
 
+**The obvious workaround was tried, and it does not work.** If a part
+cannot turn where it stands, let it step aside: `POLISH=nudge` tries the
+same 180 at the current position and one track pitch away in each of the
+eight directions. It accepts far more moves - 25 to 98 a board where
+`flip` accepts 5 to 9 - and routes worse. Thirteen seeds, ranking config:
+
+| POLISH | total DRC | vs `flip` |
+|---|---|---|
+| **`flip`** | **91** | |
+| `nudge` | 96 | better 3, worse 6, tied 3 |
+
+and `SEED=17`, the board this ships, goes from **2 problems to 5**. The
+tell is the move count: that is no longer a polish, it is a second greedy
+search over POSITION, and position is exactly what the anneal has already
+spent 60000 moves on. Turning a part in place is nearly free
+geometrically and can be taken on the surrogate; moving it is not, and
+cannot. Sixth time that trade has been lost here. `nudge` is kept so the
+measurement can be repeated, like `all`.
+
 Whether that is the RIGHT constraint is the open question, and the answer
 is probably not, for the same reason the ground pour had to be taught it:
 **silk over silk is what every board does.** A label may not lie over

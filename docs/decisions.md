@@ -245,3 +245,30 @@ pads and body; a separate cheaper label-over-foreign-PAD term), not to
 drop it. That moves every placement, so it needs its own search round and
 its own A/B. On the task board as the top layout item.
 **Touched the placement?** No.
+
+### 2026-08-23 — POLISH=nudge: move as well as turn. Measured, rejected.
+**Question:** the flip pass is blocked by courtyard overlap on 9 parts
+(previous entry). If a part cannot turn where it stands, can it turn a
+track pitch to the left instead? That needs no cost-model change, no
+`anneal.c` change and no check weakened.
+**Method:** `POLISH=nudge` tries the 180 at the current position and at
+each of the eight neighbours one track pitch away. 13 seeds, ranking
+config, against the `flip` baseline.
+**Result:** it does step aside — 25 to 98 moves accepted a board where
+`flip` accepts 5 to 9 — and it routes worse.
+
+| POLISH | total DRC over seeds 1-12 | |
+|---|---|---|
+| `flip` | **91** | |
+| `nudge` | 96 | better 3, worse 6, tied 3 |
+
+`SEED=17`, the committed board, goes from 2 problems to 5.
+**Decision:** rejected; default stays `flip`. The move count is the tell:
+this is a second greedy search over POSITION, and position is what the
+anneal already spends 60000 moves on. Turning a part in place is nearly
+free geometrically and can be taken on the surrogate; moving it is not.
+Sixth time this trade has been lost here (MOVES, RESTARTS, W_FILL twice,
+POLISH=all, and now this). Mode kept so the measurement can be repeated.
+The finding stands: fix the courtyard, not the pass that trips over it.
+**Touched the placement?** No — default unchanged, so `SEED=17` is
+untouched.
