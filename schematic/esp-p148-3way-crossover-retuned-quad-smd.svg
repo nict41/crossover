@@ -1075,6 +1075,7 @@
 <circle cx="170" cy="1610" r="2.5" fill="#CC0000"/>
 <circle cx="200" cy="280" r="2.5" fill="#CC0000"/>
 <circle cx="200" cy="2240" r="2.5" fill="#CC0000"/>
+<circle cx="220" cy="2240" r="2.5" fill="#CC0000"/>
 <circle cx="240" cy="2240" r="2.5" fill="#CC0000"/>
 <circle cx="250" cy="1350" r="2.5" fill="#CC0000"/>
 <circle cx="350" cy="1350" r="2.5" fill="#CC0000"/>
@@ -1088,6 +1089,7 @@
 <circle cx="530" cy="740" r="2.5" fill="#CC0000"/>
 <circle cx="530" cy="800" r="2.5" fill="#CC0000"/>
 <circle cx="580" cy="2240" r="2.5" fill="#CC0000"/>
+<circle cx="600" cy="2240" r="2.5" fill="#CC0000"/>
 <circle cx="620" cy="2240" r="2.5" fill="#CC0000"/>
 <circle cx="670" cy="1610" r="2.5" fill="#CC0000"/>
 <circle cx="690" cy="1350" r="2.5" fill="#CC0000"/>
@@ -1098,6 +1100,7 @@
 <circle cx="870" cy="300" r="2.5" fill="#CC0000"/>
 <circle cx="870" cy="900" r="2.5" fill="#CC0000"/>
 <circle cx="960" cy="2240" r="2.5" fill="#CC0000"/>
+<circle cx="980" cy="2240" r="2.5" fill="#CC0000"/>
 <circle cx="990" cy="280" r="2.5" fill="#CC0000"/>
 <circle cx="990" cy="880" r="2.5" fill="#CC0000"/>
 <circle cx="1000" cy="1510" r="2.5" fill="#CC0000"/>
@@ -1354,24 +1357,24 @@
 <polyline points="290 2146 340 2146" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="290 2086 328 2086" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="290 2114 328 2114" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="200 2216 200 2240 240 2240 240 2216" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="200 2240 240 2240" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="200 2216 200 2240 220 2240 240 2240 240 2216" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="200 2240 220 2240 240 2240" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="530 2070 490 2070" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="670 2054 720 2054" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="530 2130 490 2130" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="670 2146 720 2146" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="670 2086 708 2086" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="670 2114 708 2114" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="580 2216 580 2240 620 2240 620 2216" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="580 2240 620 2240" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="580 2216 580 2240 600 2240 620 2240 620 2216" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="580 2240 600 2240 620 2240" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="910 2070 870 2070" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1050 2054 1100 2054" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="910 2130 870 2130" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1050 2146 1100 2146" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1050 2086 1088 2086" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1050 2114 1088 2114" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="960 2216 960 2240 1000 2240 1000 2216" stroke="#008800" stroke-width="1" fill="none"/>
-<polyline points="960 2240 1000 2240" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="960 2216 960 2240 980 2240 1000 2240 1000 2216" stroke="#008800" stroke-width="1" fill="none"/>
+<polyline points="960 2240 980 2240 1000 2240" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1420 1520 1480 1520" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1420 1550 1480 1550" stroke="#008800" stroke-width="1" fill="none"/>
 <polyline points="1420 1580 1480 1580" stroke="#008800" stroke-width="1" fill="none"/>

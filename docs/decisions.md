@@ -441,3 +441,40 @@ note with its dimensions. The defect is now measured on every run instead
 of waiting for someone to read a render.
 **Touched the placement?** No — the footprint change was reverted.
 `check_all.py` passes with a cold cache: `SEED=17`, 149.6 x 63.5 mm, clean.
+
+### 2026-08-23 — KiCad export, and the netlist bug it found
+**Question:** deliver the schematic in KiCad (or Altium, or Specctra).
+**Method:** Altium `.SchDoc` is a binary OLE compound document — a poor bet
+without Altium. Specctra `.dsn` is a BOARD format and cannot carry a
+schematic. So KiCad: `tools/gen_kicad.py` reads the geometry
+`gen_schematic.build()` already lays out — every pin in absolute
+coordinates, every wire polyline, every label, every junction — and
+translates it, rather than re-deriving a layout from the netlist.
+Symbols are emitted one per INSTANCE and embedded in the file's own
+`lib_symbols`, so nothing depends on the reader's libraries and no
+rotation or mirroring can go wrong. EasyEDA units are 0.254 mm exactly, so
+everything lands on KiCad's 2.54 mm grid with no rounding; symbol space is
+Y-UP where sheet space is Y-down, which is the classic way a translated
+symbol comes out mirrored.
+
+Checked the way `verify()` checks the board — by measuring the artifact.
+`verify_connectivity()` parses the emitted file back with a real
+S-expression parser, rebuilds connectivity from geometry alone, and
+refuses to write unless the result matches the schematic's own netlist.
+**Result:** on its first run it disagreed, and it was right.
+**Three GND flags were attached to nothing.** `extract_netlist()` looks a
+label up by its exact coordinate in a DSU containing only wire VERTICES
+and pin dots, so a label landing mid-segment joined nothing and named a
+net that did not exist. The three affected are the GND flags on the mute
+switches' mounting lugs, which sit in the middle of the wire linking lug 7
+to lug 8 — so **the six switch mounting lugs shipped as isolated two-pad
+nets (`N200_2216` and friends) instead of ground**, contradicting the
+drawing. Both EasyEDA and KiCad connect a label wherever it lands on a
+wire; this did not.
+**Decision:** fixed at the root — `split_wires()` now promotes net-label
+positions to wire vertices, like pin dots and wire ends. GND goes from 37
+pins to 43, the three orphan nets disappear, 67 nets become 64.
+**Touched the placement?** Yes, the netlist changed — and it came out
+free: **149.6 x 63.5 mm, still verified clean, with LESS copper** (223
+tracks / 158 vias against 228 / 159), because the lugs now reach the pour
+instead of needing three little routed nets.

@@ -93,6 +93,12 @@ def main():
               [sys.executable, "tools/gen_pcb_smd.py"], quiet_ok=False)
     ok &= run("regenerating the SPICE deck",
               [sys.executable, "tools/gen_spice.py"])
+    if not fast:
+        # In the pipeline, not a one-off export: it re-derives the netlist
+        # from the KiCad file it just wrote and fails if that disagrees with
+        # the schematic, so the two can never drift apart unnoticed.
+        ok &= run("regenerating the KiCad schematic",
+                  [sys.executable, "tools/gen_kicad.py"])
     if not ok:
         print("\nA generator failed. Nothing else was checked.")
         return 1

@@ -1238,6 +1238,20 @@ def split_wires():
         marks.add(pts[-1])
     for _, _, x, y in pins:
         marks.add((x, y))
+    # Net labels too.  extract_netlist() joins a label to a net by looking
+    # up its exact coordinate in the DSU, and the DSU only ever contains
+    # wire VERTICES and pin dots - so a label dropped in the middle of a
+    # segment attached to nothing at all and silently named a net that did
+    # not exist.  Both EasyEDA and KiCad connect a label wherever it lands
+    # on a wire, and so should this.
+    #
+    # It cost three nets: the GND flags on the three mute switches' mounting
+    # lugs sit mid-segment on the wire that links lug 7 to lug 8, so the
+    # lugs came out as isolated two-pad nets (N200_2216 and friends) instead
+    # of ground.  Found by writing tools/gen_kicad.py, whose netlist check
+    # disagreed with this one and turned out to be right.
+    for _name, x, y in netlabels:
+        marks.add((x, y))
     for wi, pts in enumerate(wires):
         out = [pts[0]]
         for a, b in zip(pts, pts[1:]):
@@ -1677,16 +1691,25 @@ schdir = os.path.join(root, "schematic")
 docdir = os.path.join(root, "docs")
 
 
-def emit(cfg, primary):
-    """Build one variant and write its schematic, preview, netlist and BOM."""
+def build(cfg):
+    """Draw one variant into the module globals, without writing anything.
+
+    Split out of emit() so another generator can borrow the geometry -
+    every symbol's pins in absolute coordinates, every wire polyline, every
+    net label - instead of re-deriving it from the netlist and hoping the
+    two agree.  tools/gen_kicad.py is the caller."""
     global shapes, pins, netlabels, wires
     shapes, pins, netlabels, wires = [], [], [], []
     PIN_ROLE.clear()
     _next_id[0] = 1
-
     draw(cfg)
     split_wires()
-    junctions = build_junctions()
+    return build_junctions()
+
+
+def emit(cfg, primary):
+    """Build one variant and write its schematic, preview, netlist and BOM."""
+    junctions = build(cfg)
     for jx, jy in junctions:
         shapes.append("J~%s~%s~2.5~#CC0000~%s" % (jx, jy, gid()))
     for pts in wires:
@@ -1901,4 +1924,5 @@ def main():
           "supply wiring checked per package")
 
 
-main()
+if __name__ == "__main__":
+    main()

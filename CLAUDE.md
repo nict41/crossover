@@ -14,13 +14,14 @@
 
 ESP Project 148 3-way state-variable crossover, redrawn as EasyEDA-importable
 schematics plus a fully routed SMD PCB. Everything in `schematic/`, `pcb/`,
-`bom/` and most of `docs/` is **generated** — never hand-edit those; edit the
-generator in `tools/` and re-run it.
+`bom/`, `kicad/`, `sim/` and most of `docs/` is **generated** — never
+hand-edit those; edit the generator in `tools/` and re-run it.
 
 ## Regeneration
 
 ```sh
 python3 tools/gen_schematic.py    # schematics, previews, netlists, BOMs
+python3 tools/gen_kicad.py        # the KiCad schematic (checks itself)
 python3 tools/gen_pcb_smd.py      # SMD board, routed + verified (needs numpy)
 python3 tools/gen_range_diagram.py
 python3 tools/validate_fab.py --online   # EasyEDA import + JLCPCB limits
