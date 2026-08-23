@@ -478,3 +478,28 @@ pins to 43, the three orphan nets disappear, 67 nets become 64.
 free: **149.6 x 63.5 mm, still verified clean, with LESS copper** (223
 tracks / 158 vias against 228 / 159), because the lugs now reach the pour
 instead of needing three little routed nets.
+
+### 2026-08-23 — KiCad routing seed (placed, never wired)
+**Question:** produce a `.kicad_pcb` to feed an external routing AI: our
+board size, edge components placed on the board, everything else outside
+it, and nothing wired.
+**Method:** `tools/gen_kicad_pcb.py` reads the committed `pcb/*.json`
+rather than re-running the board generator, so the export cannot describe
+a board that was never built. The edge rows are read out of
+`gen_pcb_smd.py` with `ast` — `PANEL_ORDER` + `REAR`, without executing
+it — because deriving them geometrically does not work: pot pads sit back
+from the edge their bodies touch, so a "within 4 mm of the edge" test
+returns `C3B` and `R14` and misses every pot.
+**Result:** 149.6 x 63.5 mm outline; 14 edge parts at their committed
+positions (VR1-VR6, SW1-SW3, J1-J5); 72 parts parked on a grid outside;
+64 nets on 242 pads; 4 mounting holes as NPTH so nothing routes through a
+screw. **Zero tracks, zero vias, zero zones** — the ground pour is
+deliberately absent too, since pouring is the router's job here.
+
+Checked by re-reading the emitted file, not by trusting the writer: no
+copper primitives of any kind, footprint and pad counts match the board,
+pad nets identical to the board's, every edge part inside the outline and
+every other part clear of it.
+**Decision:** kept, and wired into `check_all.py` so it cannot drift.
+**Touched the placement?** No — it is a read-only export of the committed
+board.

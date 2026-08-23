@@ -365,9 +365,24 @@ disagree about connectivity. And it checks: after emitting the file it
 parses it back, rebuilds the netlist from the geometry alone, and refuses
 to write anything unless that matches the schematic's own netlist.
 
-Not exported: the PCB. Specctra DSN is a board interchange format and
-could carry the layout if it is ever wanted, but a `.kicad_pcb` would mean
-re-deriving footprints, which the EasyEDA artifact already has.
+`kicad/esp-p148-3way-crossover-retuned-quad-smd.kicad_pcb` — a **routing
+seed**, for handing to an external router or placement tool. It is placed
+but not wired:
+
+* the committed outline at its real size, **149.6 × 63.5 mm**;
+* the **edge components on the board** at their committed positions — the
+  nine front-panel controls and the five rear connectors — because those
+  are mechanical and not a router's to move;
+* **every other part parked outside the outline** on a grid, to be placed;
+* the full netlist on the pads, so there is a ratsnest to work from;
+* the four mounting holes, so nothing routes through a screw;
+* and **no tracks, no vias and no zones** — not even the ground pour this
+  project otherwise treats as load-bearing.
+
+It is read from the committed `pcb/*.json`, so it cannot describe a board
+that was never built, and the emitted file is parsed back and checked
+before it is written: bare of copper, every edge part inside the outline,
+every other part clear of it, pad nets identical to the board's.
 
 ## PCB
 

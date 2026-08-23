@@ -99,6 +99,8 @@ def main():
         # the schematic, so the two can never drift apart unnoticed.
         ok &= run("regenerating the KiCad schematic",
                   [sys.executable, "tools/gen_kicad.py"])
+        ok &= run("regenerating the KiCad routing seed",
+                  [sys.executable, "tools/gen_kicad_pcb.py"])
     if not ok:
         print("\nA generator failed. Nothing else was checked.")
         return 1

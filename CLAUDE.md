@@ -22,6 +22,7 @@ hand-edit those; edit the generator in `tools/` and re-run it.
 ```sh
 python3 tools/gen_schematic.py    # schematics, previews, netlists, BOMs
 python3 tools/gen_kicad.py        # the KiCad schematic (checks itself)
+python3 tools/gen_kicad_pcb.py    # KiCad routing seed: placed, never wired
 python3 tools/gen_pcb_smd.py      # SMD board, routed + verified (needs numpy)
 python3 tools/gen_range_diagram.py
 python3 tools/validate_fab.py --online   # EasyEDA import + JLCPCB limits
