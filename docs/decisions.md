@@ -339,3 +339,34 @@ a different codebase and believing the number. Third time a cache has
 served a stale answer here.
 **Touched the placement?** No. `check_all.py` passes with the cache
 cleared: `SEED=17`, 149.6 x 63.5 mm, verifies clean, no drift.
+
+### 2026-08-23 — correction: the cached-pose diagnosis was not proven
+**Question:** the previous entry blamed a stale `.place-cache` for
+`SEED=15` reporting a 194.6 x 66.5 mm board. Is that actually the
+mechanism?
+**Method:** tried to reproduce it. Also tested a second hypothesis — that
+four concurrent trials race on building `tools/_anneal.so`, and a process
+loading a half-written library falls back to the PYTHON annealer, which
+`CLAUDE.md` says gives a different board for the same seed.
+**Result:** the build race is **disproved**. Four concurrent cold builds
+of the `.so`, same seed, all produced 145.3 x 62.2 and none printed the
+fallback warning. And the key-collision story does not hold up either:
+`_place_key()` hashes the netlist, and the stale entries were written
+against a netlist with 83 parts against today's 86, so their keys cannot
+match.
+
+What survives is one causal observation and no mechanism: clearing
+`.place-cache` changed the SAME trial from 194.6 x 66.5 / 5 problems to
+145.3 x 62.2 / 2, and six isolated cold-cache runs of that seed are
+byte-identical. The offending entry was deleted before it could be
+examined.
+**Decision:** stop guessing at the mechanism and make the failure
+impossible to ship instead. `_cached_pose()` now rejects any cached pose
+whose part set is not exactly this board's, naming what is missing or
+unknown, and recomputes. Tested by planting a doctored entry both ways:
+each is rejected and the correct board is produced. Keeping the
+`gen_pcb_smd.py` addition to the key from the previous entry — it is
+sound hardening — but it should NOT be credited with fixing the observed
+anomaly, because nothing here has established what did.
+**Touched the placement?** No. `check_all.py` passes with the cache
+cleared.

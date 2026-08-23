@@ -1626,7 +1626,25 @@ def _cached_pose():
         d = json.load(open(f))
     except ValueError:
         return None
-    return ({k: tuple(v) for k, v in d["pose"].items()}, d["before"], d["after"])
+    pose = {k: tuple(v) for k, v in d["pose"].items()}
+    # A cached pose is only usable if it places EXACTLY this board's parts.
+    # The key is meant to guarantee that and this is belt-and-braces, but
+    # the belt has failed: a parallel batch reported SEED=15 as a
+    # 194.6 x 66.5 mm board with 5 DRC problems, and the identical trial
+    # re-run with this directory cleared gave 145.3 x 62.2 mm and 2.  The
+    # mechanism was never pinned down - a build race was hypothesised and
+    # disproved by direct test - so the response is a check that does not
+    # depend on knowing it.  A pose that is missing a part silently draws a
+    # smaller board; a pose carrying one that no longer exists draws a
+    # phantom.  Either way the run reports a board nobody can reproduce.
+    if set(pose) != set(ROTS):
+        _missing = sorted(set(ROTS) - set(pose))[:4]
+        _extra = sorted(set(pose) - set(ROTS))[:4]
+        print("  placement: ignoring a cached layout for a different part "
+              "set (missing %s, unknown %s)" % (_missing or "-", _extra or "-"),
+              flush=True)
+        return None
+    return (pose, d["before"], d["after"])
 
 
 def _save_pose(pose, before, after):
