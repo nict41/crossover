@@ -163,3 +163,29 @@ designator, so it is not perfectly geometry-neutral.
 chip's courtyard by half a unit, so the committed `SEED=41` board no
 longer reproduces (157.2 x 74.2 mm instead of 147.3 x 68.3). Board search
 pending; artifacts are stale until it lands.
+
+### 2026-08-23 — flip_pass profiled: 2.53 s -> 0.42 s, output unchanged
+**Question:** is the polish pass implemented efficiently, and should any
+of it be in C?
+**Method:** cProfile around `flip_pass` on a cold placement; then two
+exact changes, each verified by diffing the run output before and after.
+**Result:** 2.53 s, 5.6% of a search trial. 55% of it was `escape_of`,
+called 21228 times — 244 `full_cost` evaluations x 86 parts. Two fixes:
+`full_cost` was being called twice per candidate (once to score, once
+after reverting, purely to restore derived state — now a copy), and
+`escape_of` was 86 numpy calls on 86-element arrays where one (n, n)
+masked reduction does the same arithmetic (`escape_all()`, checked
+against the per-part version over 300 random layouts, worst difference
+1.4e-14).
+
+**2.53 s -> 0.42 s, 6.0x.** Output byte-identical on seeds 1-5 under both
+`POLISH=flip` and `POLISH=all`: same parts turned, same half-perimeter,
+same board.
+**Decision:** kept. **C rejected**: `anneal.c` has the same cost model but
+exports only `anneal`, and its `rot_base` excludes the flip angles, so
+reuse needs a new export plus a `Cfg` change — structural risk in the one
+struct that must stay field-for-field identical, for a term now at 1% of
+a trial. Incremental scoring also rejected: it is not exact, so it would
+change which flips are accepted and invalidate the A/B.
+**Touched the placement?** No — that is the point, and it was checked
+rather than assumed.

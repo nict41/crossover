@@ -552,6 +552,59 @@ class Placer:
             ox, oy = -oy, ox
         return ox, oy
 
+    def escape_all(self):
+        """`escape_of` for every part at once, as one set of array
+        operations rather than n calls.
+
+        Same arithmetic, same answer - checked against the per-part
+        version over random layouts - but the per-part version is the
+        wrong shape for this board.  Each call does about eight numpy
+        operations on 86-element arrays, which at that size is almost
+        entirely call overhead: 35 us to compare a part against its 85
+        neighbours.  A full recompute is 86 of those, and flip_pass() asks
+        for one per candidate pose, so escape was 55% of the polish pass
+        (21228 calls, 1.4 s) before this existed.
+
+        Doing it as an (n, n) masked reduction is one pass over 7396
+        elements instead of 86 passes over 86.  `escape_of` stays as the
+        readable statement of what is being computed, and is still what
+        the incremental path uses for a single part."""
+        x0, y0 = self.BX0[:, None], self.BY0[:, None]
+        x1, y1 = self.BX1[:, None], self.BY1[:, None]
+        # Neighbours that do not overlap this part's span on the
+        # perpendicular axis are not in the way - the same test escape_of()
+        # makes, one row per part instead of one call per part.
+        span_y = (self.BY0[None, :] < y1) & (self.BY1[None, :] > y0)
+        span_x = (self.BX0[None, :] < x1) & (self.BX1[None, :] > x0)
+        eye = np.eye(self.n, dtype=bool)
+        span_y = span_y & ~eye
+        span_x = span_x & ~eye
+        gaps = np.stack([
+            np.min(np.where(span_y & (self.BX1[None, :] <= x0),
+                            x0 - self.BX1[None, :], INF), axis=1),
+            np.min(np.where(span_y & (self.BX0[None, :] >= x1),
+                            self.BX0[None, :] - x1, INF), axis=1),
+            np.min(np.where(span_x & (self.BY1[None, :] <= y0),
+                            y0 - self.BY1[None, :], INF), axis=1),
+            np.min(np.where(span_x & (self.BY0[None, :] >= y1),
+                            self.BY0[None, :] - y1, INF), axis=1),
+        ], axis=1)
+        for fx0, fy0, fx1, fy1 in self.fixed_boxes:
+            ov_y = (fy0 < self.BY1) & (fy1 > self.BY0)
+            ov_x = (fx0 < self.BX1) & (fx1 > self.BX0)
+            np.minimum(gaps[:, 0], np.where(ov_y & (fx1 <= self.BX0),
+                                            self.BX0 - fx1, INF), gaps[:, 0])
+            np.minimum(gaps[:, 1], np.where(ov_y & (fx0 >= self.BX1),
+                                            fx0 - self.BX1, INF), gaps[:, 1])
+            np.minimum(gaps[:, 2], np.where(ov_x & (fy1 <= self.BY0),
+                                            self.BY0 - fy1, INF), gaps[:, 2])
+            np.minimum(gaps[:, 3], np.where(ov_x & (fy0 >= self.BY1),
+                                            fy0 - self.BY1, INF), gaps[:, 3])
+        need = np.array([self.need[i][self.R[i]] for i in range(self.n)])
+        pneed = np.array([self.pneed[i][self.R[i]] for i in range(self.n)])
+        self.esc[:] = (np.maximum(0.0, need - gaps) ** 2).sum(axis=1)
+        self.pesc[:] = (pneed * np.maximum(0.0, PLANE_GAP - gaps) ** 2).sum(axis=1)
+
     # ------------------------------------------------------------------
     def full_cost(self, w):
         """Recompute every term from scratch.  The anneal keeps all of
@@ -561,8 +614,7 @@ class Placer:
         than it is worth).  Calling this periodically is what keeps that
         approximation from accumulating into a cost the layout doesn't
         actually have."""
-        for i in range(self.n):
-            self.esc[i], self.pesc[i] = self.escape_of(i)
+        self.escape_all()
         self.demand[:] = 0.0
         for ni in range(len(self.nets)):
             self._rudy(ni, +1)
@@ -706,6 +758,25 @@ class Placer:
             return 0
         best = self.full_cost(w)
         turned = 0
+
+        # The derived state that goes with `best`, so a rejected candidate
+        # can be put back by copying rather than by recomputing.  Reverting
+        # with a second full_cost() is correct and was exactly half the
+        # pass: 244 calls for 122 candidates, one to score each pose and
+        # one to undo it.  full_cost() is a pure function of the pose, so
+        # the pose plus these four arrays IS its output - restoring them is
+        # not an approximation of the recompute, it is the same answer
+        # without the arithmetic.  `demand` is 90 x 90 doubles, 65 kB, far
+        # below what re-deriving it costs.
+        def _keep():
+            return (self.esc.copy(), self.pesc.copy(),
+                    self.net_hpwl.copy(), self.demand.copy())
+
+        def _put(st):
+            self.esc[:], self.pesc[:] = st[0], st[1]
+            self.net_hpwl[:], self.demand[:] = st[2], st[3]
+
+        state = _keep()
         # To a fixpoint: turning one part changes its neighbours' escape
         # gaps and its nets' boxes, so a move that did not pay before
         # another part moved can pay afterwards.  It terminates because
@@ -720,11 +791,12 @@ class Placer:
                     cost = self.full_cost(w)
                     if cost < best - 1e-9 and self._legal():
                         best = cost
+                        state = _keep()
                         turned += 1
                         any_move = True
                         break
                     self.set_pose(i, x, y, r)
-                    self.full_cost(w)
+                    _put(state)
             if not any_move:
                 return turned
 

@@ -239,6 +239,52 @@ Honest caveat on the winner: **seed 10 went 9 -> 16.** A flip moves the
 designator, so it is not perfectly geometry-neutral after all, and on that
 seed the moved labels cost more than the shortened nets bought.
 
+**And then it was profiled, because "is this efficient" deserves a
+measurement too.** The pass was **2.53 s** of a cold placement - 5.6% of a
+search trial - and the profile said where, which was not where it looked:
+
+| | tottime | calls |
+|---|---|---|
+| `escape_of` | 0.75 s (1.40 s cum) | **21228** |
+| `_ov_parts` / `_ov_fixed` | 0.42 s | 22707 |
+| `_rudy` / `_net_rect` | 0.28 s | 43920 |
+| `full_cost` | - | **244** |
+
+Two exact fixes took it to **0.42 s (6.0x)** with **byte-identical
+output** - same parts turned, same half-perimeter, same board, checked on
+four seeds under both `POLISH` modes:
+
+* **`full_cost` was called twice per candidate**, 244 for 122 candidates:
+  once to score the trial pose and once, after reverting, purely to put
+  the derived arrays back. It is a pure function of the pose, so the pose
+  plus `esc`/`pesc`/`net_hpwl`/`demand` **is** its output - restoring them
+  by copy is the same answer without the arithmetic. `demand` is 90x90
+  doubles, 65 kB.
+* **`escape_of` was the wrong shape.** Each call is ~8 numpy operations on
+  86-element arrays, which at that size is nearly all call overhead - 35 us
+  to compare one part against its 85 neighbours - and a full recompute is
+  86 of them. `escape_all()` does the identical arithmetic as one (n, n)
+  masked reduction: 1.40 s -> 0.057 s, checked against the per-part
+  version over 300 random layouts (worst difference 1.4e-14, one ulp).
+  `escape_of` stays as the readable statement and is still what the
+  incremental path uses for a single part.
+
+**C was considered and is NOT appropriate here.** `anneal.c` already
+carries this exact cost model - `escape_of`, `rudy`, `near_penalty`,
+`score`, `refresh` - but only `anneal` is exported, and `rot_base`
+enumerates only the angles the anneal may use, which deliberately excludes
+the flip angles. Reusing it needs a new export **and** a change to `Cfg`,
+the struct that has to stay field-for-field identical with
+`canneal.Cfg`. That is structural risk in the most fragile shared surface
+in the project, and the Python fixes above got 6x of it for none. The
+option remains if placement ever becomes the bottleneck again.
+
+Also rejected on the same grounds: **incremental scoring**, the way the
+anneal does it. It would be a bigger win and it is not exact - the
+anneal's incremental escape is deliberately approximate - so it would
+change which flips are accepted, which changes the board, which
+invalidates the twelve-seed A/B above. Exact stays exact.
+
 ## Two hand-drawn footprints were wrong, and no checker could have said so
 
 The user supplied datasheets. Two of the five footprints they covered did
