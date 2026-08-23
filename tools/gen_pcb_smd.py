@@ -1591,7 +1591,7 @@ def _place_key():
     # A/B measured 6 moves against 21 on the same seed.  Without this, the
     # second arm of that A/B would have been served the first arm's answer
     # for any seed the first arm had already run.
-    h.update(os.environ.get("POLISH", "flip").encode())
+    h.update(os.environ.get("POLISH", "nudge").encode())
     h.update(repr((MOVES, RESTARTS, PANEL_PITCH, SWITCH_PITCH,
                    sorted(PANEL_X.items()), sorted(PANEL_Y.items()),
                    sorted(REAR_X.items()), sorted(REAR_Y.items()), EDGE,

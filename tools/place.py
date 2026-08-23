@@ -699,8 +699,23 @@ class Placer:
         `mode` (env POLISH, default "flip"):
 
           off    do nothing
-          flip   only the 180-degree turn, and only for two-pad parts
+          flip   only the 180-degree turn, in place, two-pad parts only
+          nudge  the same turn, but also tried a track pitch away in each
+                 direction (the default - see below)
           all    every angle the part is allowed, for every ungrouped part
+
+        `nudge` exists because of what stops `flip`. Audited on a shipped
+        board, 9 of 48 two-pad parts were still the wrong way round, and
+        `ov` - courtyard overlap - blocked every one: `probe()` reads the
+        courtyard off the shapes a footprint emits and a silkscreen TEXT
+        counts as body, so the courtyard is asymmetric by about a label's
+        height and turning the part pushes that box into a neighbour. The
+        right long-term answer is to split the term so a label is priced
+        against foreign COPPER rather than against a neighbour's silk, and
+        that is on the task board. The cheap answer, which needs no change
+        to the cost model, no change to `anneal.c` and no check weakened,
+        is to let the part step aside: a part that cannot turn where it
+        stands can very often turn a track pitch to the left.
 
         "all" is the obvious generalisation and is NOT the default; which
         one to run is measured, not reasoned about, because the two are not
@@ -740,17 +755,29 @@ class Placer:
         with half-perimeter alone is what picks that up.
 
         Returns how many parts were turned."""
-        mode = mode or os.environ.get("POLISH", "flip")
+        mode = mode or os.environ.get("POLISH", "nudge")
         if mode == "off":
             return 0
+        # One track pitch, snapped to the routing grid: the smallest step
+        # that actually buys anything, since anything finer cannot open a
+        # channel a trace could use.  Kept to the eight neighbours rather
+        # than a wider ring - this is a polish, not a second search, and
+        # the anneal has already spent 60000 moves on where parts go.
+        t = _snap(self.track_pitch)
+        steps = ([(0.0, 0.0)] if mode in ("flip", "all") else
+                 [(dx * t, dy * t) for dy in (0, -1, 1) for dx in (0, -1, 1)])
 
         def alternatives(i):
+            """Candidate (dx, dy, rot) poses for part i, current pose first
+            excluded."""
             r = self.R[i]
-            if mode == "flip":
+            if mode == "all":
+                rots = [q for q in self.all_rots[i] if q != r]
+            else:
                 if len(self.padoff[i][r]) != 2:
                     return []
-                return [q for q in [(r + 180) % 360] if q in self.all_rots[i]]
-            return [q for q in self.all_rots[i] if q != r]
+                rots = [q for q in [(r + 180) % 360] if q in self.all_rots[i]]
+            return [(dx, dy, q) for q in rots for dx, dy in steps]
 
         cand = [i for i, p in enumerate(self.parts)
                 if not p.group and alternatives(i)]
@@ -785,9 +812,9 @@ class Placer:
             any_move = False
             for i in cand:
                 x, y = self.X[i], self.Y[i]
-                for q in alternatives(i):
+                for dx, dy, q in alternatives(i):
                     r = self.R[i]
-                    self.set_pose(i, x, y, q)
+                    self.set_pose(i, _snap(x + dx), _snap(y + dy), q)
                     cost = self.full_cost(w)
                     if cost < best - 1e-9 and self._legal():
                         best = cost
