@@ -189,3 +189,29 @@ a trial. Incremental scoring also rejected: it is not exact, so it would
 change which flips are accepted and invalidate the A/B.
 **Touched the placement?** No — that is the point, and it was checked
 rather than assumed.
+
+### 2026-08-23 — new committed board: SEED=17 ROUTE_SEED=0
+**Question:** the silkscreen fix and the flip pass move every placement,
+so the old `SEED=41` board no longer reproduces. What replaces it?
+**Method:** ranked 24 seeds at the committed config (capped router, one
+rip-up round, `ROUTE_SEED=0`), then confirmed the top four uncapped.
+Chunked deliberately — this container is reprovisioned roughly hourly and
+took two long searches with it, so verdicts are flushed per trial.
+**Result:** ranking put `SEED=17` first at 2 problems (next best 3), and
+uncapped it verifies **clean, 0 DRC problems**.
+
+| | old board | new board |
+|---|---|---|
+| seed | `41` / `RS=5` | **`17` / `RS=0`** |
+| size | 147.3 x 68.3 mm | **149.6 x 63.5 mm** |
+| area | 10061 mm2 | **9500 mm2** (-5.6%) |
+| tracks / vias | 238 / 179 | **227 / 159** |
+| utilisation | 57% | 58% |
+
+Wider by 2.3 mm, shallower by 4.8 mm, and 20 fewer vias. Every ranked
+candidate was tagged "unrouted", which is the failure the cap manufactures
+rather than a property of the placements — the usual reminder that the cap
+ranks well and judges badly.
+**Decision:** committed. `SEED`/`ROUTE_SEED` defaults pinned to 17/0.
+**Touched the placement?** It IS the placement. `check_all.py` passes: no
+drift, board verifies, fab limits and BOM clean.

@@ -1128,10 +1128,10 @@ job: run it with a timeout and don't poll it in a tight loop.
 
 ## Current state / open threads
 
-### Current board: 4 layers, 147.3 x 68.3 mm, two pinned rows, verifies CLEAN
+### Current board: 4 layers, 149.6 x 63.5 mm, two pinned rows, verifies CLEAN
 
-`SEED=41 ROUTE_SEED=5`, 86 footprints, 242 pads, 238 tracks, 179 vias,
-57% utilised. `verify()` passes every check and `validate_fab.py` passes
+`SEED=17 ROUTE_SEED=0`, 86 footprints, 242 pads, 227 tracks, 159 vias,
+58% utilised. `verify()` passes every check and `validate_fab.py` passes
 offline, including the LCSC stock query.
 
 It replaced a 151.6 x 68.1 mm board that was 8% smaller and had 0.69 mm of

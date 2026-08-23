@@ -209,7 +209,7 @@ POUR_CLEAR = 1.0
 # `python3 tools/gen_pcb_smd.py` has to rebuild the committed artifacts,
 # so the winning pair are the defaults rather than something you have to
 # know to pass on the command line.
-SEED = int(os.environ.get("SEED", 41))
+SEED = int(os.environ.get("SEED", 17))
 
 # Nets carried by the copper pour instead of by traces.  Ground is one:
 # the board already had a GND pour on both layers, and routing GND as a
@@ -2584,7 +2584,7 @@ def path_clearance_ok(net, via_pts, polys):
 # Worth having because the measured clean rate over placements alone is only
 # a couple of percent - the same layout often routes cleanly under one order
 # and not another, and searching that is far cheaper than searching seeds.
-_ROUTE_SEED = int(os.environ.get("ROUTE_SEED", 5))
+_ROUTE_SEED = int(os.environ.get("ROUTE_SEED", 0))
 _ORDER_JITTER = {}
 if _ROUTE_SEED:
     import random as _r
