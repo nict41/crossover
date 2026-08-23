@@ -370,3 +370,37 @@ sound hardening — but it should NOT be credited with fixing the observed
 anomaly, because nothing here has established what did.
 **Touched the placement?** No. `check_all.py` passes with the cache
 cleared.
+
+### 2026-08-23 — SEED=15 diagnosed and dropped: congestion, not a pocket
+**Question:** `SEED=15` (9038 mm2, 5% smaller than the shipped board) came
+within one net of clean on two independent route orders, both failing on
+`N570_920` with `R13.1` stranded. Is that a structural pocket worth
+opening, or is the placement simply full?
+**Method:** rebuilt `SEED=15 ROUTE_SEED=12` in an isolated copy of the
+tree (so the committed artifacts could not be touched), reproduced the
+failure exactly, and mapped the copper around `R13.1` layer by layer.
+Then compared which nets fail across all 18 route orders.
+**Result:** it is congestion, and the evidence is two-sided.
+
+Locally, `R13.1` is a top-layer SMD pad with **no via within 6.6 mm** in
+any direction. Inside that window the top layer already carries 12 foreign
+track segments and 8 foreign pads, the bottom 6 segments, Inner2 8. Nearest
+foreign copper edge: 1.02 mm right, 2.59 mm down. The router never found
+room to drop a via, and the top-layer channels were spoken for. Its two
+partners are 10.8 mm right (`U2A.3`) and 19.8 mm left (`R14.1`).
+
+Globally — and this is what settles it — **the failing net is different
+almost every time.** Across 18 uncapped route orders the casualties
+include `N570_920`, `N1280_900`, `N2150_1550`, `N530_100`, `N530_700`,
+`N1580_640`, `MID_MUTE`, `LOW_MUTE`, `HIGH_MUTE`, `MUTE_SS`, `MG2` and
+`+15V`. A structural pocket strands the same pad whatever the order; this
+placement is about one net over capacity and route order only chooses
+which net loses.
+
+For scale, it carries slightly MORE copper in less area than the board it
+would replace: 233 tracks / 163 vias against 228 / 159.
+**Decision:** dropped. Making it routable means giving it room, at which
+point it stops being smaller. `SEED=17` at 9500 mm2 verified clean stands
+as the shipped board. The size search is closed at 60 seeds ranked and 18
+uncapped route orders on the best sub-9500 candidate.
+**Touched the placement?** No — the whole diagnosis ran in a scratch copy.

@@ -107,10 +107,16 @@ mechanical drawing. See the top of this file's companion discussion in
   on pads and body, plus a cheaper term for label-over-foreign-PAD. Moves
   every placement, so it needs its own search round and its own A/B.
   Evidence and the per-part cost breakdown are in `CLAUDE.md`.
-* **Try to beat 149.6 × 63.5 mm (9500 mm²).** 36 seeds have been ranked at
-  the committed config; `SEED=17` won at 2 problems and confirms clean.
-  Smaller placements exist but route worse (`SEED=15`, 9038 mm², 9
-  problems). Sweep route orders on the small ones before adding seeds.
+* ~~**Try to beat 149.6 × 63.5 mm (9500 mm²).**~~ **CLOSED — do not
+  re-run this without a new idea.** 60 seeds ranked and 18 uncapped route
+  orders swept on the best sub-9500 candidate. `SEED=15` (9038 mm², 5%
+  smaller) gets within one net twice and was diagnosed: `R13.1` has no via
+  within 6.6 mm and the channels around it are taken, and across the 18
+  orders **twelve different nets** fail — congestion about one net over
+  capacity, not a pocket, so route order only picks the casualty. Giving it
+  room makes it stop being smaller. Note also that the expansion cap is a
+  bad ranker for ROUTE ORDERS (`RS12` scores 11 capped, 2 uncapped) even
+  though it is the best ranker across seeds — sweep orders uncapped.
 * **Reduce the largest empty rectangle** (29 × 28 mm at present, 58 %
   utilisation). Note that `W_FILL` has been measured **twice** and rejected
   both times — read the entry in `CLAUDE.md` before attempting anything
