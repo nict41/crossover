@@ -239,6 +239,41 @@ Honest caveat on the winner: **seed 10 went 9 -> 16.** A flip moves the
 designator, so it is not perfectly geometry-neutral after all, and on that
 seed the moved labels cost more than the shortened nets bought.
 
+**Where the pass stops, and why - the designator is part of the
+courtyard.** Audited on the board this shipped on (`SEED=17`): 9 of the 48
+two-pad parts are STILL the wrong way round, worth 23.5 mm, `C14` among
+them - the very part that started this. That is not the pass failing to
+look. Scoring each rejected flip term by term says the same thing about
+every one of them:
+
+```
+ref      d(total) d(hpwl mm)   terms that moved
+C14        1518.3      -3.05   ov +1741, esc -221, hpwl -2
+D1         9166.4      -3.40   ov +5508, near +3660, hpwl -2
+R32        5864.6      -4.06   ov +5867, hpwl -2
+R8         1956.0      -4.06   ov +1958, hpwl -2
+```
+
+**`ov` blocks all of them.** A flip moves the designator to the other
+side of the part, `probe()` reads the courtyard back off the shapes the
+footprint emitted, and `shape_box()` counts a TEXT as body - so the
+courtyard is asymmetric by about a label's height, and turning the part
+pushes that box into a neighbour. The wire gets shorter and the placement
+becomes illegal.
+
+Whether that is the RIGHT constraint is the open question, and the answer
+is probably not, for the same reason the ground pour had to be taught it:
+**silk over silk is what every board does.** A label may not lie over
+foreign COPPER - that is what makes a pin unroutable, and `verify()`
+already checks it exactly - but a label overlapping a neighbour's silk
+outline or its designator is cosmetic. Pricing it as courtyard overlap
+makes the placer refuse free wirelength to avoid a non-defect. The fix is
+not to drop the check but to split it: courtyard overlap on pads and body,
+and a separate cheaper term for label-over-foreign-PAD. That moves every
+placement, so it needs its own search round and its own A/B - it is
+written up here rather than done in the same breath as the pass that found
+it.
+
 **And then it was profiled, because "is this efficient" deserves a
 measurement too.** The pass was **2.53 s** of a cold placement - 5.6% of a
 search trial - and the profile said where, which was not where it looked:

@@ -215,3 +215,33 @@ ranks well and judges badly.
 **Decision:** committed. `SEED`/`ROUTE_SEED` defaults pinned to 17/0.
 **Touched the placement?** It IS the placement. `check_all.py` passes: no
 drift, board verifies, fab limits and BOM clean.
+
+### 2026-08-23 — why the flip pass stops: the designator is courtyard
+**Question:** the polish ran and the board is clean, so is `C14` — the
+part that started this — now the right way round? No. Why not?
+**Method:** audited every two-pad part on the committed `SEED=17` board,
+then scored each rejected flip term by term.
+**Result:** **9 of 48 two-pad parts are still reversed, worth 23.5 mm**,
+and `ov` blocks every one of them:
+
+```
+ref      d(total) d(hpwl mm)   terms that moved
+C14        1518.3      -3.05   ov +1741, esc -221, hpwl -2
+D1         9166.4      -3.40   ov +5508, near +3660, hpwl -2
+R32        5864.6      -4.06   ov +5867, hpwl -2
+R8         1956.0      -4.06   ov +1958, hpwl -2
+```
+
+`probe()` reads the courtyard off the emitted shapes and `shape_box()`
+counts a silkscreen TEXT as body, so a footprint's courtyard is
+asymmetric by about a label's height. Flipping moves that box to the
+other side and into a neighbour: the wire gets shorter and the placement
+becomes illegal.
+**Decision:** not fixed here, written up instead. The constraint is
+probably wrong — a label may not lie over foreign COPPER, which
+`verify()` already checks exactly, but a label over a neighbour's silk is
+what every board does. The fix is to split the term (courtyard overlap on
+pads and body; a separate cheaper label-over-foreign-PAD term), not to
+drop it. That moves every placement, so it needs its own search round and
+its own A/B. On the task board as the top layout item.
+**Touched the placement?** No.

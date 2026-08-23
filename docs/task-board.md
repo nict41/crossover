@@ -83,11 +83,27 @@ mechanical drawing. See the top of this file's companion discussion in
 * **Move `J6` to a board edge.** The LED loom connector currently sits
   mid-board, so the loom crosses the layout to reach the panel. It is
   anchored to `SW2` by `MUTE_NEAR`. Cost: a re-search.
-* **Try to beat 145.8 × 66.5 mm.** The seed field has produced smaller
-  near-misses (`SEED=39` at 148.3 × 60.7 with 2 unrouted). Sweep route
-  orders on the small ones. Cheap to try, no code change, but it changes
-  the committed board so it serialises.
-* **Reduce the largest empty rectangle** (30 × 27 mm at present, 61 %
+* **Split the courtyard so a designator is not treated as solid.** This
+  is the highest-value layout task on the board right now, and it is
+  measured rather than speculative. `probe()` reads the courtyard off the
+  emitted shapes and `shape_box()` counts a silkscreen TEXT as body, so a
+  part's courtyard is asymmetric by about a label's height. Turning a
+  two-pin part end for end therefore pushes that box into a neighbour, and
+  the overlap term rejects the move. On the committed board **9 of 48
+  two-pad parts are still the wrong way round, worth 23.5 mm of
+  half-perimeter, and every single one is blocked by `ov`** — `C14` by
+  +1741, `R32` by +5867. The constraint is wrong: a label may not lie over
+  foreign COPPER (a pin that cannot escape — `verify()` already checks
+  that exactly), but a label over a neighbour's silk outline is what every
+  board does. Do NOT just drop the check: split it into courtyard overlap
+  on pads and body, plus a cheaper term for label-over-foreign-PAD. Moves
+  every placement, so it needs its own search round and its own A/B.
+  Evidence and the per-part cost breakdown are in `CLAUDE.md`.
+* **Try to beat 149.6 × 63.5 mm (9500 mm²).** 36 seeds have been ranked at
+  the committed config; `SEED=17` won at 2 problems and confirms clean.
+  Smaller placements exist but route worse (`SEED=15`, 9038 mm², 9
+  problems). Sweep route orders on the small ones before adding seeds.
+* **Reduce the largest empty rectangle** (29 × 28 mm at present, 58 %
   utilisation). Note that `W_FILL` has been measured **twice** and rejected
   both times — read the entry in `CLAUDE.md` before attempting anything
   that prices area.
