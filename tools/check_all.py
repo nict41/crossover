@@ -34,7 +34,7 @@ ROOT = os.path.dirname(HERE)
 # change here after a regeneration that you did not intend, either the
 # artifacts were stale or somebody edited one by hand - and the second is
 # the failure this project has been bitten by most.
-GENERATED = ["schematic/", "pcb/", "bom/", "sim/",
+GENERATED = ["schematic/", "pcb/", "bom/", "sim/", "kicad/",
              "docs/parts.md", "docs/panel-drilling.md",
              "docs/subcircuits/images/", "docs/netlist-", "docs/crossover-ranges"]
 

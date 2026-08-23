@@ -503,3 +503,37 @@ every other part clear of it.
 **Decision:** kept, and wired into `check_all.py` so it cannot drift.
 **Touched the placement?** No — it is a read-only export of the committed
 board.
+
+### 2026-08-23 — the KiCad exports were missing components (router import)
+**Question:** imported into a routing tool, which reported `U2`, `U3` "and
+loads of other components" missing. Ours or theirs?
+**Method:** compared the reference designators in the two emitted files.
+**Result:** ours, and two separate bugs.
+
+**1. Multi-unit parts were emitted as separate components.** The schematic
+draws `U1A`..`U1D` and `VR1A`/`VR1B`; the board has one SOIC-14 called
+`U1` and one pot called `VR1`. KiCad ties a symbol to a footprint by
+REFERENCE, so 17 schematic parts had no footprint and 6 footprints
+(`U1`-`U3`, `VR1`, `VR2`, plus the one below) had no symbol. Now emitted
+as proper multi-unit symbols: one `lib_symbol` per physical part with a
+sub-symbol per unit, and instances carrying `(unit N)` and the physical
+reference.
+
+The split cannot be guessed from the name — `C3A`/`C3B` look exactly like
+`U1A`/`U1B` and are two real, separate capacitors — so `unit_map()` asks
+the BOARD which designators physically exist.
+
+**2. `J6` was named `LD1`.** `read_board()` took the first silk text that
+looked like a designator, and `J6`'s footprint prints its pin labels
+`LD1`/`LD2`/`LD3` first. `TEXT~P` is the designator; `TEXT~L` is a plain
+label. So the board carried a part that does not exist and the schematic's
+`J6` had no footprint.
+
+Both files now agree exactly: **86 components each, no schematic part
+without a footprint, no footprint without a symbol.**
+**Decision:** fixed, and the verifier extended - it now maps each unit's
+pins back through the unit map, so a section/part naming mismatch fails
+the build instead of shipping. Also added `kicad/` to `check_all.py`'s
+GENERATED list: it was being classed as SOURCE, so a change there was
+never reported as drift.
+**Touched the placement?** No.

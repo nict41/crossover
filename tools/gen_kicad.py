@@ -138,12 +138,53 @@ def read_symbols():
     return out
 
 
+def board_refs():
+    """Designators of the parts that physically exist, from the PCB artifact.
+
+    The schematic draws U1A..U1D and VR1A/VR1B; the board has one SOIC-14
+    called U1 and one pot called VR1.  KiCad ties a schematic symbol to a
+    footprint by REFERENCE, so emitting the sections as separate components
+    leaves U1..U3 and VR1/VR2 with nothing to match - which is exactly what
+    a router reported as "missing U2, U3 and loads of other components".
+
+    The split cannot be guessed from the name: C3A and C3B look identical
+    to U1A and U1B and are two real, separate capacitors.  So ask the
+    board, which is the authority on what a component is.
+    """
+    import json
+    f = os.path.join(ROOT, "pcb",
+                     "esp-p148-3way-crossover-retuned-quad-smd-pcb.json")
+    refs = set()
+    for sh in json.load(open(f))["shape"]:
+        if not sh.startswith("LIB"):
+            continue
+        for t in sh.split("#@$")[1:]:
+            g = t.split("~")
+            if g[0] == "TEXT" and g[1] == "P" and len(g) > 10:
+                refs.add(g[10].strip())
+    return refs
+
+
+def unit_map(syms):
+    """{schematic ref: (physical ref, unit number)}"""
+    real = board_refs()
+    out = {}
+    for s in syms:
+        r = s["ref"]
+        if r not in real and len(r) > 1 and r[-1].isalpha() and r[:-1] in real:
+            out[r] = (r[:-1], ord(r[-1].upper()) - ord("A") + 1)
+        else:
+            out[r] = (r, 1)
+    return out
+
+
 # --------------------------------------------------------------------------
 #  emit
 # --------------------------------------------------------------------------
 class Sheet(object):
     def __init__(self, syms, wires, labels, junctions):
         self.syms, self.wires = syms, wires
+        self.units = unit_map(syms)
         self.labels, self.junctions = labels, junctions
         xs, ys = [], []
         for s in syms:
@@ -176,62 +217,68 @@ def eff(size=TXT, hide=False, justify=None):
                                                   " (hide yes)" if hide else "")
 
 
-def sym_def(sh, s):
-    """One lib_symbol, in KiCad's Y-up symbol space."""
+def _unit_body(s, name, unit):
+    """Graphics and pins for one unit, in KiCad's Y-up symbol space."""
     ox, oy = s["origin"]
-    name = s["ref"]
 
     def lx(x):
-        return round((x - ox) * U, 4)
+        return num((x - ox) * U)
 
     def ly(y):
-        return round(-(y - oy) * U, 4)
+        return num(-(y - oy) * U)
 
-    L = ['  (symbol "crossover:%s"' % name,
-         '    (exclude_from_sim no) (in_bom yes) (on_board yes)',
-         '    (property "Reference" "%s" (at 0 0 0) %s)' % (name, eff(hide=True)),
-         '    (property "Value" "%s" (at 0 0 0) %s)'
-         % (s["value"].replace('"', "'"), eff(hide=True)),
-         '    (property "Footprint" "%s" (at 0 0 0) %s)'
-         % (s["package"], eff(hide=True)),
-         '    (property "Datasheet" "" (at 0 0 0) %s)' % eff(hide=True),
-         '    (symbol "%s_0_1"' % name]
+    L = ['    (symbol "%s_%d_1"' % (name, unit)]
     for p in s["prims"]:
         if p[0] == "rect":
-            L.append('      (rectangle (start %g %g) (end %g %g) '
+            L.append('      (rectangle (start %s %s) (end %s %s) '
                      '(stroke (width 0) (type default)) (fill (type none)))'
                      % (lx(p[1]), ly(p[2]), lx(p[3]), ly(p[4])))
         else:
-            pts = " ".join("(xy %g %g)" % (lx(x), ly(y)) for x, y in p[1])
+            pts = " ".join("(xy %s %s)" % (lx(x), ly(y)) for x, y in p[1])
             L.append('      (polyline (pts %s) (stroke (width 0) (type default)) '
                      '(fill (type %s)))'
                      % (pts, "outline" if p[0] == "pgon" else "none"))
     for txt, tx, ty, _size, _anch in s["texts"]:
-        L.append('      (text "%s" (at %g %g 0) %s)'
+        L.append('      (text "%s" (at %s %s 0) %s)'
                  % (txt.replace('"', "'"), lx(tx), ly(ty), eff(1.0)))
-    L.append('    )')
-    L.append('    (symbol "%s_1_1"' % name)
-    for num, px, py, path in s["pins"]:
+    for pnum, px, py, path in s["pins"]:
         ex, ey = _pin_path_end(path)
         vx, vy = (ex - px), -(ey - py)               # toward the body, Y-up
         ang = int(round(math.degrees(math.atan2(vy, vx)))) % 360
         ln = round(math.hypot(vx, vy) * U, 4) or 2.54
-        L.append('      (pin passive line (at %g %g %d) (length %g)'
-                 % (lx(px), ly(py), ang, ln))
+        L.append('      (pin passive line (at %s %s %d) (length %s)'
+                 % (lx(px), ly(py), ang, num(ln)))
         L.append('        (name "~" %s) (number "%s" %s)'
-                 % (eff(1.0), num, eff(1.0)))
+                 % (eff(1.0), pnum, eff(1.0)))
         L.append('      )')
-    L += ['    )', '  )']
+    L.append('    )')
     return L
 
 
-def instance(sh, s):
+def sym_def(sh, base, members):
+    """One lib_symbol for a physical part, with a sub-symbol per unit."""
+    first = members[0][1]
+    L = ['  (symbol "crossover:%s"' % base,
+         '    (exclude_from_sim no) (in_bom yes) (on_board yes)',
+         '    (property "Reference" "%s" (at 0 0 0) %s)' % (base, eff(hide=True)),
+         '    (property "Value" "%s" (at 0 0 0) %s)'
+         % (first["value"].replace('"', "'"), eff(hide=True)),
+         '    (property "Footprint" "crossover:%s" (at 0 0 0) %s)'
+         % (first["package"], eff(hide=True)),
+         '    (property "Datasheet" "" (at 0 0 0) %s)' % eff(hide=True)]
+    for unit, s in members:
+        L += _unit_body(s, base, unit)
+    L.append('  )')
+    return L
+
+
+def instance(sh, s, base, unit):
     ox, oy = s["origin"]
-    name, u = s["ref"], uid("inst", s["ref"])
+    name, u = base, uid("inst", s["ref"])
     rt, vt = s["ref_at"], s["val_at"]
     just = {"start": "left", "middle": None, "end": "right"}
-    L = ['  (symbol (lib_id "crossover:%s") (at %g %g 0) (unit 1)'
-         % (name, sh.X(ox), sh.Y(oy)),
+    L = ['  (symbol (lib_id "crossover:%s") (at %s %s 0) (unit %d)'
+         % (name, num(sh.X(ox)), num(sh.Y(oy)), unit),
          '    (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)',
          '    (uuid "%s")' % u,
          '    (property "Reference" "%s" (at %g %g 0) %s)'
@@ -244,10 +291,11 @@ def instance(sh, s):
          % (s["package"], sh.X(ox), sh.Y(oy), eff(hide=True)),
          '    (property "Datasheet" "" (at %g %g 0) %s)'
          % (sh.X(ox), sh.Y(oy), eff(hide=True))]
-    for num, px, py, _p in s["pins"]:
-        L.append('    (pin "%s" (uuid "%s"))' % (num, uid("pin", name, num)))
+    for pnum, px, py, _p in s["pins"]:
+        L.append('    (pin "%s" (uuid "%s"))'
+                 % (pnum, uid("pin", s["ref"], pnum)))
     L += ['    (instances (project "crossover" (path "/%s" '
-          '(reference "%s") (unit 1))))' % (sh.uuid, name),
+          '(reference "%s") (unit %d))))' % (sh.uuid, name, unit),
           '  )']
     return L
 
@@ -260,8 +308,12 @@ def render(sh):
          '  (title_block (title "ESP P148 3-way variable crossover") '
          '(company "generated by tools/gen_kicad.py"))',
          '  (lib_symbols']
+    groups = {}
     for s in sorted(sh.syms, key=lambda q: q["ref"]):
-        L += sym_def(sh, s)
+        base, unit = sh.units[s["ref"]]
+        groups.setdefault(base, []).append((unit, s))
+    for base in sorted(groups):
+        L += sym_def(sh, base, sorted(groups[base]))
     L.append('  )')
     for w in sh.wires:
         for a, b in zip(w, w[1:]):
@@ -277,7 +329,8 @@ def render(sh):
                  % (name, sh.X(x), sh.Y(y),
                     eff(justify="left bottom"), uid("l", name, x, y)))
     for s in sorted(sh.syms, key=lambda q: q["ref"]):
-        L += instance(sh, s)
+        base, unit = sh.units[s["ref"]]
+        L += instance(sh, s, base, unit)
     L.append(')')
     return "\n".join(L) + "\n"
 
@@ -317,7 +370,7 @@ def _at(nd):
     return (float(a[0][1]), float(a[0][2])) if a else None
 
 
-def verify_connectivity(text, expected):
+def verify_connectivity(text, expected, alias=None):
     """Re-derive the netlist from the emitted file and compare.
 
     The whole risk in a format translation is that it LOOKS right and wires
@@ -337,10 +390,10 @@ def verify_connectivity(text, expected):
             name = sy[1].split(":")[-1]
             got = []
             for sub in _kids(sy, "symbol"):
+                u = int(sub[1].rsplit("_", 2)[-2])
                 for pn in _kids(sub, "pin"):
                     xy = _at(pn)
-                    numnd = _kids(pn, "number")
-                    got.append((xy[0], xy[1], numnd[0][1]))
+                    got.append((xy[0], xy[1], _kids(pn, "number")[0][1], u))
             local[name] = got
 
     abspins, insts = [], []
@@ -349,9 +402,12 @@ def verify_connectivity(text, expected):
         if not lib:
             continue
         ref = lib[0][1].split(":")[-1]
+        unit = int(_kids(sy, "unit")[0][1]) if _kids(sy, "unit") else 1
         ix, iy = _at(sy)
         insts.append(ref)
-        for lx, ly, n in local.get(ref, []):
+        for lx, ly, n, u in local.get(ref, []):
+            if u != unit:
+                continue
             abspins.append((ref, n, round(ix + lx, 4), round(iy - ly, 4)))
 
     segs = []
@@ -407,8 +463,19 @@ def verify_connectivity(text, expected):
     for rootk, members in got.items():
         got_nets[name_of.get(rootk, "?%s" % (rootk,))] = frozenset(members)
 
+    # The schematic names a pin by its SECTION (U1C.10); the KiCad file
+    # names it by the physical part and pin number (U1.10), because that is
+    # what a footprint has.  Same pin.  Rename the expected side through the
+    # unit map so the comparison is like for like - connectivity is still
+    # rebuilt from the file's geometry, only the labels are translated.
+    alias = alias or {}
+
+    def canon(m):
+        r, _, n = m.rpartition(".")
+        return "%s.%s" % (alias.get(r, r), n)
+
     problems = []
-    want = {k: frozenset(v) for k, v in expected.items()}
+    want = {k: frozenset(canon(m) for m in v) for k, v in expected.items()}
     if len(abspins) != sum(len(v) for v in want.values()):
         problems.append("recovered %d pins from the file, the schematic has %d"
                         % (len(abspins), sum(len(v) for v in want.values())))
@@ -436,7 +503,8 @@ def main():
     sh = Sheet(syms, gs.wires, gs.netlabels, junctions)
     text = render(sh)
 
-    problems, nnets, npins = verify_connectivity(text, expected)
+    problems, nnets, npins = verify_connectivity(
+        text, expected, {r: b for r, (b, _u) in sh.units.items()})
     if problems:
         raise SystemExit("gen_kicad: the emitted schematic does not match "
                          "the netlist:\n  " + "\n  ".join(problems))

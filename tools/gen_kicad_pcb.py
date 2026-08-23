@@ -84,10 +84,14 @@ def read_board():
             elif f[0] == "TRACK" and f[2] == "3":
                 p = [float(v) for v in f[4].split()]
                 silk.append(list(zip(p[0::2], p[1::2])))
-            elif f[0] == "TEXT" and len(f) > 10 and ref is None:
-                g = f[10].strip()
-                if re.fullmatch(r"[A-Z]{1,3}\d+[A-Z]?", g):
-                    ref = g
+            elif f[0] == "TEXT" and f[1] == "P" and len(f) > 10:
+                # TEXT~P is the DESIGNATOR; TEXT~L is a plain label.  Taking
+                # the first text that merely LOOKS like a designator named
+                # J6 "LD1" after its own first pin label, so the schematic's
+                # J6 had no footprint and the board carried a part that does
+                # not exist.  Found by importing into a router that reported
+                # components missing.
+                ref = f[10].strip()
         if ref and pads:
             parts.append(dict(ref=ref, value=attrs.get("Value", ""),
                               package=attrs.get("package", ""),
