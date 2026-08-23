@@ -90,12 +90,28 @@ class Part:
     """One placeable part: its courtyard and pads at each angle it is
     allowed to take, plus whichever constraints apply to it."""
 
-    def __init__(self, ref, geom, rots, group=None, outward=None):
+    def __init__(self, ref, geom, rots, group=None, outward=None,
+                 flip_rots=()):
         self.ref = ref
         self.rots = list(rots)
+        # Angles the part may END UP at but that the ANNEAL may not
+        # propose.  The two are separate because they answer different
+        # questions.  Whether a two-pin part faces left or right is a real
+        # choice - it decides which of its pads carries which net - but
+        # handing it to the anneal enlarges the search space for every
+        # chip on the board at once, and measured over twelve seeds that
+        # made boards TIGHTER and routing WORSE (mean 12.3 DRC problems
+        # against 7.3), the same trade this project has lost four times
+        # before.  Keeping the angle out of `rots` leaves the anneal's
+        # trajectory bit-for-bit unchanged; flip_pass() then turns the
+        # parts that pay, deterministically, at the end.
+        self.flip_rots = [r for r in flip_rots if r not in self.rots]
         self.geom = geom                   # {rot: probe() result}
         self.group = group                 # rigid group name, or None
         self.outward = outward             # local-frame edge normal, or None
+
+    def all_rots(self):
+        return self.rots + self.flip_rots
 
     def box(self, rot):
         return self.geom[rot]["box"]
@@ -165,10 +181,14 @@ class Placer:
         self.fixed_boxes = list(fixed_boxes)
 
         # --- per-part, per-rotation geometry, flattened for speed --------
+        # What the ANNEAL may propose, against what the layout may HOLD -
+        # see Part.flip_rots.  The geometry tables below cover both, so a
+        # pose flip_pass() picks is as fully modelled as any other.
         self.rot_opts = [p.rots for p in parts]
-        self.boxoff = [{r: p.box(r) for r in p.rots} for p in parts]
+        self.all_rots = [p.all_rots() for p in parts]
+        self.boxoff = [{r: p.box(r) for r in p.all_rots()} for p in parts]
         self.padoff = [{r: [(pd[2], pd[3], pd[4]) for pd in p.pads(r)]
-                        for r in p.rots} for p in parts]
+                        for r in p.all_rots()} for p in parts]
         # Required clear depth beyond each side, from the pad count facing
         # it: k pads breaking out through one face need somewhere for k
         # tracks to run once they turn, which is k track pitches of depth.
@@ -219,7 +239,7 @@ class Placer:
         self.need = []
         for p in parts:
             per = {}
-            for r in p.rots:
+            for r in p.all_rots():
                 out = (_rotate(p.outward, r // 90)
                        if p.outward is not None else None)
                 cnt = _side_counts(p.box(r), p.pads(r), out)
@@ -236,7 +256,7 @@ class Placer:
         self.pneed = []
         for p in parts:
             per = {}
-            for r in p.rots:
+            for r in p.all_rots():
                 out = (_rotate(p.outward, r // 90)
                        if p.outward is not None else None)
                 pl = [pd for pd in p.pads(r) if pd[2] in self.plane_nets]
@@ -620,6 +640,64 @@ class Placer:
             assert self._legal(), "placement search returned an overlapping layout"
             return cost
         return self._anneal_py(moves, w, report)
+
+    def flip_pass(self, w):
+        """Turn two-pad parts end for end wherever it strictly helps.
+
+        A two-pin part at 180 degrees sits in almost the same courtyard it
+        sits in at 0 - only its designator moves to the other side - so the
+        move is nearly free geometrically.  What it changes is which of the
+        part's two pads carries which NET, and where the two neighbours it
+        wires to sit on opposite sides of it, that is the difference
+        between the traces leaving straight out of each end and the traces
+        crossing and wrapping around the body.
+
+        This is a deterministic pass rather than another entry in the
+        anneal's move mix, and the reason is the weights.  Measured on the
+        board this was found on, the whole prize was 30.5 mm of
+        half-perimeter across nine mis-oriented parts; at `hpwl` = 0.15
+        that is about 18 cost units against a total of ~490000 - four
+        thousandths of one percent, well inside the noise of every other
+        term.  A random search cannot be expected to chase a gain that
+        small, and it does not have to: the move is cheap to evaluate,
+        there are only ~60 candidates, and each one either helps or is
+        undone.  Offering 180 to the anneal is what makes the pose legal;
+        this is what actually finds it.
+
+        `near` matters here as much as wirelength, and more sharply: it is
+        quadratic in how far a decoupling cap's pin is from the op-amp pin
+        it decouples, and which END of the cap faces the chip moves that
+        pin by the full pad pitch.  Scoring with the full cost rather than
+        with half-perimeter alone is what picks that up.
+
+        Returns how many parts were turned."""
+        cand = [i for i, p in enumerate(self.parts)
+                if not p.group
+                and len(self.padoff[i][self.R[i]]) == 2
+                and (self.R[i] + 180) % 360 in self.all_rots[i]]
+        if not cand:
+            return 0
+        best = self.full_cost(w)
+        turned = 0
+        # To a fixpoint: turning one part changes its neighbours' escape
+        # gaps and its nets' boxes, so a move that did not pay before
+        # another part moved can pay afterwards.  It terminates because
+        # every accepted move strictly lowers the same total.
+        while True:
+            any_move = False
+            for i in cand:
+                x, y, r = self.X[i], self.Y[i], self.R[i]
+                self.set_pose(i, x, y, (r + 180) % 360)
+                cost = self.full_cost(w)
+                if cost < best - 1e-9 and self._legal():
+                    best = cost
+                    turned += 1
+                    any_move = True
+                else:
+                    self.set_pose(i, x, y, r)
+                    self.full_cost(w)
+            if not any_move:
+                return turned
 
     def _anneal_py(self, moves, w, report=None):
         cost = self.full_cost(w)

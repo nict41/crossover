@@ -550,10 +550,21 @@ def fp_chip(ref, x, y, net_of, value, kind="0805"):
     w, h, off = CHIP_GEOM[kind]
     for i, dx in enumerate((-off, off)):
         pad_rect(ref, i + 1, x + dx, y, net_of(ref, i + 1), w, h)
-    # Below the body, not beside it: the pads escape along +/-X, so keeping
-    # the label out of those two corridors is what matters (same rule that
-    # fixed the SOIC label - see fp_soic14).
-    silk_ref(x - 4, y - h / 2 - 1.5, ref)
+    # Below the pads, not beside them: both pads escape along +/-X, so
+    # keeping the label out of those two corridors is what matters (same
+    # rule that fixed the SOIC label - see fp_soic14).
+    #
+    # Through silk_ref_beside(), because a raw local anchor only holds at
+    # the angles it was eyeballed at.  This was `silk_ref(x - 4, y - h / 2
+    # - 1.5, ref)`, which is fine at 0 and 90 and puts the designator
+    # squarely on top of pad 1 at 180 and 270 - the anchor rotates with the
+    # part while the glyphs stay upright, so the text grows back across the
+    # part it names.  That is the same defect this project has now hit
+    # three times (fp_soic14, J6's pin names, and here), and it is what
+    # made 180/270 look unavailable to the placer: every chip failed the
+    # silk-over-own-pad probe the moment those angles were offered.
+    silk_ref_beside((x - off - w / 2, y - h / 2, x + off + w / 2, y + h / 2),
+                    ref, DESIG_SIZE, (0, -1))
     fp_end(ref, _m, x, y)
     part_record(ref, value, x, y, True, kind)
 
@@ -1236,6 +1247,44 @@ def drawer(ref):
 # up overlapping the pot outlines on the previous board.
 TITLE_REF = "#TITLE"
 
+# A two-pad part at 180 degrees is the SAME SHAPE as at 0 - same courtyard,
+# same box, same escape demand, pads in the same two places - so 180 reads
+# like a wasted search dimension, and for most of this project's life both
+# the chip passives and the electrolytics were given only (0, 90).
+#
+# That is wrong, and the reason is not geometric.  The two pads carry
+# DIFFERENT NETS.  Turning the part end for end moves each net's terminal
+# by the full pad pitch, and where the two neighbours it wires to sit on
+# opposite sides of it, the difference between the two orientations is
+# whether the traces leave straight out of each end or have to cross and
+# wrap around the body to get where they are going.  Half-perimeter is
+# computed from PAD positions (`_net_rect`), so the cost model can see
+# this perfectly well - the option was simply not in `rot_opts` for it to
+# propose.
+#
+# Measured on the board this was found on (SEED=41, 147.3 x 68.3 mm): 9 of
+# the 61 two-pad parts sat the wrong way round, together costing 30.5 mm of
+# half-perimeter - about 1% of the board total, but concentrated, and the
+# two worst were the output DC-blocking caps C14 and C15 at 6.1 mm each.
+# Both had the trace to the part on their RIGHT leaving from their LEFT pad.
+#
+# WHERE to offer it is the part that had to be measured.  Handing 180/270
+# to the anneal for every chip on the board makes boards that are tighter
+# and route worse - twelve seeds, ranking config, mean 12.3 DRC problems
+# against 7.3, with the placements visibly shorter - which is the same
+# trade this project has now lost four times (MOVES, RESTARTS, W_FILL
+# twice).  So the angles go to `flip_rots`: the anneal never proposes them
+# and its trajectory is bit-for-bit what it was, and place.flip_pass()
+# turns the parts that pay once the anneal has finished.
+#
+#   FLIP_ROT=0  (0, 90) and no polish - the behaviour this replaced
+#   FLIP_ROT=1  180/270 in the anneal's own move set
+#   FLIP_ROT=2  180/270 for the polish pass only (default)
+_FLIP_MODE = os.environ.get("FLIP_ROT", "2")
+_TWO_PAD_ROTS = (0, 90, 180, 270) if _FLIP_MODE == "1" else (0, 90)
+_TWO_PAD_FLIP = (180, 270) if _FLIP_MODE == "2" else ()
+FLIP_ROTS = {}
+
 ROTS = {}
 for _r in SOIC_SECTIONS:
     ROTS[_r] = (0, 90, 180, 270)      # which way the 14 pins escape
@@ -1245,7 +1294,8 @@ for _r in TERMS:
     # faces off the back of the board and no other angle is a candidate.
     ROTS[_r] = (0,) if _r in REAR else (0, 90, 180, 270)
 for _r in ELECTRO:
-    ROTS[_r] = (0, 90)
+    ROTS[_r] = _TWO_PAD_ROTS
+    FLIP_ROTS[_r] = _TWO_PAD_FLIP
 for _r in JFETS + DIODES:
     ROTS[_r] = (0, 90, 180, 270)
 for _r in HEADERS:
@@ -1255,9 +1305,11 @@ ROTS[TITLE_REF] = (0,)
 for _r in PANEL:
     ROTS[_r] = (0,)                   # shafts and plungers all face the panel
 for _r in CHIPS:
-    ROTS[_r] = (0, 90)
+    ROTS[_r] = _TWO_PAD_ROTS
+    FLIP_ROTS[_r] = _TWO_PAD_FLIP
 
-GEOM = {ref: {rot: probe(drawer(ref), rot) for rot in rots}
+GEOM = {ref: {rot: probe(drawer(ref), rot)
+              for rot in tuple(rots) + tuple(FLIP_ROTS.get(ref, ()))}
         for ref, rots in ROTS.items()}
 # Every footprint has now been drawn at every angle the placer may pick, so
 # any label-over-own-pad is knowable here, before a single part is placed.
@@ -1294,7 +1346,7 @@ REAR_Y = {r: -170.0 + (_REAR_BACK - GEOM[r][0]["box"][1]) for r in REAR}
 _parts = []
 for _ref, _rots in ROTS.items():
     _parts.append(place.Part(
-        _ref, GEOM[_ref], _rots,
+        _ref, GEOM[_ref], _rots, flip_rots=FLIP_ROTS.get(_ref, ()),
         group=("panel" if _ref in PANEL else
                "rear" if _ref in REAR else None),
         # Screw terminals take wire from off-board, so their entry side has
@@ -1524,6 +1576,15 @@ def _place_key():
     # it here, switching the constraint on silently reuses a layout
     # computed without it.
     h.update(repr(place.PLANE_GAP).encode())
+    # WHICH angles the anneal may propose, and which are left for the
+    # polish pass.  Not implied by anything above: FLIP_ROT=1 and
+    # FLIP_ROT=2 probe the SAME four angles per two-pad part, so GEOM is
+    # byte-identical between them while the two produce different layouts.
+    # Hashing the probe result but not the split is precisely the cache bug
+    # this file has already shipped once.
+    h.update(repr((sorted((k, tuple(v)) for k, v in ROTS.items()),
+                   sorted((k, tuple(v)) for k, v in FLIP_ROTS.items()))
+                  ).encode())
     h.update(repr((MOVES, RESTARTS, PANEL_PITCH, SWITCH_PITCH,
                    sorted(PANEL_X.items()), sorted(PANEL_Y.items()),
                    sorted(REAR_X.items()), sorted(REAR_Y.items()), EDGE,
@@ -1637,6 +1698,17 @@ if _HIT:
 else:
     PLACER.restore(_best[1])
     PLACER.full_cost(WEIGHTS)
+    # Last, and only on the placement that won: turning a two-pin part end
+    # for end costs the anneal nothing it can see (about 18 cost units on
+    # a total near 5e5) and costs the ROUTER a trace that has to cross the
+    # part to reach the neighbour on its other side.  See place.flip_pass().
+    _turned = PLACER.flip_pass(WEIGHTS)
+    if _turned:
+        _hp = float(PLACER.net_hpwl.sum())
+        print("  placement: turned %d two-pin part(s) end for end, "
+              "half-perimeter %.0f -> %.0f mm"
+              % (_turned, _best[2] * 0.254, _hp * 0.254), flush=True)
+        _best = (_best[0], _best[1], _hp)
     AFTER = _best[2]
     POSE = PLACER.result()
     _save_pose(POSE, BEFORE, AFTER)
