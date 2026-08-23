@@ -1585,6 +1585,13 @@ def _place_key():
     h.update(repr((sorted((k, tuple(v)) for k, v in ROTS.items()),
                    sorted((k, tuple(v)) for k, v in FLIP_ROTS.items()))
                   ).encode())
+    # And WHICH polish runs over those angles.  Same trap one level along:
+    # POLISH=flip and POLISH=all read the identical ROTS/FLIP_ROTS split
+    # and the identical place.py, and produce different final poses - the
+    # A/B measured 6 moves against 21 on the same seed.  Without this, the
+    # second arm of that A/B would have been served the first arm's answer
+    # for any seed the first arm had already run.
+    h.update(os.environ.get("POLISH", "flip").encode())
     h.update(repr((MOVES, RESTARTS, PANEL_PITCH, SWITCH_PITCH,
                    sorted(PANEL_X.items()), sorted(PANEL_Y.items()),
                    sorted(REAR_X.items()), sorted(REAR_Y.items()), EDGE,
@@ -1705,7 +1712,7 @@ else:
     _turned = PLACER.flip_pass(WEIGHTS)
     if _turned:
         _hp = float(PLACER.net_hpwl.sum())
-        print("  placement: turned %d two-pin part(s) end for end, "
+        print("  placement: re-angled %d part(s), "
               "half-perimeter %.0f -> %.0f mm"
               % (_turned, _best[2] * 0.254, _hp * 0.254), flush=True)
         _best = (_best[0], _best[1], _hp)

@@ -118,3 +118,48 @@ that priced column AREA, this prices escape depth weighted by pin count.
 board it replaces (2.3 mm narrower, 4.3 mm deeper). `SEED=39 ROUTE_SEED=6`
 is the strictly-no-growth alternative: 145.3 x 65.8 mm, defect-free, high
 -pin gap 2.88 mm, but it trips the wasted-rectangle quality note.
+
+### 2026-08-23 — a two-pin part has two ways round (POLISH / flip_pass)
+**Question:** spotted by eye on the render — `C14`'s trace to `R26`, the
+part immediately to its right, leaves from its LEFT pad, so both its nets
+cross and wrap around the body. Is the placer accounting for this at all?
+**Method:** audited every two-pad part on the committed board, comparing
+each one's nets' half-perimeter against the same part turned end for end.
+Then a paired 3-arm A/B over 12 seeds at the ranking config, and a fourth
+arm for the generalisation.
+**Result:** no, it is not. `ROTS` gave chip passives and electrolytics
+`(0, 90)`, on the reasoning that 180 is the same SHAPE — true, and beside
+the point, because the two pads carry different NETS. **9 of 61 two-pad
+parts sat the wrong way round, together 30.5 mm of half-perimeter**
+(`C14` and `C15` worst at 6.1 mm each).
+
+Two obstacles. `fp_chip` anchored its designator in the local frame, so
+every chip on the board put its label on its own pad 1 at 180/270 and
+failed the footprint probe — third instance of that bug class, now routed
+through `silk_ref_beside()`. And the angles must NOT go to the anneal:
+
+| arm | mean DRC | total |
+|---|---|---|
+| baseline `(0, 90)` | 8.42 | 101 |
+| flip in a polish pass | **7.58** | **91** |
+| flip in the anneal's move set | 9.67 | 116 |
+| `POLISH=all` (every angle, every part) | 9.00 | 108 |
+
+**Decision:** kept as `POLISH=flip` (default), with the angles in
+`Part.flip_rots` so the anneal's trajectory is bit-for-bit unchanged.
+`POLISH=all` measured and rejected — it accepts 21 moves against 6 on
+seed 1 and routes worse than doing nothing, because a 180 on a two-pad
+part changes only which pad carries which net while a 90 on a SOIC
+changes which face has seven pins queuing to get out. `off` and `all`
+kept so the measurement can be repeated.
+
+A deterministic pass is the right shape regardless: `hpwl` is weighted
+0.15 and contributes ~1533 of a ~490000 total, so the whole prize is ~18
+cost units — 0.004%. The anneal is structurally unable to chase it.
+
+Caveat, not glossed: seed 10 went **9 -> 16**. A flip moves the
+designator, so it is not perfectly geometry-neutral.
+**Touched the placement?** Yes, twice over — the silk fix moves every
+chip's courtyard by half a unit, so the committed `SEED=41` board no
+longer reproduces (157.2 x 74.2 mm instead of 147.3 x 68.3). Board search
+pending; artifacts are stale until it lands.

@@ -145,6 +145,100 @@ twice, and "give the busy parts room" worked first time.
 The other half of the idea was already in place: `seed()` has always laid
 parts down in descending pin order, after the pinned edge rows.
 
+## A two-pin part has two ways round, and the search knew about one
+
+Spotted by eye on a board render, which is worth noting on its own: `C14`
+had the trace to `R26` - the part immediately to its RIGHT - leaving from
+its LEFT pad, so both of its nets crossed and wrapped around the body to
+get where they were going.
+
+`ROTS` gave the chip passives and the electrolytics `(0, 90)`. The
+argument was geometric and correct as far as it went: a two-pad part at
+180 degrees is the same shape as at 0, same courtyard, same box, same
+escape demand. The conclusion does not follow, because the two pads carry
+**different nets**. Turning the part end for end moves each net's terminal
+by the full pad pitch, and where the neighbours it wires to sit on
+opposite sides of it, that is the difference between the traces leaving
+straight out of each end and the traces crossing. Half-perimeter is
+computed from PAD positions (`_net_rect`), so the cost model could always
+have seen it - the pose was simply not in `rot_opts` for the anneal to
+propose.
+
+Audited on the board it was found on: **9 of 61 two-pad parts sat the
+wrong way round, together 30.5 mm of half-perimeter**, worst being `C14`
+and `C15` at 6.1 mm each.
+
+**Two things had to be true before it could be fixed, and the second is
+the general lesson.**
+
+**A silkscreen bug was hiding it.** `fp_chip` anchored its designator in
+the local frame - `silk_ref(x - 4, y - h / 2 - 1.5, ref)` - which is fine
+at 0 and 90 and puts the label squarely on pad 1 at 180 and 270, because
+the anchor rotates with the part while the glyphs stay upright. Every
+chip on the board failed the silk-over-own-pad probe the moment those
+angles were offered. Third instance of that bug class here after
+`fp_soic14` and `J6`'s pin names; it now goes through
+`silk_ref_beside()` like the others. **Text anchors rotate; glyphs
+don't** - if a new angle makes a whole class of footprint fail at once,
+suspect the label before the geometry.
+
+**WHERE you offer a move matters as much as whether it exists.** Three
+arms, twelve seeds, ranking config:
+
+| arm | mean DRC | total | vs baseline |
+|---|---|---|---|
+| baseline `(0, 90)` | 8.42 | 101 | - |
+| **flip in a polish pass** | **7.58** | **91** | better 5, worse 2, tied 5 |
+| flip in the anneal's move set | 9.67 | 116 | worse |
+
+Handing the angles to the anneal makes the search space bigger for every
+chip at once, and it spends the freedom on tighter placements that route
+worse - the same trade this project has now lost with `MOVES`, with
+`RESTARTS` and twice with `W_FILL`. So they live in `Part.flip_rots`,
+which the anneal never proposes and which therefore leaves its trajectory
+bit-for-bit unchanged, and `place.flip_pass()` turns the parts that pay
+afterwards. Not uniformly bad, and worth knowing why the mean is the
+right statistic: the anneal arm produced the field's **joint-best single
+board** (seed 9, 3 problems against the baseline's 11) and is simply
+higher variance, but a search that confirms only its top few candidates
+pays for the mean.
+
+**A deterministic pass is the right shape for this anyway.** `hpwl` is
+weighted 0.15 and contributes about **1533 of a ~490000 total** - `near`
+alone is 311143 - so the whole 30.5 mm prize is worth roughly **18 cost
+units, four thousandths of one percent**. A stochastic search cannot be
+expected to chase that and does not have to: there are ~60 candidates,
+each either helps or is undone, and the pass costs ~2 s. Score it on the
+FULL cost, not on wirelength: `near` is quadratic in how far a bypass
+cap's pin is from the op-amp pin it decouples, and which end of the cap
+faces the chip moves that pin by a whole pad pitch.
+
+**`POLISH=all` was the obvious generalisation, and it was measured and
+rejected.** If a part's angle is worth re-checking at the end, why only
+180, and why only two-pad parts? Same twelve seeds:
+
+| POLISH | mean DRC | total | vs `flip` |
+|---|---|---|---|
+| `off` | 8.42 | 101 | |
+| **`flip`** | **7.58** | **91** | |
+| `all` | 9.00 | 108 | better 1, worse 6, tied 5 |
+
+`all` accepts far more moves - 21 against 6 on seed 1 - and routes worse
+than doing nothing at all. The reason is that the two moves are not the
+same kind of move, and the distinction is worth keeping: **a 180 on a
+two-pad part changes only which pad carries which net**, leaving
+courtyard, escape demand and congestion footprint identical, so it is
+close to pure routing benefit. **A 90 on a SOIC changes which of its
+faces has seven pins queuing to get out**, which is the single thing this
+board's routability is most sensitive to. Greedy hill-climbing on the
+surrogate is fine for the first and is just surrogate-fitting for the
+second. The mode is kept so the measurement can be repeated, not because
+it should be used.
+
+Honest caveat on the winner: **seed 10 went 9 -> 16.** A flip moves the
+designator, so it is not perfectly geometry-neutral after all, and on that
+seed the moved labels cost more than the shortened nets bought.
+
 ## Two hand-drawn footprints were wrong, and no checker could have said so
 
 The user supplied datasheets. Two of the five footprints they covered did
