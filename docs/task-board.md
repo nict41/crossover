@@ -83,9 +83,17 @@ mechanical drawing. See the top of this file's companion discussion in
 * **Move `J6` to a board edge.** The LED loom connector currently sits
   mid-board, so the loom crosses the layout to reach the panel. It is
   anchored to `SW2` by `MUTE_NEAR`. Cost: a re-search.
-* **Split the courtyard so a designator is not treated as solid.** This
-  is the highest-value layout task on the board right now, and it is
-  measured rather than speculative. `probe()` reads the courtyard off the
+* **Retry the courtyard split, with the two things the first attempt
+  could not afford.** BUILT AND REVERTED once already — see
+  `docs/decisions.md` and `CLAUDE.md`. `git revert 131a7ea` brings the
+  whole implementation back (probe, Placer, `anneal.c` `hbox`, `verify()`,
+  cache key), so do NOT re-derive it. It is correct and it lost: the freed
+  space goes into a smaller board that will not route, and its only clean
+  board was 13% bigger than the incumbent. What was NOT tried, and must be
+  before it is judged again: a `W_H` re-tune (400 was calibrated against
+  the old courtyard, and the two are coupled) and a full-width seed field
+  (12 seeds against the incumbent's 24 is not a fair budget). Background
+  on why it matters: `probe()` reads the courtyard off the
   emitted shapes and `shape_box()` counts a silkscreen TEXT as body, so a
   part's courtyard is asymmetric by about a label's height. Turning a
   two-pin part end for end therefore pushes that box into a neighbour, and

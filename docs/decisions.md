@@ -272,3 +272,40 @@ POLISH=all, and now this). Mode kept so the measurement can be repeated.
 The finding stands: fix the courtyard, not the pass that trips over it.
 **Touched the placement?** No — default unchanged, so `SEED=17` is
 untouched.
+
+### 2026-08-23 — the courtyard fix: correct, measured, reverted
+**Question:** the overlap term treats a designator as solid, which blocked
+9 of 48 two-pad parts from turning the right way round. Fix it so a label
+blocks copper rather than another label.
+**Method:** priced overlap as part i's FULL extent against part j's HARD
+box (pads and body, no silk text), both ways round — which needs no new
+term and forbids exactly the right things. Implemented in `probe()`,
+`Placer`, `anneal.c` (`Cfg` verified by compiling it and comparing
+`sizeof` and every offset against `ctypes`: 344 bytes both sides) and
+`verify()`. 12 seeds at the ranking config in two size-weight settings,
+then uncapped confirms on the smallest candidates.
+**Result:** it works as intended — `silk ... sits over` never fired,
+`flip_pass` went from 5-9 moves to up to 24 — and it loses.
+
+| arm | total DRC | mean area |
+|---|---|---|
+| baseline (full-against-full, `W_H=400`) | **91** | 10465 mm2 |
+| courtyard fix, `W_H=400` | 115 | 10212 mm2 |
+| courtyard fix, `W_H=150` | 84 | 11079 mm2 |
+
+At `W_H=400` the freed space goes straight into a smaller board —
+`SEED=12` at **8384 mm2**, 12% under the shipped board — and uncapped
+none of the small ones route (`+15V`, `N1400_900`, `HIGH_VOL`/`MG2` each
+left in two pieces). Its only clean board is 10706 mm2, 13% bigger than
+the incumbent. At `W_H=150` it wins on count and pays 6% more area, best
+candidate 10461 mm2.
+**Decision:** reverted. A board search ships the smallest CLEAN board, not
+a mean, and on that metric the correct model loses in every configuration
+while the incorrect one holds 9500 mm2 verified clean. Being right about
+the geometry does not entitle a change to ship. Done as a clean revert of
+one self-contained commit (131a7ea) so retrying it is a `git revert` away.
+If retried: re-tune `W_H` (it is coupled to the courtyard and was
+calibrated against the old one) and use a full-width seed field — 12
+seeds against the incumbent's 24 is not a fair budget.
+**Touched the placement?** Net zero. `check_all.py` passes with a cold
+cache: `SEED=17`, 149.6 x 63.5 mm, verifies clean.

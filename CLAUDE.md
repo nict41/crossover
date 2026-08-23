@@ -280,18 +280,56 @@ geometrically and can be taken on the surrogate; moving it is not, and
 cannot. Sixth time that trade has been lost here. `nudge` is kept so the
 measurement can be repeated, like `all`.
 
-Whether that is the RIGHT constraint is the open question, and the answer
-is probably not, for the same reason the ground pour had to be taught it:
-**silk over silk is what every board does.** A label may not lie over
-foreign COPPER - that is what makes a pin unroutable, and `verify()`
-already checks it exactly - but a label overlapping a neighbour's silk
-outline or its designator is cosmetic. Pricing it as courtyard overlap
-makes the placer refuse free wirelength to avoid a non-defect. The fix is
-not to drop the check but to split it: courtyard overlap on pads and body,
-and a separate cheaper term for label-over-foreign-PAD. That moves every
-placement, so it needs its own search round and its own A/B - it is
-written up here rather than done in the same breath as the pass that found
-it.
+**It was built, measured in three configurations, and REVERTED - and it
+is the most interesting negative result in this file, because the change
+is CORRECT.** "A label blocks copper, not another label" has an exact
+geometric form and needs no new cost term: price overlap as part i's FULL
+extent against part j's HARD box (pads and body, no text), both ways
+round, never full against full. That one rule says all of it - two bodies
+may not share a place (hard-against-hard sits inside both halves), a label
+may not land on a neighbour's PAD (a pad is inside that neighbour's hard
+box), and a label MAY cross a neighbour's silk. `escape_of` deliberately
+keeps the full box, because a label really does obstruct a TRACE.
+
+Implemented end to end: `probe()` derives the hard box, `Placer` carries
+`HX0..HY1`, `anneal.c` mirrors it with an `hbox` array (`Cfg` checked by
+compiling it and reading `sizeof` and every offset back against
+`ctypes` - 344 bytes both sides, `hbox` at 40), `verify()` asks the same
+question, and the cache key hashes the new box. It works: `silk ... sits
+over` never fired on any board, and `flip_pass` went from 5-9 moves to
+up to 24.
+
+And it loses. Twelve seeds, ranking config:
+
+| arm | total DRC | mean area |
+|---|---|---|
+| **baseline (full-against-full, `W_H=400`)** | **91** | 10465 mm2 |
+| courtyard fix, `W_H=400` | 115 | 10212 mm2 |
+| courtyard fix, `W_H=150` | **84** | 11079 mm2 |
+
+Read the areas, not the counts. At `W_H=400` the fix does exactly what it
+should - parts stop shoving each other apart over labels that were never
+in the way - and the anneal spends every bit of that on a smaller board:
+`SEED=12` came out at **8384 mm2**, 12% under the shipped board. Uncapped,
+none of the small ones route: seed 12 leaves `+15V` in two pieces, seed 10
+`N1400_900`, seed 6 `HIGH_VOL` and `MG2`. The only clean board it found is
+10706 mm2, 13% BIGGER than the one it would replace. At `W_H=150` it beats
+the baseline on count - and buys that with 6% more area, its best
+candidate at 10461 mm2, still 10% over.
+
+**The metric a board search ships is the smallest CLEAN board, not a mean.**
+On that metric the correct model loses in every configuration tried, and
+the incorrect one holds 9500 mm2 verified clean. Seventh time freeing the
+surrogate produced worse routing here - and the first time the thing being
+freed was genuinely wrong. Being right about the geometry does not entitle
+a change to ship.
+
+Reverted, and deliberately as a clean `git revert` of one self-contained
+commit so re-doing it is a revert away rather than a re-derivation. If it
+is retried, the two things this round could not afford are the ones to
+fix: a proper `W_H` re-tune (the fix and the size weight are coupled, and
+400 was calibrated against the old courtyard), and a full-width seed field
+- 12 seeds against the 24 the incumbent had is not a fair search budget.
 
 **And then it was profiled, because "is this efficient" deserves a
 measurement too.** The pass was **2.53 s** of a cold placement - 5.6% of a

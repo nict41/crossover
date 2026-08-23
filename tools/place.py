@@ -116,12 +116,6 @@ class Part:
     def box(self, rot):
         return self.geom[rot]["box"]
 
-    def hard(self, rot):
-        """What the part physically occupies: pads and body, no
-        silkscreen text.  `box` is the same thing plus the labels, which
-        obstruct a TRACE but do not stop another part being there."""
-        return self.geom[rot].get("hard", self.geom[rot]["box"])
-
     def pads(self, rot):
         return self.geom[rot]["pads"]
 
@@ -193,7 +187,6 @@ class Placer:
         self.rot_opts = [p.rots for p in parts]
         self.all_rots = [p.all_rots() for p in parts]
         self.boxoff = [{r: p.box(r) for r in p.all_rots()} for p in parts]
-        self.hardoff = [{r: p.hard(r) for r in p.all_rots()} for p in parts]
         self.padoff = [{r: [(pd[2], pd[3], pd[4]) for pd in p.pads(r)]
                         for r in p.all_rots()} for p in parts]
         # Required clear depth beyond each side, from the pad count facing
@@ -319,11 +312,6 @@ class Placer:
         self.BY0 = np.zeros(self.n)
         self.BX1 = np.zeros(self.n)
         self.BY1 = np.zeros(self.n)
-        # The hard box, kept in step with the full one by _sync_box().
-        self.HX0 = np.zeros(self.n)
-        self.HY0 = np.zeros(self.n)
-        self.HX1 = np.zeros(self.n)
-        self.HY1 = np.zeros(self.n)
         self.esc = np.zeros(self.n)
         self.pesc = np.zeros(self.n)
         self.net_hpwl = np.zeros(len(self.nets))
@@ -340,9 +328,6 @@ class Placer:
     # state maintenance
     # ------------------------------------------------------------------
     def _sync_box(self, i):
-        hx0, hy0, hx1, hy1 = self.hardoff[i][self.R[i]]
-        self.HX0[i], self.HY0[i] = self.X[i] + hx0, self.Y[i] + hy0
-        self.HX1[i], self.HY1[i] = self.X[i] + hx1, self.Y[i] + hy1
         dx0, dy0, dx1, dy1 = self.boxoff[i][self.R[i]]
         self.BX0[i], self.BY0[i] = self.X[i] + dx0, self.Y[i] + dy0
         self.BX1[i], self.BY1[i] = self.X[i] + dx1, self.Y[i] + dy1
@@ -359,45 +344,17 @@ class Placer:
     # cost terms
     # ------------------------------------------------------------------
     def _ov_parts(self, i):
-        """Overlap between part i and every other part - FULL box against
-        HARD box, both ways round, never full against full.
-
-        The distinction is the whole point.  A part's full box includes its
-        designator; its hard box is pads and body only.  Two parts may not
-        occupy the same place, and a label may not lie over a neighbour's
-        COPPER (that is a pin that cannot escape, and silkscreen keeps
-        traces out) - but a label lying across a neighbour's silk outline,
-        or across its designator, is what every board does.
-
-        Pricing it full-against-full forbids that harmless case, and it
-        cost this board real layout: nine of forty-eight two-pad parts
-        could not be turned the right way round because turning one moves
-        its label to the other side and into a neighbour's LABEL.  Same
-        lesson the ground pour had to be taught - silk keeps a trace out
-        and has no business keeping anything else out.
-
-        Symmetric by construction, so overlap_of(i) is still the exact
-        delta when i alone moves, and hard-against-hard - two bodies on top
-        of each other - is counted by both halves and can never be missed.
-        """
-        w1 = np.minimum(self.HX1, self.BX1[i]) - np.maximum(self.HX0, self.BX0[i])
-        h1 = np.minimum(self.HY1, self.BY1[i]) - np.maximum(self.HY0, self.BY0[i])
-        w2 = np.minimum(self.BX1, self.HX1[i]) - np.maximum(self.BX0, self.HX0[i])
-        h2 = np.minimum(self.BY1, self.HY1[i]) - np.maximum(self.BY0, self.HY0[i])
-        for a in (w1, h1, w2, h2):
-            np.maximum(a, 0.0, out=a)
-        self_pair = 2.0 * ((self.HX1[i] - self.HX0[i])
-                           * (self.HY1[i] - self.HY0[i]))
-        return float(np.dot(w1, h1)) + float(np.dot(w2, h2)) - self_pair
+        w = np.minimum(self.BX1, self.BX1[i]) - np.maximum(self.BX0, self.BX0[i])
+        h = np.minimum(self.BY1, self.BY1[i]) - np.maximum(self.BY0, self.BY0[i])
+        np.maximum(w, 0.0, out=w)
+        np.maximum(h, 0.0, out=h)
+        return float(np.dot(w, h)) - (self.BX1[i] - self.BX0[i]) * (self.BY1[i] - self.BY0[i])
 
     def _ov_fixed(self, i):
-        """Against the immovable keepouts - the mounting holes - on the
-        HARD box.  A hole has to be clear of copper and of the part body;
-        a designator printed across one is cosmetic."""
         a = 0.0
         for fx0, fy0, fx1, fy1 in self.fixed_boxes:
-            ow = min(fx1, self.HX1[i]) - max(fx0, self.HX0[i])
-            oh = min(fy1, self.HY1[i]) - max(fy0, self.HY0[i])
+            ow = min(fx1, self.BX1[i]) - max(fx0, self.BX0[i])
+            oh = min(fy1, self.BY1[i]) - max(fy0, self.BY0[i])
             if ow > 0 and oh > 0:
                 a += ow * oh
         return a

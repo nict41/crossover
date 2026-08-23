@@ -250,8 +250,6 @@ def gid():
 
 
 shapes, pads, placed = [], [], []
-# (ref, full courtyard box, hard box) - see verify()'s courtyard check.
-placed_hard = []
 REPORT = []            # 'note:' lines under the board line
 
 
@@ -955,14 +953,7 @@ def probe(draw, rot):
     finally:
         xf_pop()
     my_shapes, my_pads = shapes[m_sh:], [dict(p) for p in pads[m_pd:]]
-    _bx = [(sh, shape_box(sh)) for sh in my_shapes]
-    boxes = [b for _sh, b in _bx if b]
-    # The same shapes minus the silkscreen TEXT.  Two boxes, because the
-    # footprint answers two different questions and they are not the same
-    # question: what does this part physically OCCUPY (nothing else may be
-    # there at all), and what does it obstruct (a trace may not run under
-    # a label either).  See Placer._ov_parts.
-    _hard = [b for sh, b in _bx if b and text_bbox(sh) is None]
+    boxes = [b for b in (shape_box(s) for s in my_shapes) if b]
     del shapes[m_sh:]
     del pads[m_pd:]
     del FP_SPANS[m_sp:]
@@ -995,13 +986,7 @@ def probe(draw, rot):
     y0 = min(b[2] for b in boxes) - CLEAR
     x1 = max(b[3] for b in boxes) + CLEAR
     y1 = max(b[4] for b in boxes) + CLEAR
-    # A footprint that is nothing BUT text - the title block - has no hard
-    # extent at all, and giving it an empty one would let parts sit on top
-    # of it.  It keeps the full box, which is what it had before.
-    _h = _hard or boxes
-    hard = (min(b[1] for b in _h) - CLEAR, min(b[2] for b in _h) - CLEAR,
-            max(b[3] for b in _h) + CLEAR, max(b[4] for b in _h) + CLEAR)
-    return dict(box=(x0, y0, x1, y1), hard=hard, body=body,
+    return dict(box=(x0, y0, x1, y1), body=body,
                 pads=[(p["ref"], p["num"], p["net"], p["x"], p["y"],
                        p["w"], p["h"]) for p in my_pads])
 
@@ -1570,7 +1555,7 @@ def _place_key():
     # unchanged while every term that consumes it moves.  That is the
     # same failure as hashing the weights but not the cost function -
     # already in this file's history once - one level further down.
-    h.update(repr([(r, sorted((rot, g["box"], g["hard"], g["body"], g["pads"])
+    h.update(repr([(r, sorted((rot, g["box"], g["body"], g["pads"])
                               for rot, g in sorted(gg.items())))
                    for r, gg in sorted(GEOM.items())]).encode())
     h.update(repr(sorted(netdoc["nets"].items())).encode())
@@ -1777,10 +1762,6 @@ for _ref in sorted(POSE):
     placed.append((_x + EDGE_X + _b[0], _y + EDGE + _b[1],
                    _x + EDGE_X + _b[2], _y + EDGE + _b[3]))
     PLACED_BOX[_ref] = placed[-1]
-    _hb = GEOM[_ref][_rot]["hard"]
-    placed_hard.append((_ref, placed[-1],
-                        (_x + EDGE_X + _hb[0], _y + EDGE + _hb[1],
-                         _x + EDGE_X + _hb[2], _y + EDGE + _hb[3])))
 
 
 # ---- mounting holes: a corner is a WISH, not a position ------------------
@@ -4300,21 +4281,12 @@ def verify():
     #    copper clearance only catches it if their pads happen to collide too.
     #    A rotation or slot change that looks fine electrically can still put
     #    two parts on top of each other visually/mechanically without this.
-    #
-    #    Asked the same way the placer asks it, and NOT as box-against-box:
-    #    a part's full extent includes its designator, and a designator
-    #    lying across a neighbour's silk outline is what every board does.
-    #    What must not happen is a part's extent - label included - landing
-    #    on another part's HARD geometry, its pads and body.  Full-against-
-    #    hard says exactly that; full-against-full also forbids the
-    #    harmless case, and forbidding it cost this board nine parts that
-    #    could not turn round.  The silk-over-copper check above is the
-    #    other half of the same rule and is unchanged.
-    for i, (ra, a, ha) in enumerate(placed_hard):
-        for rb, b, hb in placed_hard[i + 1:]:
-            if boxes_overlap(a, hb) or boxes_overlap(ha, b):
+    for i, a in enumerate(placed):
+        for b in placed[i + 1:]:
+            if boxes_overlap(a, b):
                 problems.append("footprint courtyards overlap: %s / %s"
-                                % (ra, rb))
+                                % (tuple(round(v, 1) for v in a),
+                                   tuple(round(v, 1) for v in b)))
     return problems
 
 
