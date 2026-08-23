@@ -641,8 +641,25 @@ class Placer:
             return cost
         return self._anneal_py(moves, w, report)
 
-    def flip_pass(self, w):
-        """Turn two-pad parts end for end wherever it strictly helps.
+    def flip_pass(self, w, mode=None):
+        """Re-angle parts in place wherever it strictly helps.
+
+        `mode` (env POLISH, default "flip"):
+
+          off    do nothing
+          flip   only the 180-degree turn, and only for two-pad parts
+          all    every angle the part is allowed, for every ungrouped part
+
+        "all" is the obvious generalisation and is NOT the default; which
+        one to run is measured, not reasoned about, because the two are not
+        the same kind of move.  A two-pad part at 180 degrees keeps its
+        courtyard and its escape demand and changes only which of its pads
+        carries which net, so the move is almost pure routing benefit.
+        Turning a SOIC 90 degrees changes which of its faces has seven pins
+        queuing to get out - the single thing this board's routability is
+        most sensitive to - and a greedy pass over the SURROGATE is exactly
+        the procedure that has produced worse boards here four times.  See
+        the A/B in CLAUDE.md for which one won.
 
         A two-pin part at 180 degrees sits in almost the same courtyard it
         sits in at 0 - only its designator moves to the other side - so the
@@ -671,10 +688,20 @@ class Placer:
         with half-perimeter alone is what picks that up.
 
         Returns how many parts were turned."""
+        mode = mode or os.environ.get("POLISH", "flip")
+        if mode == "off":
+            return 0
+
+        def alternatives(i):
+            r = self.R[i]
+            if mode == "flip":
+                if len(self.padoff[i][r]) != 2:
+                    return []
+                return [q for q in [(r + 180) % 360] if q in self.all_rots[i]]
+            return [q for q in self.all_rots[i] if q != r]
+
         cand = [i for i, p in enumerate(self.parts)
-                if not p.group
-                and len(self.padoff[i][self.R[i]]) == 2
-                and (self.R[i] + 180) % 360 in self.all_rots[i]]
+                if not p.group and alternatives(i)]
         if not cand:
             return 0
         best = self.full_cost(w)
@@ -686,14 +713,16 @@ class Placer:
         while True:
             any_move = False
             for i in cand:
-                x, y, r = self.X[i], self.Y[i], self.R[i]
-                self.set_pose(i, x, y, (r + 180) % 360)
-                cost = self.full_cost(w)
-                if cost < best - 1e-9 and self._legal():
-                    best = cost
-                    turned += 1
-                    any_move = True
-                else:
+                x, y = self.X[i], self.Y[i]
+                for q in alternatives(i):
+                    r = self.R[i]
+                    self.set_pose(i, x, y, q)
+                    cost = self.full_cost(w)
+                    if cost < best - 1e-9 and self._legal():
+                        best = cost
+                        turned += 1
+                        any_move = True
+                        break
                     self.set_pose(i, x, y, r)
                     self.full_cost(w)
             if not any_move:
