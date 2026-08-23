@@ -29,7 +29,8 @@
 typedef struct {
     int n, nr, nnets, nfixed, nnear, ngroups;
     const int *rot_base;        /* n+1 : first (part,rot) slot of each part */
-    const double *box;          /* nr*4 */
+    const double *box;          /* nr*4 : full extent, labels included */
+    const double *hbox;         /* nr*4 : pads and body only, no silk text */
     const double *need;         /* nr*4 */
     const double *pneed;        /* nr*4 : plane-net pads per side */
     const int *pad_base;        /* nr+1 */
@@ -54,6 +55,7 @@ typedef struct {
     double *X, *Y;
     int *R;                     /* index of the chosen slot within the part */
     double *BX0, *BY0, *BX1, *BY1;
+    double *HX0, *HY0, *HX1, *HY1;
     double *esc, *pesc, *nethp, *demand;
     double ov;
 } St;
@@ -82,17 +84,32 @@ static void sync_box(const Cfg *c, St *s, int i) {
     s->BY0[i] = s->Y[i] + c->box[pr * 4 + 1];
     s->BX1[i] = s->X[i] + c->box[pr * 4 + 2];
     s->BY1[i] = s->Y[i] + c->box[pr * 4 + 3];
+    s->HX0[i] = s->X[i] + c->hbox[pr * 4 + 0];
+    s->HY0[i] = s->Y[i] + c->hbox[pr * 4 + 1];
+    s->HX1[i] = s->X[i] + c->hbox[pr * 4 + 2];
+    s->HY1[i] = s->Y[i] + c->hbox[pr * 4 + 3];
 }
 
+/* FULL box against HARD box, both ways round - never full against full.
+   A label may not lie over a neighbour's copper or body, but a label
+   across a neighbour's silk is what every board does.  Mirrors
+   Placer._ov_parts(); the reasoning is written out there. */
 static double ov_parts(const Cfg *c, const St *s, int i) {
-    double a = 0.0, x0 = s->BX0[i], y0 = s->BY0[i], x1 = s->BX1[i], y1 = s->BY1[i];
+    double a = 0.0;
+    double fx0 = s->BX0[i], fy0 = s->BY0[i], fx1 = s->BX1[i], fy1 = s->BY1[i];
+    double hx0 = s->HX0[i], hy0 = s->HY0[i], hx1 = s->HX1[i], hy1 = s->HY1[i];
     for (int j = 0; j < c->n; j++) {
         if (j == i) continue;
-        double w = (s->BX1[j] < x1 ? s->BX1[j] : x1) - (s->BX0[j] > x0 ? s->BX0[j] : x0);
-        if (w <= 0) continue;
-        double h = (s->BY1[j] < y1 ? s->BY1[j] : y1) - (s->BY0[j] > y0 ? s->BY0[j] : y0);
-        if (h <= 0) continue;
-        a += w * h;
+        double w = (s->HX1[j] < fx1 ? s->HX1[j] : fx1) - (s->HX0[j] > fx0 ? s->HX0[j] : fx0);
+        if (w > 0) {
+            double h = (s->HY1[j] < fy1 ? s->HY1[j] : fy1) - (s->HY0[j] > fy0 ? s->HY0[j] : fy0);
+            if (h > 0) a += w * h;
+        }
+        w = (s->BX1[j] < hx1 ? s->BX1[j] : hx1) - (s->BX0[j] > hx0 ? s->BX0[j] : hx0);
+        if (w > 0) {
+            double h = (s->BY1[j] < hy1 ? s->BY1[j] : hy1) - (s->BY0[j] > hy0 ? s->BY0[j] : hy0);
+            if (h > 0) a += w * h;
+        }
     }
     return a;
 }
@@ -101,8 +118,8 @@ static double ov_fixed(const Cfg *c, const St *s, int i) {
     double a = 0.0;
     for (int k = 0; k < c->nfixed; k++) {
         const double *f = c->fixed + k * 4;
-        double w = (f[2] < s->BX1[i] ? f[2] : s->BX1[i]) - (f[0] > s->BX0[i] ? f[0] : s->BX0[i]);
-        double h = (f[3] < s->BY1[i] ? f[3] : s->BY1[i]) - (f[1] > s->BY0[i] ? f[1] : s->BY0[i]);
+        double w = (f[2] < s->HX1[i] ? f[2] : s->HX1[i]) - (f[0] > s->HX0[i] ? f[0] : s->HX0[i]);
+        double h = (f[3] < s->HY1[i] ? f[3] : s->HY1[i]) - (f[1] > s->HY0[i] ? f[1] : s->HY0[i]);
         if (w > 0 && h > 0) a += w * h;
     }
     return a;
@@ -312,6 +329,8 @@ int anneal(const Cfg *c, int moves, unsigned long long seed,
     st.X = X; st.Y = Y; st.R = R;
     st.BX0 = malloc(sizeof(double) * c->n); st.BY0 = malloc(sizeof(double) * c->n);
     st.BX1 = malloc(sizeof(double) * c->n); st.BY1 = malloc(sizeof(double) * c->n);
+    st.HX0 = malloc(sizeof(double) * c->n); st.HY0 = malloc(sizeof(double) * c->n);
+    st.HX1 = malloc(sizeof(double) * c->n); st.HY1 = malloc(sizeof(double) * c->n);
     st.esc = malloc(sizeof(double) * c->n);
     st.pesc = malloc(sizeof(double) * c->n);
     st.nethp = malloc(sizeof(double) * (c->nnets ? c->nnets : 1));
@@ -467,6 +486,7 @@ int anneal(const Cfg *c, int moves, unsigned long long seed,
         memcpy(R, bR, sizeof(int) * c->n);
     }
     free(st.BX0); free(st.BY0); free(st.BX1); free(st.BY1);
+    free(st.HX0); free(st.HY0); free(st.HX1); free(st.HY1);
     free(st.esc); free(st.pesc); free(st.nethp); free(st.demand);
     free(bX); free(bY); free(bR); free(touch); free(grp);
     return ok;

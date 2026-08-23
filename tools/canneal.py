@@ -33,7 +33,8 @@ class Cfg(ctypes.Structure):
         ("n", ctypes.c_int), ("nr", ctypes.c_int), ("nnets", ctypes.c_int),
         ("nfixed", ctypes.c_int), ("nnear", ctypes.c_int),
         ("ngroups", ctypes.c_int),
-        ("rot_base", _ip), ("box", _dp), ("need", _dp), ("pneed", _dp),
+        ("rot_base", _ip), ("box", _dp), ("hbox", _dp),
+        ("need", _dp), ("pneed", _dp),
         ("pad_base", _ip), ("pad_dx", _dp), ("pad_dy", _dp),
         ("group", _ip), ("outward", _ip),
         ("net_base", _ip), ("net_part", _ip), ("net_pk", _ip),
@@ -97,10 +98,11 @@ def build(p, w):
     from place import _rotate
     _KEEP.clear()
     rot_base, box, need, pad_base, pdx, pdy, outward = [0], [], [], [0], [], [], []
-    pneed = []
+    pneed, hbox = [], []
     for i, part in enumerate(p.parts):
         for r in part.rots:
             box.extend(p.boxoff[i][r])
+            hbox.extend(p.hardoff[i][r])
             need.extend(p.need[i][r])
             pneed.extend(p.pneed[i][r])
             pads = p.padoff[i][r]
@@ -149,6 +151,7 @@ def build(p, w):
     c.ngroups = len(seen)
     c.rot_base = A(rot_base, np.int32).ctypes.data_as(_ip)
     c.box = A(box, np.float64).ctypes.data_as(_dp)
+    c.hbox = A(hbox, np.float64).ctypes.data_as(_dp)
     c.need = A(need, np.float64).ctypes.data_as(_dp)
     c.pneed = A(pneed, np.float64).ctypes.data_as(_dp)
     c.pad_base = A(pad_base, np.int32).ctypes.data_as(_ip)
