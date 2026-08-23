@@ -311,6 +311,55 @@ def check_fab(doc):
 # =========================================================================
 #  assembly data
 # =========================================================================
+def check_silk_overlaps(doc):
+    """Silkscreen labels printed on top of each other.
+
+    Reported, not failed, and the distinction is the point.  verify()
+    checks silk against COPPER - a label over a pad is a pin that cannot
+    escape - and two labels on top of each other is legal copper-wise
+    while being useless to a human.  Nothing looked for it until a render
+    was read by eye, and it found five: every screw terminal prints its
+    designator across its own first pin name.
+
+    Left as a note because the fix was MEASURED and costs more than it is
+    worth.  The names sit above the block and the designator has nowhere
+    to go: pushing it above them grows every terminal's courtyard into the
+    board (SEED=17: 149.6 x 63.5 mm -> 168.7 x 79.0), and moving it beside
+    them re-searched over 24 seeds gives a best routable board of
+    11858 mm2 against the incumbent's 9500 - 25% more board to un-overlap
+    a designator, while the pin names that actually tell you which
+    terminal drives which amplifier stay readable.  The trade is refused;
+    the defect stays visible here so nobody has to rediscover it.
+    """
+    def tbox(f):
+        if f[0] != "TEXT" or f[7] != "3":
+            return None
+        size = float(f[9])
+        return (float(f[2]), float(f[3]) - size,
+                float(f[2]) + 0.62 * size * len(f[10]),
+                float(f[3]) + 0.25 * size, f[10])
+    boxes = []
+    for sh in doc["shape"]:
+        parts = sh.split("#@$") if sh.startswith("LIB") else [sh]
+        for piece in (parts[1:] if sh.startswith("LIB") else parts):
+            b = tbox(piece.split("~"))
+            if b:
+                boxes.append(b)
+    hits = []
+    for i, a in enumerate(boxes):
+        for b in boxes[i + 1:]:
+            ox = min(a[2], b[2]) - max(a[0], b[0])
+            oy = min(a[3], b[3]) - max(a[1], b[1])
+            if ox > 0 and oy > 0:
+                hits.append("'%s' / '%s' overlap %.2f x %.2f mm"
+                            % (a[4], b[4], ox * 0.254, oy * 0.254))
+    if hits:
+        note("%d silkscreen label pair(s) overlap (legibility, not a fab "
+             "limit): %s" % (len(hits), "; ".join(sorted(hits))))
+    else:
+        note("no silkscreen labels overlap each other")
+
+
 def check_hole_edges(doc, holes):
     """Board material between every hole and the board outline.
 
@@ -601,6 +650,7 @@ def main():
     doc = json.load(open(PCB))
     check_import(doc)
     check_hole_edges(doc, check_fab(doc))
+    check_silk_overlaps(doc)
     check_assembly(doc)
     check_netlist(doc)
     check_docs()

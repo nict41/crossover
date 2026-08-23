@@ -404,3 +404,40 @@ point it stops being smaller. `SEED=17` at 9500 mm2 verified clean stands
 as the shipped board. The size search is closed at 60 seeds ranked and 18
 uncapped route orders on the best sub-9500 candidate.
 **Touched the placement?** No — the whole diagnosis ran in a scratch copy.
+
+### 2026-08-23 — every terminal prints its designator over its own pin name
+**Question:** found by reading the render, not by any check: the rear row
+shows "J5LOW", "J4MID", "J2IN", "J1+15". Are those labels really
+colliding, and can it be fixed?
+**Method:** measured every silk-label pair on the board; then tried the
+two ways the designator can clear the name row, pricing each with a
+re-search rather than at one seed (a footprint silk change moves every
+placement).
+**Result:** five real collisions, all the same defect — each screw
+terminal's designator overlaps its own first pin name by 0.58-0.98 mm
+horizontally and 1.08 mm vertically. `verify()` cannot see it: it checks
+silk against COPPER, and two labels on top of each other is legal
+copper-wise and useless to a human.
+
+Both fixes cost real board:
+
+| fix | result |
+|---|---|
+| designator above the name row | `SEED=17` 149.6 x 63.5 -> **168.7 x 79.0 mm** |
+| designator beside the block | 24 seeds re-ranked; best routable **11858 mm2 @ 1 DRC**, next 12008 @ 3. Small ones (9513, 9542) route at 10-12. |
+
+Against the incumbent's 9500 mm2 verified clean, that is **+25% board** to
+un-overlap a designator. The pin names — the labels that actually tell you
+which terminal drives which amplifier — remain readable either way, and
+the designators are on the assembly drawing and in the CPL.
+
+The geometry says why there is no free fix: the block is 14 units (3.556
+mm) per pin and `LABEL_SIZE` text is ~3.1 units per character, so "GND"
+alone eats 9.3 of a 14-unit pitch. There is no room on that line for a
+designator, and the only clear space is outward, which is what costs.
+**Decision:** refused, and made VISIBLE instead. `validate_fab.py` gains
+`check_silk_overlaps()`, which reports every overlapping label pair as a
+note with its dimensions. The defect is now measured on every run instead
+of waiting for someone to read a render.
+**Touched the placement?** No — the footprint change was reverted.
+`check_all.py` passes with a cold cache: `SEED=17`, 149.6 x 63.5 mm, clean.
